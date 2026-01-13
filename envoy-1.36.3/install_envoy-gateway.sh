@@ -9,7 +9,7 @@ INFRA_CHART="./strato-gateway-infra"
 GW_NAME="cmp-gateway"
 IMG_GATEWAY="docker.io/envoyproxy/gateway:v1.6.1"
 IMG_PROXY="docker.io/envoyproxy/envoy:distroless-v1.36.3"
-GW_CLASS_NAME="eg-direct-node"
+GW_CLASS_NAME="eg-cluster-entry"
 GLOBAL_POLICY_FILE="policy-global-config.yaml"
 
 # ==========================================

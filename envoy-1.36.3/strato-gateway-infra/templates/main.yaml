@@ -45,7 +45,7 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
-  name: eg-direct-node
+  name: eg-cluster-entry
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
   parametersRef:
@@ -62,7 +62,7 @@ metadata:
   name: {{ .Values.gateway.name }}
   namespace: {{ .Values.common.namespace }}
 spec:
-  gatewayClassName: eg-direct-node
+  gatewayClassName: eg-cluster-entry
   listeners:
   - name: http
     protocol: HTTP
