@@ -1,0 +1,3 @@
+# nodeport-values.yaml (변경할 부분만 작성)
+service:
+  type: NodePort

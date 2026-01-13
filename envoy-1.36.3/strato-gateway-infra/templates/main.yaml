@@ -12,8 +12,9 @@ spec:
         container:
           image: {{ .Values.envoy.image | quote }}
         pod:
-          nodeSelector:
-            kubernetes.io/hostname: {{ required "A valid .Values.envoy.nodeName is required!" .Values.envoy.nodeName | quote }}
+          {{- if .Values.envoy.nodeName }}
+          nodeName: {{ .Values.envoy.nodeName | quote }}
+          {{- end }}
         patch:
           type: StrategicMerge
           value:
@@ -33,10 +34,11 @@ spec:
                     - containerPort: 10443
                       name: https
 
-      # [정석] 외부 노출은 Service 객체가 담당합니다.
       envoyService:
-        type: LoadBalancer
-        # K3s에서는 LoadBalancer를 쓰면 자동으로 노드 IP의 80포트를 바인딩해줍니다.
+        # values.yaml에 값이 없으면 기본값(LoadBalancer)을 씁니다.
+        type: {{ .Values.service.type }}
+        # Local 사용 시, Gateway의 Deployment를 DaemonSet으로 변경 필요
+        externalTrafficPolicy: {{ .Values.service.trafficPolicy | default "Local" }}
 
 ---
 # 2. GatewayClass

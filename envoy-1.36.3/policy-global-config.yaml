@@ -1,0 +1,93 @@
+# -----------------------------------------------------------
+# 1. IP 감지 정책 (Trust Hops)
+#    - 로드밸런서를 신뢰하고 진짜 IP를 감지합니다.
+# -----------------------------------------------------------
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: enable-client-ip
+  namespace: envoy-gateway-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: cmp-gateway
+  
+  # envoy 앞에 있는 LB의 개수
+  clientIPDetection:
+    xForwardedFor:
+      numTrustedHops: 0 # 현재 LB가 없는 환경
+
+---
+# -----------------------------------------------------------
+# 2. 전역 패치 정책 (Global Patch)
+#    - 기능 A: X-Real-IP 헤더 강제 주입
+#    - 기능 B: 요청 본문(Body) 크기 5GB로 제한 해제
+# -----------------------------------------------------------
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyPatchPolicy
+metadata:
+  name: global-gateway-config
+  namespace: envoy-gateway-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: cmp-gateway
+  type: JSONPatch
+  jsonPatches:
+    # =======================================================
+    # (1) HTTP 리스너 (Port 80) 설정
+    # =======================================================
+    # 1-A. X-Real-IP 헤더 주입
+    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+      name: "envoy-gateway-system/cmp-gateway/http"
+      operation:
+        op: add
+        path: "/filter_chains/0/filters/0/typed_config/http_filters/0"
+        value:
+          name: envoy.filters.http.header_mutation
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation
+            mutations:
+              request_mutations:
+                - set_header:
+                    header:
+                      key: "X-Real-IP"
+                      value: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+    
+    # 1-B. Body Size 5GB 설정
+    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+      name: "envoy-gateway-system/cmp-gateway/http"
+      operation:
+        op: add
+        path: "/filter_chains/0/filters/0/typed_config/max_request_bytes"
+        value: 5368709120
+
+    # =======================================================
+    # (2) HTTPS 리스너 (Port 443) 설정
+    # =======================================================
+    # 2-A. X-Real-IP 헤더 주입
+    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+      name: "envoy-gateway-system/cmp-gateway/https"
+      operation:
+        op: add
+        path: "/filter_chains/0/filters/0/typed_config/http_filters/0"
+        value:
+          name: envoy.filters.http.header_mutation
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation
+            mutations:
+              request_mutations:
+                - set_header:
+                    header:
+                      key: "X-Real-IP"
+                      value: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+
+    # 2-B. Body Size 5GB 설정
+    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+      name: "envoy-gateway-system/cmp-gateway/https"
+      operation:
+        op: add
+        path: "/filter_chains/0/filters/0/typed_config/max_request_bytes"
+        value: 5368709120
