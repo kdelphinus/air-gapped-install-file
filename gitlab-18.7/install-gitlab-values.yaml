@@ -1,0 +1,86 @@
+global:
+  edition: ce
+  hosts:
+    domain: devops.internal # 내부 도메인에 맞게 변경
+    https: false
+
+  image:
+    registry: 1.1.1.213:30002 # Harbor domain
+    repository: library # Harbor Project
+    pullPolicy: IfNotPresent
+
+  # [핵심] Ingress 설정
+  # 1. Gateway API를 사용할 때
+  ingress:
+    enabled: false
+    configureCertmanager: false
+    tls:
+      enabled: false          # TLS 비활성화 (HTTP 접속)
+
+  # 2. 이미 설치된 ingress nginx를 사용할 때
+  # ingress:
+  #   enabled: true           # Ingress 객체(라우팅 규칙) 생성: YES
+  #   configureCertmanager: false
+  #   class: "none"           # NGINX가 채가면 안되므로 none 설정 (나중에 Envoy가 처리)
+  #   tls:
+  #     enabled: false          # TLS 비활성화 (HTTP 접속)
+
+  # 3. gitlab의 ingress nginx를 사용할 떄
+  # ingress:
+  #   enabled: true             # Ingress 활성화
+  #   configureCertmanager: false # 인증서 관리자 끔 (HTTP 사용)
+  #   class: gitlab-nginx              # 내장 NGINX 사용
+  #   tls:
+  #     enabled: false          # TLS 비활성화 (HTTP 접속)
+
+# [핵심] NGINX 컨트롤러 비활성화 (이미지는 받았지만 설치는 안 함)
+# 1,2. Gateway API를 사용할 때 혹은 이미 설치된 ingress nginx를 사용할 때
+nginx-ingress:
+  enabled: false
+
+# 3. gitlab의 ingress nginx를 사용할 때
+# nginx-ingress:
+#   enabled: true
+#   controller:
+#     ingressClassResource:
+#       # [핵심] IngressClass 이름 변경 (충돌 방지)
+#       name: gitlab-nginx
+#       # 컨트롤러 값도 유니크하게 변경
+#       controllerValue: "k8s.io/gitlab-nginx"
+#     image:
+#       registry: 1.1.1.213:30002 # Harbor domain
+#       repository: library/ingress-nginx-controller # Harbor에 올라간 이미지
+#       tag: "v1.11.8"
+#       digest: ""
+#     service:
+#       type: NodePort
+#       nodePorts:
+#         http: 30080
+#         https: 30443
+#         ssh: 30022
+
+# [필수] Prometheus, Runner 등 무거운 컴포넌트 우선 비활성화 (안정화 후 켜기 권장)
+prometheus:
+  install: false
+gitlab-runner:
+  install: false
+
+# [필수] DB 버전 (GitLab 18 대응)
+postgresql:
+  image:
+    tag: "16.2.0"
+  persistence:
+    storageClass: manual
+
+redis:
+  master:
+    persistence:
+      storageClass: manual
+
+gitaly:
+  persistence:
+    storageClass: manual
+
+minio:
+  persistence:
+    storageClass: manual

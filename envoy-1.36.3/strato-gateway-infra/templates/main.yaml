@@ -1,0 +1,81 @@
+# 1. EnvoyProxy: 표준 아키텍처 (Pod 격리 + Service 노출)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: direct-node-proxy
+  namespace: {{ .Values.common.namespace }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        container:
+          image: {{ .Values.envoy.image | quote }}
+        pod:
+          nodeSelector:
+            kubernetes.io/hostname: {{ required "A valid .Values.envoy.nodeName is required!" .Values.envoy.nodeName | quote }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              template:
+                spec:
+                  # [정석] 호스트 네트워크를 쓰지 않고, K8s 내부망을 씁니다.
+                  hostNetwork: false
+                  dnsPolicy: ClusterFirst
+                  containers:
+                  - name: envoy
+                    ports:
+                    # [정석] 컨테이너는 10080/10443 같은 안전한 포트를 씁니다.
+                    # 외부 80 -> Service -> Pod 10080 흐름이 됩니다.
+                    - containerPort: 10080
+                      name: http
+                    - containerPort: 10443
+                      name: https
+
+      # [정석] 외부 노출은 Service 객체가 담당합니다.
+      envoyService:
+        type: LoadBalancer
+        # K3s에서는 LoadBalancer를 쓰면 자동으로 노드 IP의 80포트를 바인딩해줍니다.
+
+---
+# 2. GatewayClass
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg-direct-node
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: direct-node-proxy
+    namespace: {{ .Values.common.namespace }}
+
+---
+# 3. Gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.common.namespace }}
+spec:
+  gatewayClassName: eg-direct-node
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80 # 서비스가 외부로 노출할 포트
+    allowedRoutes:
+      namespaces:
+        from: All
+  - name: https
+    protocol: HTTPS
+    port: 443
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: {{ .Values.gateway.tls.name }}
+        kind: Secret
+    allowedRoutes:
+      namespaces:
+        from: All

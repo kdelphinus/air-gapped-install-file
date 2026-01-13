@@ -1,0 +1,50 @@
+FROM jenkins/jenkins:2.528.3
+
+USER root
+
+# 1. 기본 유틸리티 설치
+RUN apt-get update && \
+    apt-get install -y curl unzip jq ca-certificates bash && \
+    update-ca-certificates && \
+    apt-get clean
+
+# 2. 플러그인 주입 (호스트에서 다운로드 받은 폴더 복사)
+COPY downloaded_plugins/ /usr/share/jenkins/ref/plugins/
+
+# 3. OpenTofu 설치
+ARG TOFU_VERSION=1.6.0
+RUN curl -fsSL "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_amd64.zip" -o tofu.zip \
+    && unzip tofu.zip \
+    && mv tofu /usr/local/bin/tofu \
+    && chmod +x /usr/local/bin/tofu \
+    && rm tofu.zip
+
+# 4. 툴 설치 스크립트 복사 및 실행
+COPY bundle-*.sh /tmp/
+RUN chmod +x /tmp/bundle-*.sh && \
+    sed -i 's/\r$//' /tmp/bundle-*.sh && \
+    /bin/bash /tmp/bundle-aws-provider.sh && \
+    /bin/bash /tmp/bundle-azure-provider.sh && \
+    /bin/bash /tmp/bundle-vmware-provider.sh && \
+    /bin/bash /tmp/bundle-openstack-provider.sh && \
+    /bin/bash /tmp/bundle-kubectl.sh && \
+    /bin/bash /tmp/bundle-helm.sh
+
+# 5. OpenTofu 폐쇄망 설정 (.tofurc)
+# 로컬 Provider 경로 강제 지정
+RUN echo 'provider_installation {' > /usr/share/jenkins/ref/.tofurc && \
+    echo '  filesystem_mirror {' >> /usr/share/jenkins/ref/.tofurc && \
+    echo '    path    = "/usr/local/share/tofu-providers"' >> /usr/share/jenkins/ref/.tofurc && \
+    echo '    include = ["registry.opentofu.org/*/*"]' >> /usr/share/jenkins/ref/.tofurc && \
+    echo '  }' >> /usr/share/jenkins/ref/.tofurc && \
+    echo '}' >> /usr/share/jenkins/ref/.tofurc
+
+# 6. 환경 변수 및 권한 설정
+ENV TF_CLI_CONFIG_FILE="/var/jenkins_home/.tofurc"
+ENV TOFU_PLUGIN_CACHE_DIR="/usr/local/share/tofu-providers"
+
+# 소유권 변경 (중요)
+RUN chown -R jenkins:jenkins /usr/share/jenkins/ref \
+    && chown -R jenkins:jenkins /usr/local/share/tofu-providers
+
+USER jenkins

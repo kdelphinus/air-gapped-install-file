@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gitlab-postgresql-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: manual
+  claimRef:
+    namespace: gitlab
+    name: data-gitlab-postgresql-0  # 이 PVC만 이 PV를 쓸 수 있음
+  hostPath:
+    path: /data/gitlab_pg
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gitlab-redis-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: manual
+  claimRef:
+    namespace: gitlab
+    name: redis-data-gitlab-redis-master-0
+  hostPath:
+    path: /data/gitlab_redis
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gitlab-gitaly-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: manual
+  claimRef:
+    namespace: gitlab
+    name: repo-data-gitlab-gitaly-0
+  hostPath:
+    path: /data/gitlab_data
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gitlab-minio-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: manual
+  claimRef:
+    namespace: gitlab
+    name: gitlab-minio
+  hostPath:
+    path: /data/gitlab_data/minio

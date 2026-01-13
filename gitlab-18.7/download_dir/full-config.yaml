@@ -1,0 +1,24 @@
+# --- full-config.yaml ---
+# 목적: 에러 없이 모든 하위 차트의 이미지를 리스트에 포함시키기 위함
+
+global:
+  edition: ce
+  hosts:
+    domain: "internal.example.com" # 필수: 도메인 설정
+  
+  # Ingress 활성화 (이미지 추출용)
+  ingress:
+    enabled: true
+    configureCertmanager: true 
+
+# CertManager 필수 설정 (Schema Validation 통과용)
+certmanager-issuer:
+  email: "admin@example.com"
+
+# GitLab 18+ 필수 요구사항 (PostgreSQL 16)
+postgresql:
+  image:
+    tag: "16.2.0"
+
+# 그 외 모든 기능(Prometheus, Grafana, NGINX, Registry 등)은 
+# 기본값(Enabled)으로 두어 이미지를 다 받아옵니다.
