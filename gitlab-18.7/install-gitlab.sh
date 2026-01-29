@@ -120,7 +120,9 @@ else
     echo "✅ 노드 고정 설정 완료."
     
     # [핵심] Helm에 전달할 옵션을 변수에 저장
-    NODE_SELECTOR_ARGS="--set-string global.nodeSelector.${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}"
+    NODE_SELECTOR_ARGS="--set-string global.nodeSelector.${NODE_LABEL_KEY}=${NODE_LABEL_VALUE} \
+                        --set-string redis.master.nodeSelector.${NODE_LABEL_KEY}=${NODE_LABEL_VALUE} \
+                        --set-string postgresql.primary.nodeSelector.${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}"
 fi
 
 # ==========================================
