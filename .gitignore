@@ -213,6 +213,9 @@ $RECYCLE.BIN/
 # export_git_rpms.sh 스크립트가 생성하는 다운로드 디렉토리
 git_offline_bundle/
 
+# 다운로드된 deb 패키지들
+*.deb
+
 # 다운로드된 RPM 패키지들
 *.rpm
 
