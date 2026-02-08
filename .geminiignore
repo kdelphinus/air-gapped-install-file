@@ -1,0 +1,24 @@
+# Ignore git and IDE files
+.git/
+.idea/
+.vscode/
+
+# Ignore binary packages and archives
+*.deb
+*.rpm
+*.tar.gz
+*.tgz
+*.tar
+*.zip
+*.jpi
+*.swp
+
+# Ignore specific large data directories that don't contain source code/config
+**/download_dir/
+**/images/
+**/binaries/
+**/rpms/
+**/charts/*.tgz
+**/charts/*.tar.gz
+**/git_offline_bundle/
+**/downloaded_plugins/

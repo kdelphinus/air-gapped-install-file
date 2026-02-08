@@ -1,0 +1,19 @@
+{
+  "project": {
+    "name": "Air-gapped Infrastructure",
+    "description": "Offline installation bundles for Rocky Linux 9.6",
+    "constraints": [
+      "No internet access",
+      "Target OS: Rocky Linux 9.6",
+      "K8s version: 1.30",
+      "GitLab version: 18.7",
+      "Harbor version: 1.14.3",
+      "NFS Provisioner version: 4.0.2"
+    ]
+  },
+  "conventions": {
+    "scripting": "Bash",
+    "infrastructure": "Kubernetes/Helm",
+    "registry": "Local Harbor (Port 30002)"
+  }
+}
