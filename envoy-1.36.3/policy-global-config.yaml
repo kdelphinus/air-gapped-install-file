@@ -17,6 +17,11 @@ spec:
   clientIPDetection:
     xForwardedFor:
       numTrustedHops: 0 # 현재 LB가 없는 환경
+  
+  # 클라이언트 연결 타임아웃 설정 (10분)
+  timeout:
+    http:
+      streamIdleTimeout: 600s
 
 ---
 # -----------------------------------------------------------
@@ -91,3 +96,22 @@ spec:
         op: add
         path: "/filter_chains/0/filters/0/typed_config/max_request_bytes"
         value: 5368709120
+
+---
+# -----------------------------------------------------------
+# 3. 백엔드 트래픽 정책 (Backend Timeout)
+#    - 백엔드 서비스의 응답 대기 시간을 10분으로 연장
+# -----------------------------------------------------------
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: global-timeout-config
+  namespace: envoy-gateway-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: cmp-gateway
+  timeout:
+    http:
+      requestTimeout: 600s
