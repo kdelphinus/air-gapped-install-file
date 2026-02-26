@@ -1,0 +1,99 @@
+# ArgoCD 2.12.1 (Chart 7.4.1) Air-gapped Values
+global:
+  # Local Harbor Registry Details
+  image:
+    repository: harbor.local:30002/goe/argocd
+    tag: v2.12.1
+    imagePullPolicy: IfNotPresent
+
+# Core Components
+server:
+  image:
+    repository: harbor.local:30002/goe/argocd
+    tag: v2.12.1
+
+repoServer:
+  image:
+    repository: harbor.local:30002/goe/argocd
+    tag: v2.12.1
+  # ---------------------------------------------------------------------------
+  # Persistence for Repo Server (Cache)
+  # ---------------------------------------------------------------------------
+  # Option A: Use PVC (Recommended for NAS/StorageClass)
+  # volumes:
+  #   - name: argocd-repo-cache
+  #     persistentVolumeClaim:
+  #       claimName: argocd-repo-pvc
+  # volumeMounts:
+  #   - name: argocd-repo-cache
+  #     mountPath: /home/argocd/cmp-server/plugins
+  
+  # Option B: Use hostPath (Direct Node Path)
+  # volumes:
+  #   - name: argocd-repo-cache
+  #     hostPath:
+  #       path: /data/argocd/repo-cache
+  #       type: DirectoryOrCreate
+  # volumeMounts:
+  #   - name: argocd-repo-cache
+  #     mountPath: /home/argocd/cmp-server/plugins
+
+controller:
+  image:
+    repository: harbor.local:30002/goe/argocd
+    tag: v2.12.1
+
+applicationSet:
+  image:
+    repository: harbor.local:30002/goe/argocd
+    tag: v2.12.1
+
+dex:
+  enabled: false
+
+# Redis dependency (Standalone)
+redis:
+  image:
+    repository: harbor.local:30002/goe/redis
+    tag: 7.2.4-alpine
+  # ---------------------------------------------------------------------------
+  # Persistence for Redis
+  # ---------------------------------------------------------------------------
+  # Option A: Use PVC
+  # volumes:
+  #   - name: redis-data
+  #     persistentVolumeClaim:
+  #       claimName: argocd-redis-pvc
+  # volumeMounts:
+  #   - name: redis-data
+  #     mountPath: /data
+  
+  # Option B: Use hostPath
+  # volumes:
+  #   - name: redis-data
+  #     hostPath:
+  #       path: /data/argocd/redis
+  #       type: DirectoryOrCreate
+  # volumeMounts:
+  #   - name: redis-data
+  #     mountPath: /data
+
+# HA Proxy (if HA is enabled via redis-ha)
+haproxy:
+  image:
+    repository: harbor.local:30002/goe/haproxy
+    tag: 2.9.7-alpine
+
+# Notifications
+notifications:
+  enabled: true
+  image:
+    repository: harbor.local:30002/goe/argocd
+    tag: v2.12.1
+
+# Disable checking for newer versions
+configs:
+  cm:
+    admin.enabled: "true"
+  params:
+    server.insecure: true
