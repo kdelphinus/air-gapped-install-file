@@ -15,6 +15,16 @@
     "scripting": "Bash",
     "infrastructure": "Kubernetes/Helm",
     "registry": "Local Harbor (Port 30002)",
-    "git_commit": "Include 'Co-Authored-By: Gemini CLI <noreply@google.com>' in all commit messages."
+    "git_commit": "Include 'Co-Authored-By: Gemini CLI <noreply@google.com>' in all commit messages.",
+    "documentation": {
+      "format": "Markdown",
+      "linting": "Strict adherence to markdownlint (MD001-MD050)",
+      "rules": [
+        "Header spacing (MD022)",
+        "Language tags for all code blocks (MD040)",
+        "Consistent list bullets (MD004)",
+        "No trailing spaces (MD009)"
+      ]
+    }
   }
 }
