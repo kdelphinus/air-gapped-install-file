@@ -2,11 +2,11 @@
 
 # ==================== Config ====================
 # Harbor Registry
-HARBOR_REGISTRY="harbor.local:30002"
-HARBOR_PROJECT="goe"
+HARBOR_REGISTRY="harbor-product.strato.co.kr:8443"
+HARBOR_PROJECT="strato-solution-baseimage"
 
 # Storage: "none" | "nas" | "hostpath"
-STORAGE_TYPE="nas"
+STORAGE_TYPE="hostpath"
 
 # NAS (NFS) Settings - STORAGE_TYPE="nas" 일 때 사용
 NAS_SERVER="192.168.1.50"
