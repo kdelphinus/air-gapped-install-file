@@ -26,7 +26,8 @@ argocd-2.12.1/
 - Harbor 레지스트리 접근 가능
 - (도메인 접속 사용 시) Envoy Gateway 설치 완료
 
-포함된 리소스:
+**포함된 리소스:**
+
 - Helm 차트: v7.4.1 (ArgoCD v2.12.1)
 - 컨테이너 이미지: `argocd`, `redis`, `haproxy` (.tar)
 
@@ -79,14 +80,15 @@ GATEWAY_NAMESPACE="envoy-gateway-system"
 # ================================================
 ```
 
-설정 후 실행:
+**설정 후 실행:**
 
 ```bash
 chmod +x install-argocd.sh
 ./install-argocd.sh
 ```
 
-스크립트가 자동으로 처리하는 항목:
+**스크립트가 자동으로 처리하는 항목:**
+
 - namespace 생성
 - NAS PV/PVC 적용 (nas 선택 시)
 - Helm 설치 (Harbor 이미지 경로 + 스토리지 설정)
@@ -110,7 +112,7 @@ kubectl get httproute -n argocd
 ### 초기 계정
 
 | 항목 | 값 |
-|------|----|
+| :--- | :--- |
 | ID | `admin` |
 | PW | 설치 시 자동 생성 (아래 명령으로 확인) |
 
@@ -119,7 +121,8 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d && echo
 ```
 
-> 초기 비밀번호는 최초 로그인 후 반드시 변경하고, secret을 삭제하세요.
+> **참고:** 초기 비밀번호는 최초 로그인 후 반드시 변경하고, secret을 삭제하세요.
+>
 > ```bash
 > kubectl delete secret argocd-initial-admin-secret -n argocd
 > ```
@@ -127,13 +130,14 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 ### 접속 방법
 
 | 방법 | 주소 |
-|------|------|
+| :--- | :--- |
 | NodePort | `http://<NODE_IP>:30001` |
 | 도메인 | `http://argocd.devops.internal` (DNS/hosts 등록 필요) |
 | 포트 포워딩 (임시) | `kubectl port-forward svc/argocd-server -n argocd 8080:80` → `http://localhost:8080` |
 
-도메인 접속 시 hosts 파일 또는 DNS에 아래 항목 추가:
-```
+**도메인 접속 시 hosts 파일 또는 DNS에 아래 항목 추가:**
+
+```text
 <GATEWAY_IP>  argocd.devops.internal
 ```
 
