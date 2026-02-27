@@ -1,10 +1,10 @@
 {
   "project": {
     "name": "Air-gapped Infrastructure",
-    "description": "Offline installation bundles for Rocky Linux 9.6",
+    "description": "Offline installation bundles for Rocky Linux, Ubuntu, and other Linux distributions.",
     "constraints": [
       "No internet access",
-      "Target OS: Rocky Linux 9.6",
+      "Support multiple Linux distributions (RHEL-based, Debian-based)",
       "K8s version: 1.30",
       "GitLab version: 18.7",
       "Harbor version: 1.14.3",

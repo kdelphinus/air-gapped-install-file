@@ -4,13 +4,13 @@ This project is a repository of installation assets, scripts, and documentation 
 
 ## 🎯 Project Goals
 - Provide repeatable, offline installation processes for core devops tools.
-- Target Environment: **Rocky Linux 9.6** and **Kubernetes**.
+- Target Environments: **Rocky Linux (RHEL-based)** and **Ubuntu (Debian-based)** systems.
 - Centralized image management using **Harbor**.
 
 ## 🏗️ Project Structure
-Each top-level directory represents a component of the stack:
-- `docker-offline-*`: Docker engine installation for Rocky Linux.
-- `k8s-*`: Kubernetes cluster setup (RPMs, binaries, images).
+Each top-level directory represents a component of the stack, often organized by OS:
+- `docker-offline-*`: Docker engine installation (e.g., for Rocky Linux).
+- `k8s-*`: Kubernetes cluster setup (RPMs/DEBs, binaries, images).
 - `harbor-*`: Enterprise container registry setup.
 - `ingress-nginx-*`: K8s Ingress controller.
 - `gitlab-*`: GitLab EE v18.7 deployment (Helm based).
@@ -18,10 +18,11 @@ Each top-level directory represents a component of the stack:
 - `mariadb-*`: Database installation.
 - `envoy-*`: Envoy Gateway configuration.
 - `nfs-provisioner-4.0.2`: Dynamic NFS storage provisioning for K8s.
+- `basic-tools-*`: Essential utilities for specific OS versions.
 
 ## 🛠️ Key Conventions & Tech Stack
-- **OS**: Rocky Linux 9.6 (RHEL-based).
-- **Scripts**: Primarily Bash (`.sh`). Many scripts handle offline image loading (`docker load`) and pushing to local Harbor.
+- **OS**: Multi-OS support including Rocky Linux 9.6 and Ubuntu 24.04.
+- **Scripts**: Primarily Bash (`.sh`). Many scripts handle offline image loading (`docker load`) and pushing to local Harbor. Scripts should handle OS-specific differences (e.g., `dnf` vs `apt`).
 - **Orchestration**: Kubernetes (K8s) via Helm charts and static manifests.
 - **Storage**: Mixed (HostPath, NFS, Manual PVs).
 - **Offline Strategy**:
@@ -35,6 +36,9 @@ Each top-level directory represents a component of the stack:
 
 ## 🤖 AI Instructions
 - Always assume **no internet access**. All tools and dependencies must be sourced from within the repository or the local network.
-- When generating scripts, prefer Bash and ensure they are compatible with Rocky Linux 9.6.
+- When generating scripts, prefer Bash and ensure they are compatible with the target OS (Rocky Linux 9.6, Ubuntu 24.04, etc.).
 - For Kubernetes resources, prioritize stability and data persistence (`Retain` policy for PVs).
 - Reference existing `upload_images_to_harbor_v2.sh` scripts when dealing with container images.
+- Handle OS-specific package management:
+    - RHEL/Rocky: `dnf localinstall` / `yum`
+    - Ubuntu/Debian: `dpkg -i` / `apt install`
