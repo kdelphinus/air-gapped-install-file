@@ -4,6 +4,6 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 ### 3.31.0
 
-* [7137] https://github.com/kubernetes/ingress-nginx/pull/7137 Add support for custom probes
+* [7137] <https://github.com/kubernetes/ingress-nginx/pull/7137> Add support for custom probes
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.30.0...helm-chart-3.31.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.30.0...helm-chart-3.31.0>

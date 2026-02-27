@@ -11,4 +11,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [9046](https://github.com/kubernetes/ingress-nginx/pull/9046) Parameterize metrics port name
 * [9104](https://github.com/kubernetes/ingress-nginx/pull/9104) Fix yaml formatting error with multiple annotations
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.2.1...helm-chart-4.3.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.2.1...helm-chart-4.3.0>

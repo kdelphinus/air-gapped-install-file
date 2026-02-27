@@ -5,7 +5,7 @@ NAS(NFS) / hostPath 스토리지 및 NodePort · HTTPRoute 네트워크 설정�
 
 ## 폴더 구조
 
-```
+```shell
 argocd-2.12.1/
 ├── argo-cd/                # Helm 차트 원본
 ├── images/                 # 컨테이너 이미지 (.tar)

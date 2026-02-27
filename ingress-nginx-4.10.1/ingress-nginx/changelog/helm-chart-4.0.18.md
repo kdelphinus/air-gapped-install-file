@@ -37,4 +37,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [8136](https://github.com/kubernetes/ingress-nginx/pull/8136) add ingressClass option to helm chart - back compatibility with ingress.class annotations
 * [8126](https://github.com/kubernetes/ingress-nginx/pull/8126) Example for JWT
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.0.15...helm-chart-4.0.18
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.0.15...helm-chart-4.0.18>

@@ -6,4 +6,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 * [#6469](https://github.com/kubernetes/ingress-nginx/pull/6469) Allow custom service names for controller and backend
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.13.0...ingress-nginx-3.14.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.13.0...ingress-nginx-3.14.0>

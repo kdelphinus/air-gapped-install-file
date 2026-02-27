@@ -9,4 +9,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [#6180](https://github.com/kubernetes/ingress-nginx/pull/6180) Fix helm chart admissionReviewVersions regression
 * [#6169](https://github.com/kubernetes/ingress-nginx/pull/6169) Fix Typo in example prometheus rules
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.0.0...ingress-nginx-3.3.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.0.0...ingress-nginx-3.3.0>

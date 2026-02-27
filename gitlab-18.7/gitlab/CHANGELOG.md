@@ -1304,7 +1304,7 @@ No changes.
 
 ### Changed (5 changes)
 
-- [Stop sidekiq namespaced probes in gitlab-exporter ](gitlab-org/charts/gitlab@aec9b2e9bad6c64b03a3f38abaf86c3731920915) ([merge request](gitlab-org/charts/gitlab!3479))
+- [Stop sidekiq namespaced probes in gitlab-exporter](gitlab-org/charts/gitlab@aec9b2e9bad6c64b03a3f38abaf86c3731920915) ([merge request](gitlab-org/charts/gitlab!3479))
 - [Require upgrade stop at 16.7/chart 7.7](gitlab-org/charts/gitlab@25cd781235f9e91c8754cf6157ef4b75bf3cdc5b) ([merge request](gitlab-org/charts/gitlab!3559))
 - [Update gitlab-org/charts/gitlab-runner from 0.59.2 to 0.60.0](gitlab-org/charts/gitlab@aa2dfde6fe0556b1ab4c5fc270e120464a7fac4a) ([merge request](gitlab-org/charts/gitlab!3549))
 - [Update gitlab-org/gitlab-qa from 13.0.0 to 13.1.0](gitlab-org/charts/gitlab@02624f32e73ac31e78309e4fec083de88e14f6c4) ([merge request](gitlab-org/charts/gitlab!3539))
@@ -1821,7 +1821,7 @@ No changes.
 - [Registry; add support for database discovery for primary records](gitlab-org/charts/gitlab@02618c9b63bfac6c6baf257bc020439a45d3f220) ([merge request](gitlab-org/charts/gitlab!3142))
 - [Add SMTP read and write timeout values](gitlab-org/charts/gitlab@843467c988f90f358d58ace7c6514634443b384f) ([merge request](gitlab-org/charts/gitlab!3156))
 - [Add annotations to upgradeCheck ConfigMap](gitlab-org/charts/gitlab@9bd462052cc3ca33994ff262c66208ec8d70a7c8) by @LukasAuerbeck ([merge request](gitlab-org/charts/gitlab!3116))
-- [ Adding containerSecurityContext logic to geo chart](gitlab-org/charts/gitlab@10d9b8c945f10f9e84f1b280e88a040e33586f5b) ([merge request](gitlab-org/charts/gitlab!3127))
+- [Adding containerSecurityContext logic to geo chart](gitlab-org/charts/gitlab@10d9b8c945f10f9e84f1b280e88a040e33586f5b) ([merge request](gitlab-org/charts/gitlab!3127))
 - [Allow configuring an embedding database](gitlab-org/charts/gitlab@6a923ec7421e814add2fef3069320c13f28f354c) ([merge request](gitlab-org/charts/gitlab!3107))
 
 ### Fixed (7 changes)
@@ -1999,7 +1999,7 @@ No changes.
 ### Added (6 changes)
 
 - [Support setting extra env vars for kas](gitlab-org/charts/gitlab@f8c5589fc5c82ea20b3798838da007b066ec67e4) ([merge request](gitlab-org/charts/gitlab!3023))
-- [Add containerSecurityContext helper templates and values to Gitaly chart ](gitlab-org/charts/gitlab@a7cd11bbc886271d4212ad368fd41885a674a647) by @BrettSeedling ([merge request](gitlab-org/charts/gitlab!2793))
+- [Add containerSecurityContext helper templates and values to Gitaly chart](gitlab-org/charts/gitlab@a7cd11bbc886271d4212ad368fd41885a674a647) by @BrettSeedling ([merge request](gitlab-org/charts/gitlab!2793))
 - [Add new cron backup parameter Ref #3076](gitlab-org/charts/gitlab@42b7f8dab938d0d748318d736a42e0070472ccea) by @Vedrillan ([merge request](gitlab-org/charts/gitlab!2984))
 - [Add support for Gitaly GPG signing](gitlab-org/charts/gitlab@d65fa4b7880f2b006cb1f0b54c704d47febee136) ([merge request](gitlab-org/charts/gitlab!2754))
 - [Add support for fsGroupChangePolicy to all subcharts](gitlab-org/charts/gitlab@20283351cbe24015d25b7823746534c9b65a139a) ([merge request](gitlab-org/charts/gitlab!3000))
@@ -2476,7 +2476,7 @@ No changes.
 
 ### Fixed (5 changes)
 
-- [Add a relabel_config to target __scheme__ in the default values](gitlab-org/charts/gitlab@cedee2096d5558aad731c76ffb4f7122db0f9697) ([merge request](gitlab-org/charts/gitlab!2672))
+- [Add a relabel_config to target **scheme** in the default values](gitlab-org/charts/gitlab@cedee2096d5558aad731c76ffb4f7122db0f9697) ([merge request](gitlab-org/charts/gitlab!2672))
 - [Fix custom certificate authorities not working on UBI containers](gitlab-org/charts/gitlab@faed05de75b98269deabf1336e9e613348417c37) ([merge request](gitlab-org/charts/gitlab!2650))
 - [Add KAS configmap checksum to deployment spec](gitlab-org/charts/gitlab@180b80d2f1b64614c52b69988c4c7358cfa6abe4) ([merge request](gitlab-org/charts/gitlab!2654))
 - [Allow shell maxUnavailable to be a percentage](gitlab-org/charts/gitlab@9758097c837ba2c5dbe4823bde327be82ada51ff) ([merge request](gitlab-org/charts/gitlab!2627))
@@ -3385,7 +3385,6 @@ No changes.
 - Add Microsoft Graph config support for MailRoom. !1929
 - Added support for IAM roles in EKS. !1940
 
-
 ## 4.10.5 (2021-06-01)
 
 No changes.
@@ -3404,7 +3403,6 @@ No changes.
 
 - Fix for Rancher/RKE: Remove extra space before -}} in _kas.tpl. !1925
 
-
 ## 4.10.1 (2021-03-31)
 
 ### Fixed (1 change)
@@ -3414,7 +3412,6 @@ No changes.
 ### Changed (1 change)
 
 - GitLab Exporter to 10.1.0. !1915
-
 
 ## 4.10.0 (2021-03-22)
 
@@ -3448,7 +3445,6 @@ No changes.
 - Webservice: enable per-deployment blackoutSeconds. !1867
 - Add migration configurations to registry chart. !1888
 
-
 ## 4.9.7 (2021-04-27)
 
 No changes.
@@ -3466,7 +3462,6 @@ No changes.
 ### Changed (1 change)
 
 - GitLab Runner to 0.26.0. !1858
-
 
 ## 4.9.3 (2021-03-08)
 
@@ -3531,7 +3526,6 @@ No changes.
 - Clarify EKS installation instructions. !1801
 - Add outgoing email section to 'globals' docs. !1821
 
-
 ## 4.8.8 (2021-04-13)
 
 - No changes.
@@ -3563,13 +3557,11 @@ No changes.
 - Fixes backups when GitLab KAS is enabled. !1765
 - Fix Gitaly persistence configuration. !1796
 
-
 ## 4.8.1 (2021-01-26)
 
 ### Changed (1 change)
 
 - Update GitLab Runner chart to 0.25.0. !1775
-
 
 ## 4.8.0 (2021-01-22)
 
@@ -3596,7 +3588,6 @@ No changes.
 - Add support for custom domains in GitLab Pages. !1728
 - Add tolerations for minio create bucket job. !1744 (David ALEXANDRE)
 - Add upgrade survey link to upgrade output. !1762
-
 
 ## 4.7.9 (2021-03-17)
 
@@ -3631,7 +3622,6 @@ No changes.
 - Minio: Adds podLabels and podAnnotations to chart. !1264 (Kavanaugh Latiolais)
 - Support custom labels for Pods of GitLab components. !1457 (Maxence Laude)
 
-
 ## 4.7.4 (2021-01-13)
 
 - No changes.
@@ -3646,13 +3636,11 @@ No changes.
 
 - Fix nginx-ingress checkConfig error. !1730
 
-
 ## 4.7.1 (2020-12-23)
 
 ### Changed (1 change)
 
 - GitLab Runner to 0.24.0. !1724
-
 
 ## 4.7.0 (2020-12-22)
 
@@ -3690,7 +3678,6 @@ No changes.
 - Update NGINX from v0.20.0 to 0.41.2. !1690
 - Changes the default loglevel for registry to info. !1703
 
-
 ## 4.6.7 (2021-02-11)
 
 - No changes.
@@ -3711,7 +3698,6 @@ No changes.
 - Minio: Adds podLabels and podAnnotations to chart. !1264 (Kavanaugh Latiolais)
 - Support custom labels for Pods of GitLab components. !1457 (Maxence Laude)
 
-
 ## 4.6.5 (2021-01-13)
 
 - No changes.
@@ -3725,7 +3711,6 @@ No changes.
 ### Changed (1 change, 1 of them is from the community)
 
 - Update gitlab-runner from 0.22.0 to 0.23.0. !1686 (Jan Brummelte)
-
 
 ## 4.6.2 (2020-12-07)
 
@@ -3769,7 +3754,6 @@ No changes.
 - Update resource specifications for Webservice and Sidekiq. !1634
 - Set release_package to run manually. !1641
 
-
 ## 4.5.7 (2021-01-13)
 
 - No changes.
@@ -3783,7 +3767,6 @@ No changes.
 ### Other (1 change)
 
 - Set release_package to run manually. !1641
-
 
 ## 4.5.4 (2020-11-13)
 
@@ -3799,7 +3782,6 @@ No changes.
 
 - geo-logcursor: move redis secrets to optional. !1614
 - Remove trailing space causing errors in the deprecation template. !1615
-
 
 ## 4.5.1 (2020-10-22)
 
@@ -3829,13 +3811,11 @@ No changes.
 - cleanup registry.fullname templates. !1568
 - Bump default gitlab-kas image tag to v0.0.6. !1582
 
-
 ## 4.4.6 (2020-12-07)
 
 ### Other (1 change)
 
 - Set release_package to run manually. !1641
-
 
 ## 4.4.5 (2020-11-04)
 
@@ -3844,20 +3824,17 @@ No changes.
 - Fix PG password error when enabling extensions during DB init. !1593
 - geo-logcursor: move redis secrets to optional. !1614
 
-
 ## 4.4.4 (2020-10-15)
 
 ### Fixed (1 change)
 
 - Praefect: fixup certificates mounts #2341. !1590
 
-
 ## 4.4.3 (2020-10-07)
 
 ### Added (1 change)
 
 - Adds NetworkPolicy for gitlab-shell. !1580
-
 
 ## 4.4.2 (2020-10-01)
 
@@ -3870,13 +3847,11 @@ No changes.
 - Bump default gitlab-kas image tag to v0.0.5. !1565
 - Update GitLab Version to 13.4.2.
 
-
 ## 4.4.1 (2020-09-24)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.4.1.
-
 
 ## 4.4.0 (2020-09-22)
 
@@ -3914,7 +3889,6 @@ No changes.
 - Adds capability to specify memoryKiller per Pod. !1536
 - Update GitLab Version to 13.4.0.
 
-
 ## 4.3.9 (2020-11-02)
 
 - No changes.
@@ -3929,7 +3903,6 @@ No changes.
 
 - Update GitLab Version to 13.3.7.
 
-
 ## 4.3.6 (2020-09-14)
 
 ### Changed (1 change)
@@ -3940,20 +3913,17 @@ No changes.
 
 - Update GitLab Version to 13.3.6.
 
-
 ## 4.3.5 (2020-09-04)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.3.5.
 
-
 ## 4.3.4 (2020-09-02)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.3.4.
-
 
 ## 4.3.3 (2020-09-02)
 
@@ -3964,7 +3934,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 13.3.3.
-
 
 ## 4.3.2 (2020-08-28)
 
@@ -3977,7 +3946,6 @@ No changes.
 
 - Update GitLab Version to 13.3.2.
 
-
 ## 4.3.1 (2020-08-25)
 
 ### Changed (1 change)
@@ -3987,7 +3955,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 13.3.1.
-
 
 ## 4.3.0 (2020-08-22)
 
@@ -4019,13 +3986,11 @@ No changes.
 
 - Update GitLab Version to 13.3.0.
 
-
 ## 4.2.10 (2020-10-01)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.2.10.
-
 
 ## 4.2.9 (2020-09-04)
 
@@ -4033,13 +3998,11 @@ No changes.
 
 - Update GitLab Version to 13.2.9.
 
-
 ## 4.2.8 (2020-09-02)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.2.8.
-
 
 ## 4.2.7 (2020-09-02)
 
@@ -4047,13 +4010,11 @@ No changes.
 
 - Update GitLab Version to 13.2.7.
 
-
 ## 4.2.6 (2020-08-18)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.2.6.
-
 
 ## 4.2.5 (2020-08-18)
 
@@ -4065,13 +4026,11 @@ No changes.
 
 - Update GitLab Version to 13.2.5.
 
-
 ## 4.2.4 (2020-08-11)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.2.4.
-
 
 ## 4.2.3 (2020-08-05)
 
@@ -4079,13 +4038,11 @@ No changes.
 
 - Update GitLab Version to 13.2.3.
 
-
 ## 4.2.2 (2020-07-30)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.2.2.
-
 
 ## 4.2.1 (2020-07-24)
 
@@ -4100,7 +4057,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 13.2.1.
-
 
 ## 4.2.0 (2020-07-22)
 
@@ -4125,13 +4081,11 @@ No changes.
 - Add an annotations support to the migrations job template. !1423 (Tiago Posse)
 - Update GitLab Version to 13.2.0.
 
-
 ## 4.1.12 (2020-09-04)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.1.11.
-
 
 ## 4.1.11 (2020-09-02)
 
@@ -4139,13 +4093,11 @@ No changes.
 
 - Update GitLab Version to 13.1.10.
 
-
 ## 4.1.10 (2020-09-02)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.1.9.
-
 
 ## 4.1.9 (2020-08-18)
 
@@ -4153,13 +4105,11 @@ No changes.
 
 - Update GitLab Version to 13.1.8.
 
-
 ## 4.1.7 (2020-08-05)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.1.6.
-
 
 ## 4.1.6 (2020-07-24)
 
@@ -4167,20 +4117,17 @@ No changes.
 
 - Update GitLab Version to 13.1.5.
 
-
 ## 4.1.5 (2020-07-24)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.1.5.
 
-
 ## 4.1.4 (2020-07-09)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.1.4.
-
 
 ## 4.1.3 (2020-07-06)
 
@@ -4192,13 +4139,11 @@ No changes.
 
 - Update GitLab Version to 13.1.3.
 
-
 ## 4.1.2 (2020-07-01)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.1.2.
-
 
 ## 4.1.1 (2020-06-24)
 
@@ -4209,7 +4154,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 13.1.1.
-
 
 ## 4.1.0 (2020-06-22)
 
@@ -4250,13 +4194,11 @@ No changes.
 - Update GitLab Runner chart to 0.18.0. !1416
 - Update GitLab Version to 13.1.0.
 
-
 ## 4.0.12 (2020-08-18)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.0.14.
-
 
 ## 4.0.11 (2020-08-18)
 
@@ -4264,13 +4206,11 @@ No changes.
 
 - Update GitLab Version to 13.0.13.
 
-
 ## 4.0.10 (2020-08-05)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.0.12.
-
 
 ## 4.0.9 (2020-07-09)
 
@@ -4278,13 +4218,11 @@ No changes.
 
 - Update GitLab Version to 13.0.10.
 
-
 ## 4.0.8 (2020-07-06)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.0.9.
-
 
 ## 4.0.7 (2020-07-01)
 
@@ -4292,13 +4230,11 @@ No changes.
 
 - Update GitLab Version to 13.0.8.
 
-
 ## 4.0.6 (2020-06-25)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.0.7.
-
 
 ## 4.0.5 (2020-06-10)
 
@@ -4310,20 +4246,17 @@ No changes.
 
 - Update GitLab Version to 13.0.6.
 
-
 ## 4.0.4 (2020-06-04)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.0.5.
 
-
 ## 4.0.3 (2020-06-03)
 
 ### Other (1 change)
 
 - Update GitLab Version to 13.0.4.
-
 
 ## 4.0.2 (2020-05-29)
 
@@ -4341,7 +4274,6 @@ No changes.
 
 - Update GitLab Version to 13.0.3.
 
-
 ## 4.0.1 (2020-05-27)
 
 ### Fixed (1 change)
@@ -4355,7 +4287,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 13.0.1.
-
 
 ## 4.0.0 (2020-05-22)
 
@@ -4392,13 +4323,11 @@ No changes.
 - Update bitnami/postgres -> 8.9.4, postgres -> 11.7.0. !1320
 - Update GitLab Version to 13.0.0.
 
-
 ## 3.3.13 (2020-07-06)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.10.14.
-
 
 ## 3.3.12 (2020-07-01)
 
@@ -4406,13 +4335,11 @@ No changes.
 
 - Update GitLab Version to 12.10.13.
 
-
 ## 3.3.11 (2020-06-25)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.10.12.
-
 
 ## 3.3.9 (2020-06-04)
 
@@ -4420,13 +4347,11 @@ No changes.
 
 - Update GitLab Version to 12.10.10.
 
-
 ## 3.3.7 (2020-05-29)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.10.8.
-
 
 ## 3.3.6 (2020-05-27)
 
@@ -4438,7 +4363,6 @@ No changes.
 
 - Update GitLab Version to 12.10.7.
 
-
 ## 3.3.5 (2020-05-15)
 
 ### Changed (1 change)
@@ -4449,20 +4373,17 @@ No changes.
 
 - Update GitLab Version to 12.10.6.
 
-
 ## 3.3.4 (2020-05-14)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.10.5.
 
-
 ## 3.3.3 (2020-05-04)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.10.3.
-
 
 ## 3.3.2 (2020-04-30)
 
@@ -4476,13 +4397,11 @@ No changes.
 
 - Update GitLab Version to 12.10.2.
 
-
 ## 3.3.1 (2020-04-24)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.10.1.
-
 
 ## 3.3.0 (2020-04-22)
 
@@ -4519,13 +4438,11 @@ No changes.
 
 - Update GitLab Version to 12.10.0.
 
-
 ## 3.2.9 (2020-06-10)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.9.10.
-
 
 ## 3.2.8 (2020-06-03)
 
@@ -4533,13 +4450,11 @@ No changes.
 
 - Update GitLab Version to 12.9.9.
 
-
 ## 3.2.7 (2020-05-27)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.9.8.
-
 
 ## 3.2.6 (2020-05-14)
 
@@ -4547,20 +4462,17 @@ No changes.
 
 - Update GitLab Version to 12.9.7.
 
-
 ## 3.2.5 (2020-04-30)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.9.5.
 
-
 ## 3.2.4 (2020-04-17)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.9.4.
-
 
 ## 3.2.3 (2020-04-15)
 
@@ -4572,20 +4484,17 @@ No changes.
 
 - Update GitLab Version to 12.9.3.
 
-
 ## 3.2.2 (2020-03-31)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.9.2.
 
-
 ## 3.2.1 (2020-03-26)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.9.1.
-
 
 ## 3.2.0 (2020-03-22)
 
@@ -4605,20 +4514,17 @@ No changes.
 
 - Update GitLab Version to 12.9.0.
 
-
 ## 3.1.8 (2020-04-30)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.8.10.
 
-
 ## 3.1.7 (2020-04-15)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.8.9.
-
 
 ## 3.1.6 (2020-03-26)
 
@@ -4630,13 +4536,11 @@ No changes.
 
 - Update GitLab Version to 12.8.8.
 
-
 ## 3.1.5 (2020-03-16)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.8.7.
-
 
 ## 3.1.4 (2020-03-11)
 
@@ -4644,13 +4548,11 @@ No changes.
 
 - Update GitLab Version to 12.8.6.
 
-
 ## 3.1.3 (2020-03-09)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.8.5.
-
 
 ## 3.1.2
 
@@ -4662,13 +4564,11 @@ No changes.
 
 - Update GitLab Version to 12.8.2.
 
-
 ## 3.1.1
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.8.1.
-
 
 ## 3.1.0
 
@@ -4707,13 +4607,11 @@ No changes.
 - Bump Container Registry to v2.8.1-gitlab. !1173
 - Update GitLab Version to 12.8.0.
 
-
 ## 3.0.7 (2020-04-15)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.7.9.
-
 
 ## 3.0.6 (2020-03-26)
 
@@ -4725,13 +4623,11 @@ No changes.
 
 - Update GitLab Version to 12.7.8.
 
-
 ## 3.0.5
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.7.7.
-
 
 ## 3.0.4
 
@@ -4743,7 +4639,6 @@ No changes.
 
 - Update GitLab Version to 12.7.6.
 
-
 ## 3.0.3
 
 ### Fixed (1 change)
@@ -4753,7 +4648,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 12.7.5.
-
 
 ## 3.0.2
 
@@ -4765,7 +4659,6 @@ No changes.
 
 - Update GitLab Version to 12.7.4.
 
-
 ## 3.0.1
 
 ### Changed (1 change)
@@ -4775,7 +4668,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 12.7.2.
-
 
 ## 3.0.0
 
@@ -4806,13 +4698,11 @@ No changes.
 - Use mail_room gem version from Gemfile.lock as appVersion in the chart. !1088
 - Update GitLab Version to 12.7.0.
 
-
 ## 2.6.9
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.6.8.
-
 
 ## 2.6.8
 
@@ -4824,13 +4714,11 @@ No changes.
 
 - Update GitLab Version to 12.6.7.
 
-
 ## 2.6.7
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.6.6.
-
 
 ## 2.6.6
 
@@ -4842,20 +4730,17 @@ No changes.
 
 - Update GitLab Version to 12.6.4.
 
-
 ## 2.6.5
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.6.4.
 
-
 ## 2.6.4
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.6.3.
-
 
 ## 2.6.3
 
@@ -4867,13 +4752,11 @@ No changes.
 
 - Update GitLab Version to 12.6.2.
 
-
 ## 2.6.2
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.6.2.
-
 
 ## 2.6.1
 
@@ -4881,7 +4764,6 @@ No changes.
 
 - Update gitlab-org/charts/gitlab-runner from 0.11.0 to 0.12.0. !1085
 - Update GitLab Version to 12.6.1.
-
 
 ## 2.6.0
 
@@ -4916,20 +4798,17 @@ No changes.
 - Document the use of external Minio for object storage. !1005
 - Update GitLab Version to 12.6.0.
 
-
 ## 2.5.11
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.10.
 
-
 ## 2.5.10
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.9.
-
 
 ## 2.5.9
 
@@ -4941,20 +4820,17 @@ No changes.
 
 - Update GitLab Version to 12.5.7.
 
-
 ## 2.5.8
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.7.
 
-
 ## 2.5.7
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.6.
-
 
 ## 2.5.6
 
@@ -4966,13 +4842,11 @@ No changes.
 
 - Update GitLab Version to 12.5.5.
 
-
 ## 2.5.5
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.4.
-
 
 ## 2.5.4
 
@@ -4984,20 +4858,17 @@ No changes.
 
 - Update GitLab Version to 12.5.3.
 
-
 ## 2.5.3
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.2.
 
-
 ## 2.5.2
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.1.
-
 
 ## 2.5.1
 
@@ -5008,7 +4879,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 12.5.0.
-
 
 ## 2.5.0
 
@@ -5040,13 +4910,11 @@ No changes.
 - Update gitlab-runner to 0.11.0/12.5.0. !1046
 - Update GitLab Version to 12.5.0.
 
-
 ## 2.4.13
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.4.8.
-
 
 ## 2.4.12
 
@@ -5054,13 +4922,11 @@ No changes.
 
 - Update GitLab Version to 12.4.7.
 
-
 ## 2.4.10
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.4.5.
-
 
 ## 2.4.9
 
@@ -5068,13 +4934,11 @@ No changes.
 
 - Update GitLab Version to 12.4.4.
 
-
 ## 2.4.8
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.4.3.
-
 
 ## 2.4.7
 
@@ -5092,7 +4956,6 @@ No changes.
 - Adds the global gitlab annotations to mailroom.
 - Update GitLab Version to 12.4.2.
 
-
 ## 2.4.6
 
 ### Fixed (1 change)
@@ -5107,14 +4970,12 @@ No changes.
 
 - Update GitLab Version to 12.4.2.
 
-
 ## 2.4.5
 
 ### Other (2 changes)
 
 - Update GitLab Runner to v12.4.1. !1018
 - Update GitLab Version to 12.4.1.
-
 
 ## 2.4.4
 
@@ -5126,7 +4987,6 @@ No changes.
 
 - Update GitLab Version to 12.4.1.
 
-
 ## 2.4.3
 
 ### Fixed (1 change)
@@ -5136,7 +4996,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 12.4.1.
-
 
 ## 2.4.2
 
@@ -5148,7 +5007,6 @@ No changes.
 
 - Update GitLab Version to 12.4.0.
 
-
 ## 2.4.1
 
 ### Fixed (2 changes)
@@ -5159,7 +5017,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 12.4.0.
-
 
 ## 2.4.0
 
@@ -5190,7 +5047,6 @@ No changes.
 - Update gitlab-runner to 0.10.0/12.4.0. !1003
 - Update GitLab Version to 12.4.0.
 
-
 ## 2.3.12
 
 ### Fixed (2 changes)
@@ -5202,20 +5058,17 @@ No changes.
 
 - Update GitLab Version to 12.3.9.
 
-
 ## 2.3.11
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.3.8.
 
-
 ## 2.3.10
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.3.7.
-
 
 ## 2.3.9
 
@@ -5226,7 +5079,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 12.3.6.
-
 
 ## 2.3.8
 
@@ -5246,13 +5098,11 @@ No changes.
 
 - Update GitLab Version to 12.3.5.
 
-
 ## 2.3.7
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.3.5.
-
 
 ## 2.3.6
 
@@ -5260,7 +5110,6 @@ No changes.
 
 - Update gitlab-runner to v0.9.1. !987
 - Update GitLab Version to 12.3.4.
-
 
 ## 2.3.5
 
@@ -5272,20 +5121,17 @@ No changes.
 
 - Update GitLab Version to 12.3.4.
 
-
 ## 2.3.3
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.3.2.
 
-
 ## 2.3.2
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.3.1.
-
 
 ## 2.3.1
 
@@ -5296,7 +5142,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 12.3.0.
-
 
 ## 2.3.0
 
@@ -5329,7 +5174,6 @@ No changes.
 - Update gitlab-runner to 0.9.0/12.3.0. !965
 - Update GitLab Version to 12.3.0.
 
-
 ## 2.2.12
 
 ### Fixed (1 change)
@@ -5340,20 +5184,17 @@ No changes.
 
 - Update GitLab Version to 12.2.9.
 
-
 ## 2.2.11
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.2.8.
 
-
 ## 2.2.10
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.2.7.
-
 
 ## 2.2.9
 
@@ -5369,13 +5210,11 @@ No changes.
 
 - Update GitLab Version to 12.2.8.
 
-
 ## 2.2.8
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.2.7.
-
 
 ## 2.2.7
 
@@ -5387,13 +5226,11 @@ No changes.
 
 - Update GitLab Version to 12.2.6.
 
-
 ## 2.2.6
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.2.5.
-
 
 ## 2.2.5
 
@@ -5411,7 +5248,6 @@ No changes.
 - Update gitlab-runner to 0.8.0/12.2.0. !912
 - Update GitLab Version to 12.2.4.
 
-
 ## 2.2.4
 
 ### Added (2 changes, 2 of them are from the community)
@@ -5423,13 +5259,11 @@ No changes.
 
 - Update GitLab Version to 12.2.4.
 
-
 ## 2.2.3
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.2.4.
-
 
 ## 2.2.2
 
@@ -5437,13 +5271,11 @@ No changes.
 
 - Update GitLab Version to 12.2.3.
 
-
 ## 2.2.1
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.2.1.
-
 
 ## 2.2.0
 
@@ -5473,13 +5305,11 @@ No changes.
 - Document global.ingress.class & sample Traefik. !898
 - Update GitLab Version to 12.2.0.
 
-
 ## 2.1.14
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.1.14.
-
 
 ## 2.1.13
 
@@ -5491,13 +5321,11 @@ No changes.
 
 - Update GitLab Version to 12.1.14.
 
-
 ## 2.1.12
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.1.13.
-
 
 ## 2.1.11
 
@@ -5505,13 +5333,11 @@ No changes.
 
 - Update GitLab Version to 12.1.12.
 
-
 ## 2.1.10
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.1.11.
-
 
 ## 2.1.8
 
@@ -5523,13 +5349,11 @@ No changes.
 
 - Update GitLab Version to 12.1.8.
 
-
 ## 2.1.7
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.1.6.
-
 
 ## 2.1.6
 
@@ -5541,7 +5365,6 @@ No changes.
 
 - Update GitLab Version to 12.1.4.
 
-
 ## 2.1.5
 
 ### Fixed (1 change)
@@ -5552,13 +5375,11 @@ No changes.
 
 - Update GitLab Version to 12.1.4.
 
-
 ## 2.1.4
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.1.4.
-
 
 ## 2.1.3
 
@@ -5566,20 +5387,17 @@ No changes.
 
 - Update GitLab Version to 12.1.3.
 
-
 ## 2.1.2
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.1.2.
 
-
 ## 2.1.1
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.1.1.
-
 
 ## 2.1.0
 
@@ -5614,13 +5432,11 @@ No changes.
 - Update gitlab-runner to 0.7.0/12.1.0. !878
 - Update GitLab Version to 12.1.0.
 
-
 ## 2.0.7
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.0.9.
-
 
 ## 2.0.6
 
@@ -5628,13 +5444,11 @@ No changes.
 
 - Update GitLab Version to 12.0.8.
 
-
 ## 2.0.5
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.0.6.
-
 
 ## 2.0.4
 
@@ -5649,13 +5463,11 @@ No changes.
 
 - Update GitLab Version to 12.0.4.
 
-
 ## 2.0.3 (2019-07-03)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.0.3.
-
 
 ## 2.0.2 (2019-06-26)
 
@@ -5668,13 +5480,11 @@ No changes.
 - Update gitlab-runner to 0.6.0/12.0.0. !832
 - Update GitLab Version to 12.0.2.
 
-
 ## 2.0.1 (2019-06-25)
 
 ### Other (1 change)
 
 - Update GitLab Version to 12.0.1.
-
 
 ## 2.0.0 (2019-06-22)
 
@@ -5683,7 +5493,7 @@ No changes.
 - Ensure unicorn.rb issues appropriate lifecycle hooks. !791
 - Add missing object storage settings in task-runner. !793
 - Disable storage redirect of Registry when the internal Minio is used. !797
-- Port over https://github.com/helm/charts/pull/13646. !804
+- Port over <https://github.com/helm/charts/pull/13646>. !804
 - Add SMTP and other missing settings for task-runner. !809
 - Fix example smtp settings. !810
 
@@ -5706,13 +5516,11 @@ No changes.
 - Default Registry replicas to minReplicas. !794 (skarbek)
 - Update GitLab Version to 12.0.0.
 
-
 ## 1.9.8
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.11.8.
-
 
 ## 1.9.7
 
@@ -5725,13 +5533,11 @@ No changes.
 
 - Update GitLab Version to 11.11.7.
 
-
 ## 1.9.5 (2019-06-26)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.11.4.
-
 
 ## 1.9.4 (2019-06-21)
 
@@ -5743,13 +5549,11 @@ No changes.
 
 - Update GitLab Version to 11.11.3.
 
-
 ## 1.9.3 (2019-06-10)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.11.3.
-
 
 ## 1.9.2 (2019-06-05)
 
@@ -5758,14 +5562,12 @@ No changes.
 - Update gitlab-runner to 0.5.2/11.11.2. !806
 - Update GitLab Version to 11.11.2.
 
-
 ## 1.9.1 (2019-06-03)
 
 ### Other (2 changes)
 
 - Update GitLab Runner Helm Chart to 0.5.1. !801
 - Update GitLab Version to 11.11.1.
-
 
 ## 1.9.0 (2019-05-22)
 
@@ -5791,13 +5593,11 @@ No changes.
 - Update gitlab-runner to 0.5.0/11.11.0. !798
 - Update GitLab Version to 11.11.0.
 
-
 ## 1.8.6 (2019-07-03)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.10.8.
-
 
 ## 1.8.5 (2019-06-26)
 
@@ -5813,13 +5613,11 @@ No changes.
 
 - Update GitLab Version to 11.10.7.
 
-
 ## 1.8.4 (2019-05-01)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.10.4.
-
 
 ## 1.8.3 (2019-04-30)
 
@@ -5827,13 +5625,11 @@ No changes.
 
 - Update GitLab Version to 11.10.3.
 
-
 ## 1.8.2 (2019-04-29)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.10.2.
-
 
 ## 1.8.1 (2019-04-24)
 
@@ -5841,7 +5637,6 @@ No changes.
 
 - Update gitlab-runner to 0.4.1/11.10.1. !768
 - Update GitLab Version to 11.10.1.
-
 
 ## 1.8.0 (2019-04-22)
 
@@ -5866,13 +5661,11 @@ No changes.
 - Update gitlab-runner to 0.4.0/11.10.0. !765
 - Update GitLab Version to 11.10.0.
 
-
 ## 1.7.5 (2019-04-11)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.9.8.
-
 
 ## 1.7.4 (2019-04-10)
 
@@ -5883,7 +5676,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 11.9.7.
-
 
 ## 1.7.3 (2019-04-05)
 
@@ -5896,7 +5688,6 @@ No changes.
 
 - Update GitLab Version to 11.9.6.
 
-
 ## 1.7.2 (2019-04-02)
 
 ### Fixed (1 change)
@@ -5907,14 +5698,12 @@ No changes.
 
 - Update GitLab Version to 11.9.4.
 
-
 ## 1.7.1 (2019-03-25)
 
 ### Other (2 changes)
 
 - Update gitlab-runner to 0.3.0/11.9.0. !735
 - Update GitLab Version to 11.9.1.
-
 
 ## 1.7.0 (2019-03-22)
 
@@ -5945,7 +5734,6 @@ No changes.
 - Automate version mapping updates. !704
 - Update GitLab Version to 11.9.0.
 
-
 ## 1.6.3 (2019-03-20)
 
 ### Changed (1 change)
@@ -5955,7 +5743,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 11.8.3.
-
 
 ## 1.6.2 (2019-03-13)
 
@@ -5967,7 +5754,6 @@ No changes.
 
 - Update GitLab Version to 11.8.2.
 
-
 ## 1.6.1 (2019-03-04)
 
 ### Fixed (1 change)
@@ -5978,7 +5764,6 @@ No changes.
 
 - Update gitlab-runner to 0.2.0/11.8.0. !697
 - Update GitLab Version to 11.8.1.
-
 
 ## 1.6.0 (2019-02-22)
 
@@ -6004,13 +5789,11 @@ No changes.
 - Allow static ServiceAccount Name in shared-secrets. !688
 - Update GitLab Version to 11.8.0.
 
-
 ## 1.5.3 (2019-02-05)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.7.5.
-
 
 ## 1.5.2 (2019-02-05)
 
@@ -6018,14 +5801,12 @@ No changes.
 
 - Update GitLab Version to 11.7.4.
 
-
 ## 1.5.1 (2019-01-31)
 
 ### Other (2 changes)
 
 - Update gitlab-runner to 0.1.45/11.7.0. !654
 - Update GitLab Version to 11.7.3.
-
 
 ## 1.5.0 (2019-01-22)
 
@@ -6056,13 +5837,11 @@ No changes.
 - Move ingress enabled detection to helper method. !607
 - Update GitLab Version to 11.7.0.
 
-
 ## 1.4.4 (2019-01-17)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.6.5.
-
 
 ## 1.4.3 (2019-01-16)
 
@@ -6071,20 +5850,17 @@ No changes.
 - Update gitlab/gitlab-runner to v0.1.44. !633
 - Update GitLab Version to 11.6.4.
 
-
 ## 1.4.2 (2019-01-05)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.6.3.
 
-
 ## 1.4.1 (2019-01-02)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.6.2.
-
 
 ## 1.4.0 (2018-12-22)
 
@@ -6114,7 +5890,6 @@ No changes.
 - Operator Version 0.1. !605
 - Update GitLab Version to 11.6.0.
 
-
 ## 1.3.4 (2018-12-14)
 
 ### Other (3 changes)
@@ -6123,13 +5898,11 @@ No changes.
 - Fix Broken Icon Image on Helm Hub. !597
 - Update GitLab Version to 11.5.4.
 
-
 ## 1.3.3 (2018-12-06)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.5.3.
-
 
 ## 1.3.2 (2018-12-04)
 
@@ -6141,13 +5914,11 @@ No changes.
 
 - Update GitLab Version to 11.5.2.
 
-
 ## 1.3.1 (2018-11-28)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.5.1.
-
 
 ## 1.3.0 (2018-11-22)
 
@@ -6176,13 +5947,11 @@ No changes.
 - Update nginx-ingress fork to 0.30.0. !578
 - Update GitLab Version to 11.5.0.
 
-
 ## 1.2.6 (2018-11-20)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.4.7.
-
 
 ## 1.2.5 (2018-11-20)
 
@@ -6191,13 +5960,11 @@ No changes.
 - Mount configuration files directly to /srv/gitlab/config instead of /var/opt/gitlab/config/gitlab. !565
 - Update GitLab Version to 11.4.6.
 
-
 ## 1.2.4 (2018-11-05)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.4.5.
-
 
 ## 1.2.3 (2018-11-01)
 
@@ -6205,13 +5972,11 @@ No changes.
 
 - Update GitLab Version to 11.4.4.
 
-
 ## 1.2.2 (2018-10-29)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.4.3.
-
 
 ## 1.2.1 (2018-10-29)
 
@@ -6222,7 +5987,6 @@ No changes.
 ### Other (1 change)
 
 - Update GitLab Version to 11.4.2.
-
 
 ## 1.2.0 (2018-10-22)
 
@@ -6257,13 +6021,11 @@ No changes.
 - Use example.com in documentation and examples as per RFC2606. !512 (Scott Leggett)
 - Update GitLab Version to 11.4.0.
 
-
 ## 1.1.6 (2018-10-17)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.3.6.
-
 
 ## 1.1.5 (2018-10-15)
 
@@ -6279,13 +6041,11 @@ No changes.
 
 - Update GitLab Version to 11.3.5.
 
-
 ## 1.1.4 (2018-10-05)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.3.4.
-
 
 ## 1.1.3 (2018-10-04)
 
@@ -6293,20 +6053,17 @@ No changes.
 
 - Update GitLab Version to 11.3.3.
 
-
 ## 1.1.2 (2018-10-03)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.3.2.
 
-
 ## 1.1.1 (2018-10-01)
 
 ### Other (1 change)
 
 - Update GitLab Version to 11.3.1.
-
 
 ## 1.1.0 (2018-09-22)
 
@@ -6329,13 +6086,11 @@ No changes.
 - Added namespace to resources. !443 (Matthias van de Meent (Cofano Software Solutions))
 - Update GitLab Version to 11.3.0.
 
-
 ## 1.0.2 (2018-08-28)
 
 ### Fixed (1 change)
 
 - Fixed setting the connection to a non-default redis port. !470
-
 
 ## 1.0.1 (2018-08-22)
 
@@ -6391,13 +6146,11 @@ No changes.
 - add anti-affinity to nginx.
 - Remove Dockerfile since it's been moved to gitlab-org/gitlab-build-images.
 
-
 ## 0.3.5 (2018-07-31)
 
 ### Fixed (1 change)
 
 - Pin the minio/mc image version to a know working tag. !426
-
 
 ## 0.3.4 (2018-07-31)
 

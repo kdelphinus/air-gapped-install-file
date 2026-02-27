@@ -49,8 +49,8 @@
 
 ### 🔐 보안 정보 (Secrets)
 
-* **ingress-nginx-admission**: 컨트롤러와 API 서버 간의 보안 통신용 인증서.
-* **default-token**: 서비스 어카운트 권한 관리를 위한 토큰.
+- **ingress-nginx-admission**: 컨트롤러와 API 서버 간의 보안 통신용 인증서.
+- **default-token**: 서비스 어카운트 권한 관리를 위한 토큰.
 
 ### ⚙️ 시스템 설정 (ConfigMaps)
 

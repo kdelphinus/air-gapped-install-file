@@ -7,4 +7,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * Do not create KEDA in case of DaemonSets.
 * Fix KEDA v2 definition
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.20.0...helm-chart-3.20.1
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.20.0...helm-chart-3.20.1>

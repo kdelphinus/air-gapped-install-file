@@ -8,4 +8,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * Adding resource type to default HPA configuration to resolve issues with Terraform helm chart usage (#9803)
 * Update Ingress-Nginx version controller-v1.7.1
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.6.0...helm-chart-4.6.1
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.6.0...helm-chart-4.6.1>

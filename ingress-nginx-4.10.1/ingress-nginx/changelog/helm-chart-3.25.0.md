@@ -6,4 +6,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 * [#6957](https://github.com/kubernetes/ingress-nginx/pull/6957) Add ability to specify automountServiceAccountToken
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.24.0...helm-chart-3.25.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.24.0...helm-chart-3.25.0>

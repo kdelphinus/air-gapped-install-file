@@ -62,6 +62,7 @@ The GitLab Zoekt Helm chart deploys a code search engine with a modern, scalable
    - Enables federated search capabilities
 
 The architecture features:
+
 - Federated search with gRPC streaming for efficient multi-node searches
 - Self-registering node system for easy scaling
 - Configurable security with TLS and basic authentication

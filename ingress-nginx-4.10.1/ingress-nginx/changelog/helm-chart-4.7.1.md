@@ -9,4 +9,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * added helmshowvalues example (#10019)
 * Update Ingress-Nginx version controller-v1.8.1
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.7.0...helm-chart-4.7.1
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.7.0...helm-chart-4.7.1>

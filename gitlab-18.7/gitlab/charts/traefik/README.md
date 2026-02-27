@@ -16,6 +16,7 @@ To keep this HelmChart as generic as possible we tend
 to avoid integrating any third party solutions nor any specific use cases.
 
 Accordingly, the encouraged approach to fulfill your needs:
+
 1. override the default Traefik configuration values ([yaml file or cli](https://helm.sh/docs/chart_template_guide/values_files/))
 2. append your own configurations (`kubectl apply -f myconf.yaml`)
 3. extend this HelmChart ([as a Subchart](https://helm.sh/docs/chart_template_guide/subcharts_and_globals/))
@@ -25,6 +26,7 @@ Accordingly, the encouraged approach to fulfill your needs:
 ### Prerequisites
 
 With the command `helm version`, make sure that you have:
+
 - Helm v3 [installed](https://helm.sh/docs/using_helm/#installing-helm)
 
 Add Traefik's chart repository to Helm:

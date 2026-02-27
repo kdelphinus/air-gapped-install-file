@@ -9,4 +9,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [#6253](https://github.com/kubernetes/ingress-nginx/pull/6253) Release v0.40.0
 * [#6233](https://github.com/kubernetes/ingress-nginx/pull/6233) Add admission controller e2e test
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.3.0...ingress-nginx-3.3.1
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.3.0...ingress-nginx-3.3.1>

@@ -18,4 +18,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [8434](https://github.com/kubernetes/ingress-nginx/pull/8434) added new auth-tls-match-cn annotation
 * [8426](https://github.com/kubernetes/ingress-nginx/pull/8426) Bump github.com/prometheus/common from 0.32.1 to 0.33.0
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.0.18...helm-chart-4.1.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.0.18...helm-chart-4.1.0>

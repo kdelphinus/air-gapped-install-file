@@ -10,4 +10,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [helm] pass service annotations through helm tpl engine (#10084)
 * Update Ingress-Nginx version controller-v1.9.0-beta.0
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.7.2...helm-chart-4.8.0-beta.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.7.2...helm-chart-4.8.0-beta.0>

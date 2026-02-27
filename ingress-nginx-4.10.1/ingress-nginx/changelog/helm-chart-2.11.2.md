@@ -6,4 +6,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 * [#5951](https://github.com/kubernetes/ingress-nginx/pull/5951) Bump chart patch version
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-2.11.1...ingress-nginx-2.11.2
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-2.11.1...ingress-nginx-2.11.2>

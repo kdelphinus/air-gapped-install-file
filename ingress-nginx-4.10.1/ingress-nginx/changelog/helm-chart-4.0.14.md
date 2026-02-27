@@ -4,6 +4,6 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 ### 4.0.14
 
-* [8061] https://github.com/kubernetes/ingress-nginx/pull/8061 Using helm-docs to populate values table in README.md
+* [8061] <https://github.com/kubernetes/ingress-nginx/pull/8061> Using helm-docs to populate values table in README.md
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.0.13...helm-chart-4.0.14
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.0.13...helm-chart-4.0.14>

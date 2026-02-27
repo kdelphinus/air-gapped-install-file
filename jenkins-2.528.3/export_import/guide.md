@@ -1,6 +1,5 @@
 > 검증 필요
 
-
 # 📘 Jenkins Migration: All-in-One Guide
 
 ## 📋 워크플로우 개요
@@ -111,13 +110,12 @@ tar -czf jenkins_import_ready.tar.gz jenkins_export_20260124
 1. **플러그인 확인:** XML에 정의된 플러그인들이 새 Jenkins에 설치되어 있어야 합니다. (특히 `Folders`, `Git`, `Pipeline` 관련)
 2. **Credential 생성:** 파이프라인에서 사용하는 `Credential ID`가 새 Jenkins에 미리 생성되어 있어야 합니다. (ID값 일치 필수)
 3. **K8s 포트포워딩:** 로컬 터미널에서 Jenkins로 통신하기 위해 포트를 엽니다.
+
 ```bash
 # 터미널 창 1개 열어서 유지
 kubectl port-forward svc/jenkins 8080:8080 -n jenkins
 
 ```
-
-
 
 ### 🚀 최종 Import 스크립트 (`import_final.sh`)
 
@@ -193,9 +191,10 @@ echo "=========================================="
 
 1. **폴더 구조:** Jenkins 메인 화면에서 폴더(Folder) 구조가 깨지지 않고 트리 형태로 잘 보이는가?
 2. **Multibranch Pipeline:** 멀티브랜치 파이프라인의 경우, Import 직후 자동으로 `Scan Repository`가 돕니다.
+
 * 이때 **Credential**이 없거나 **Git 주소**가 틀리면 "Scan Failed"가 뜹니다.
 * 이 경우 Jenkins 화면에서 해당 Job의 `Configure`에 들어가 Git 주소가 올바르게 바뀌었는지 눈으로 확인하세요.
 
+1. **Agent Label:** 만약 구망에서 `agent { label 'linux' }`를 썼는데, 새 K8s 환경에는 해당 라벨의 노드가 없다면 빌드가 `Pending` 상태로 멈춥니다.
 
-3. **Agent Label:** 만약 구망에서 `agent { label 'linux' }`를 썼는데, 새 K8s 환경에는 해당 라벨의 노드가 없다면 빌드가 `Pending` 상태로 멈춥니다.
 * *해결:* `Manage Jenkins > Nodes` 에서 라벨을 맞춰주거나, 파이프라인 스크립트를 수정해야 합니다.

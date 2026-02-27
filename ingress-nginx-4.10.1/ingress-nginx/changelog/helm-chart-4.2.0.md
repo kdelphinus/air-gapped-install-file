@@ -44,4 +44,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [8695](https://github.com/kubernetes/ingress-nginx/pull/8695) Bump actions/download-artifact from 2 to 3
 * [8694](https://github.com/kubernetes/ingress-nginx/pull/8694) Bump crazy-max/ghaction-docker-buildx from 1.6.2 to 3.3.1
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.1.2...helm-chart-4.2.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-4.1.2...helm-chart-4.2.0>

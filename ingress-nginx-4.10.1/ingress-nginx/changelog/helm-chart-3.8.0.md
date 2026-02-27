@@ -10,4 +10,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [#6401](https://github.com/kubernetes/ingress-nginx/pull/6401) Fix controller service annotations
 * [#6403](https://github.com/kubernetes/ingress-nginx/pull/6403) Initial helm chart changelog
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.7.1...ingress-nginx-3.8.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.7.1...ingress-nginx-3.8.0>

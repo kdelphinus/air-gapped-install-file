@@ -6,4 +6,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 * Fix routing regression introduced in 0.41.0 with PathType Exact
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.9.0...ingress-nginx-3.10.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.9.0...ingress-nginx-3.10.0>

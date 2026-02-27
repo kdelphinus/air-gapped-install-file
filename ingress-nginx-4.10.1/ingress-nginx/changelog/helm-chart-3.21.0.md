@@ -9,4 +9,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 * [#6767](https://github.com/kubernetes/ingress-nginx/pull/6767) Remove ClusterRole when scope option is enabled
 * [#6785](https://github.com/kubernetes/ingress-nginx/pull/6785) Update kube-webhook-certgen image to v1.5.1
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.20.1...helm-chart-3.21.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.20.1...helm-chart-3.21.0>

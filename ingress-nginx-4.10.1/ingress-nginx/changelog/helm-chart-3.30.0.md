@@ -6,4 +6,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 * [#7092](https://github.com/kubernetes/ingress-nginx/pull/7092) Removes the possibility of using localhost in ExternalNames as endpoints
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.29.0...helm-chart-3.30.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.29.0...helm-chart-3.30.0>

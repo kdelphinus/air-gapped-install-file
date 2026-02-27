@@ -6,4 +6,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 * [#6514](https://github.com/kubernetes/ingress-nginx/pull/6514) Remove helm2 support and update docs
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.11.1...ingress-nginx-3.12.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/ingress-nginx-3.11.1...ingress-nginx-3.12.0>

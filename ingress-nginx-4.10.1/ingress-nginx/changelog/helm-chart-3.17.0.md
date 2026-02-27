@@ -6,4 +6,4 @@ This file documents all notable changes to [ingress-nginx](https://github.com/ku
 
 * Update ingress-nginx v0.42.0
 
-**Full Changelog**: https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.16.1...helm-chart-3.17.0
+**Full Changelog**: <https://github.com/kubernetes/ingress-nginx/compare/helm-chart-3.16.1...helm-chart-3.17.0>
