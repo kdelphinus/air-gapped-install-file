@@ -83,3 +83,10 @@ air-gapped/
 - K8s 리소스는 `Retain` policy 우선
 - 이미지 관련 작업 시 기존 `upload_images_to_harbor_v2.sh` 패턴 참조
 - 각 컴포넌트 폴더의 `README.md` / `guide.md` 먼저 확인
+- **Markdown 파일 작성 시 markdownlint 규칙 준수**
+  - 제목은 ATX 스타일 (`#`), 레벨은 순서대로 (h1 → h2 → h3)
+  - 목록 들여쓰기는 2칸, 순서 있는 목록은 `1.` 통일 가능
+  - 코드 블록에 언어 명시 (` ```bash `, ` ```yaml ` 등)
+  - 빈 줄: 제목/목록/코드블록 앞뒤로 1줄
+  - 줄 끝 공백 없음, 파일 끝 개행 1개
+  - 인라인 HTML 사용 금지
