@@ -16,6 +16,12 @@ NAS_REPO_PATH="/nas/argocd/repo"
 # hostPath Settings - STORAGE_TYPE="hostpath" 일 때 사용
 HOSTPATH_REDIS="/data/argocd/redis"
 HOSTPATH_REPO="/data/argocd/repo-cache"
+
+# Networking
+NODEPORT="30001"
+DOMAIN="argocd.devops.internal"   # HTTPRoute hostname, "" 이면 HTTPRoute 미생성
+GATEWAY_NAME="cmp-gateway"
+GATEWAY_NAMESPACE="envoy-gateway-system"
 # ================================================
 
 NAMESPACE="argocd"
@@ -66,7 +72,7 @@ if [ "$STORAGE_TYPE" = "nas" ]; then
         --set "repoServer.volumes[0].name=argocd-repo-cache"
         --set "repoServer.volumes[0].persistentVolumeClaim.claimName=argocd-repo-pvc"
         --set "repoServer.volumeMounts[0].name=argocd-repo-cache"
-        --set "repoServer.volumeMounts[0].mountPath=/home/argocd/cmp-server/plugins"
+        --set "repoServer.volumeMounts[0].mountPath=/home/argocd/cmp-server/cache"
         --set "redis.volumes[0].name=redis-data"
         --set "redis.volumes[0].persistentVolumeClaim.claimName=argocd-redis-pvc"
         --set "redis.volumeMounts[0].name=redis-data"
@@ -78,7 +84,7 @@ elif [ "$STORAGE_TYPE" = "hostpath" ]; then
         --set "repoServer.volumes[0].hostPath.path=${HOSTPATH_REPO}"
         --set "repoServer.volumes[0].hostPath.type=DirectoryOrCreate"
         --set "repoServer.volumeMounts[0].name=argocd-repo-cache"
-        --set "repoServer.volumeMounts[0].mountPath=/home/argocd/cmp-server/plugins"
+        --set "repoServer.volumeMounts[0].mountPath=/home/argocd/cmp-server/cache"
         --set "redis.volumes[0].name=redis-data"
         --set "redis.volumes[0].hostPath.path=${HOSTPATH_REDIS}"
         --set "redis.volumes[0].hostPath.type=DirectoryOrCreate"
@@ -96,6 +102,56 @@ if [ -d "$CHART_PATH" ]; then
 else
     echo "Error: Helm chart directory '$CHART_PATH' not found."
     exit 1
+fi
+
+# ---- NodePort Service ----
+echo ""
+echo ">>> Applying NodePort service (port: ${NODEPORT})"
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server-nodeport
+  namespace: ${NAMESPACE}
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: argocd-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      nodePort: ${NODEPORT}
+EOF
+
+# ---- HTTPRoute ----
+if [ -n "$DOMAIN" ]; then
+    echo ""
+    echo ">>> Applying HTTPRoute (hostname: ${DOMAIN})"
+    kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd-route
+  namespace: ${NAMESPACE}
+spec:
+  parentRefs:
+    - name: ${GATEWAY_NAME}
+      namespace: ${GATEWAY_NAMESPACE}
+  hostnames:
+    - "${DOMAIN}"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: argocd-server
+          port: 80
+EOF
+else
+    echo ""
+    echo ">>> DOMAIN not set, skipping HTTPRoute"
 fi
 
 echo ""
