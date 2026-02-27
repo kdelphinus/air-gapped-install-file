@@ -10,7 +10,7 @@
 ## Target Environment
 
 | 항목 | 값 |
-|------|----|
+| :--- | :--- |
 | OS | Rocky Linux 9.6, Ubuntu 24.04 등 (특정 OS 한정 없음) |
 | Kubernetes | v1.30.0 (kubeadm 기반) |
 | Container Runtime | containerd v2.2.0 |
@@ -19,13 +19,13 @@
 
 ## Component Directory Map
 
-```
+```text
 air-gapped/
 ├── k8s-1.30-*/                 # K8s 클러스터 구성 (RPM/DEB, 바이너리, 이미지)
 ├── harbor-1.14.3/              # 내부 컨테이너 레지스트리
 ├── docker-offline-*/           # Docker Engine (OS별)
 ├── git-*-rocky9.6/             # Git 오프라인 설치 (Rocky)
-├── basic-tools-rocky9.6/       # 기본 유틸 (curl, vim, jq 등) - Rocky
+├── basic-tools-rocky9.6/       # 기본 유틸 (curl, vimi, jq 등) - Rocky
 ├── basic-tools-ubuntu24.04/    # 기본 유틸 - Ubuntu
 ├── nfs-provisioner-4.0.2/      # NFS 동적 스토리지 프로비저닝 (Multi-OS 스크립트 포함)
 ├── ingress-nginx-4.10.1/       # K8s Ingress 컨트롤러
@@ -61,7 +61,7 @@ air-gapped/
 ## Network Reference
 
 | 서비스 | 접근 방식 | 포트 |
-|--------|-----------|------|
+| :--- | :--- | :--- |
 | Harbor | NodePort | 30002 |
 | Jenkins | NodePort | 30000 |
 | Ingress-Nginx | HostNetwork | 80 / 443 |
