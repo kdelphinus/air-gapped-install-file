@@ -8,6 +8,26 @@ spec:
   provider:
     type: Kubernetes
     kubernetes:
+      {{- if eq .Values.envoy.deploymentType "DaemonSet" }}
+      envoyDaemonSet:
+        container:
+          image: {{ .Values.envoy.image | quote }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              template:
+                spec:
+                  hostNetwork: false
+                  dnsPolicy: ClusterFirst
+                  containers:
+                  - name: envoy
+                    ports:
+                    - containerPort: 10080
+                      name: http
+                    - containerPort: 10443
+                      name: https
+      {{- else }}
       envoyDeployment:
         container:
           image: {{ .Values.envoy.image | quote }}
@@ -21,23 +41,19 @@ spec:
             spec:
               template:
                 spec:
-                  # [정석] 호스트 네트워크를 쓰지 않고, K8s 내부망을 씁니다.
                   hostNetwork: false
                   dnsPolicy: ClusterFirst
                   containers:
                   - name: envoy
                     ports:
-                    # [정석] 컨테이너는 10080/10443 같은 안전한 포트를 씁니다.
-                    # 외부 80 -> Service -> Pod 10080 흐름이 됩니다.
                     - containerPort: 10080
                       name: http
                     - containerPort: 10443
                       name: https
+      {{- end }}
 
       envoyService:
-        # values.yaml에 값이 없으면 기본값(LoadBalancer)을 씁니다.
         type: {{ .Values.service.type }}
-        # Local 사용 시, Gateway의 Deployment를 DaemonSet으로 변경 필요
         externalTrafficPolicy: {{ .Values.service.trafficPolicy | default "Local" }}
 
 ---

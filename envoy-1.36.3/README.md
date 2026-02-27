@@ -72,3 +72,80 @@
 
 - **Envoy 로그 확인**: 트래픽 라우팅 실패 시 Envoy 컨테이너의 Access Log를 확인하십시오.
 - **xDS 상태**: `envoy-gateway`가 Envoy 프록시에 설정을 제대로 전달하는지 `status` 필드를 통해 확인하십시오.
+
+---
+
+## 6. 배포 모드 선택 (Traffic Policy & Deployment Type)
+
+### 개요
+
+두 가지 설정의 조합으로 트래픽 처리 방식이 결정됩니다.
+
+| 설정 | 옵션 | 기본값 |
+| --- | --- | --- |
+| `service.trafficPolicy` | `Cluster` / `Local` | `Local` |
+| `envoy.deploymentType` | `Deployment` / `DaemonSet` | `DaemonSet` |
+
+### 모드 비교
+
+| 항목 | Cluster + Deployment | Local + DaemonSet |
+| --- | --- | --- |
+| 클라이언트 실IP 보존 | 불가 (노드 IP로 SNAT) | 가능 |
+| IP 기반 접근제어 / 감사로그 | 불가 | 가능 |
+| 노드 추가 시 Pod 자동 배포 | 수동 | 자동 |
+| Pod 재시작 중 트래픽 처리 | 다른 노드로 우회 | 해당 노드 일시 드롭 |
+| 부하 분산 | kube-proxy가 균등 분산 | 노드 단위 분산 |
+| 권장 환경 | 단일 노드 / IP 불필요 | 멀티 노드 / IP 기반 정책 필요 |
+
+### 선택 기준
+
+- **클라이언트 실IP가 필요하다** (접근 로그, IP 차단, rate limiting 등) → `Local + DaemonSet`
+- **단순하게 동작만 되면 된다** (IP 불필요, 단일 노드) → `Cluster + Deployment`
+
+### 적용 방법
+
+**신규 설치 — Local + DaemonSet (기본값, 추가 옵션 불필요)**
+
+```bash
+helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
+  -n envoy-gateway-system
+```
+
+**신규 설치 — Cluster + Deployment**
+
+```bash
+helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
+  -n envoy-gateway-system \
+  --set service.trafficPolicy=Cluster \
+  --set envoy.deploymentType=Deployment
+```
+
+**기존 설치 변경 — Cluster + Deployment → Local + DaemonSet**
+
+> 전환 중 약 10~30초 트래픽 중단이 발생합니다. 점검 시간에 진행하십시오.
+
+```bash
+# 1단계: trafficPolicy 먼저 변경 (무중단)
+helm upgrade strato-gateway-infra ./strato-gateway-infra \
+  -n envoy-gateway-system \
+  --set service.trafficPolicy=Local
+
+# 2단계: DaemonSet 전환 (약 30초 중단)
+helm upgrade strato-gateway-infra ./strato-gateway-infra \
+  -n envoy-gateway-system \
+  --set envoy.deploymentType=DaemonSet
+```
+
+### 동작 원리
+
+`externalTrafficPolicy: Local`은 **클라이언트 → Envoy** 구간에만 적용됩니다.
+Envoy가 백엔드(Jenkins, GitLab 등)로 요청을 전달하는 구간은 ClusterIP를 통한
+일반 클러스터 라우팅을 사용하므로, 백엔드 Pod의 위치와 무관하게 정상 동작합니다.
+
+```
+클라이언트 (실IP 보존)
+    ↓  ← externalTrafficPolicy: Local 적용 구간
+Envoy Pod (DaemonSet, 모든 노드)
+    ↓  ← ClusterIP 일반 라우팅
+백엔드 Pod (Jenkins / GitLab / ArgoCD ...)
+```

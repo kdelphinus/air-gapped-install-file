@@ -8,9 +8,10 @@ gateway:
     name: "strato-tls"
 
 service:
-  trafficPolicy: Cluster
+  trafficPolicy: Local
   type: LoadBalancer
 
 envoy:
   nodeName: "" # 스크립트에서 주입
   image: "docker.io/envoyproxy/envoy:distroless-v1.36.3"
+  deploymentType: DaemonSet # "Deployment" 또는 "DaemonSet" (멀티 노드 환경)
