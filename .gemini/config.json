@@ -14,6 +14,7 @@
   "conventions": {
     "scripting": "Bash",
     "infrastructure": "Kubernetes/Helm",
-    "registry": "Local Harbor (Port 30002)"
+    "registry": "Local Harbor (Port 30002)",
+    "git_commit": "Include 'Co-Authored-By: Gemini CLI <noreply@google.com>' in all commit messages."
   }
 }
