@@ -15,3 +15,6 @@ envoy:
   nodeName: "" # 스크립트에서 주입
   image: "docker.io/envoyproxy/envoy:distroless-v1.36.3"
   deploymentType: DaemonSet # "Deployment" 또는 "DaemonSet" (멀티 노드 환경)
+
+clientIP:
+  proxyProtocol: false # true 시 HAProxy 앞단 필수 (NodePort 직접 접근 차단됨)

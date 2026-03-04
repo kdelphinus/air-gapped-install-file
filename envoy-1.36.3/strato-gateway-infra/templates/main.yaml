@@ -20,6 +20,10 @@ spec:
                 spec:
                   hostNetwork: false
                   dnsPolicy: ClusterFirst
+                  tolerations:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                    effect: NoSchedule
                   containers:
                   - name: envoy
                     ports:
@@ -97,3 +101,19 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+
+{{- if .Values.clientIP.proxyProtocol }}
+---
+# 4. ClientTrafficPolicy: PROXY Protocol 활성화 (HAProxy 앞단 구성 시 사용)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: enable-proxy-protocol
+  namespace: {{ .Values.common.namespace }}
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: {{ .Values.gateway.name }}
+  enableProxyProtocol: true
+{{- end }}
