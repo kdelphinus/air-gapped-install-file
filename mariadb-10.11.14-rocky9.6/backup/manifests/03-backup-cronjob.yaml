@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mariadb-backup
+  namespace: mariadb
+spec:
+  # 매일 새벽 2시 실행 (필요에 따라 변경)
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: mariadb-backup
+              # 실제 Harbor 주소 및 이미지 경로로 변경 필요
+              # 예: <NODE_IP>:30002/library/mariadb:10.11.14
+              image: <NODE_IP>:30002/library/mariadb:10.11.14
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+
+                  BACKUP_DIR="/backup/$(date +%Y%m%d_%H%M%S)"
+                  mkdir -p "${BACKUP_DIR}"
+
+                  echo "[INFO] Starting mariabackup → ${BACKUP_DIR}"
+
+                  # 물리 백업 (Galera wsrep 상태 함께 기록)
+                  mariabackup \
+                    --host="${MYSQL_HOST}" \
+                    --user="${MYSQL_USER}" \
+                    --password="${MYSQL_PASSWORD}" \
+                    --backup \
+                    --galera-info \
+                    --target-dir="${BACKUP_DIR}"
+
+                  # prepare: 복원 가능한 일관된 상태로 만들기
+                  mariabackup --prepare --target-dir="${BACKUP_DIR}"
+
+                  # 7일 이상 된 백업 디렉토리 삭제
+                  find /backup -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +
+
+                  echo "[INFO] Backup completed: ${BACKUP_DIR}"
+              env:
+                - name: MYSQL_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: mariadb-backup-secret
+                      key: MYSQL_HOST
+                - name: MYSQL_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: mariadb-backup-secret
+                      key: MYSQL_USER
+                - name: MYSQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mariadb-backup-secret
+                      key: MYSQL_PASSWORD
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backup
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: mariadb-backup-pvc

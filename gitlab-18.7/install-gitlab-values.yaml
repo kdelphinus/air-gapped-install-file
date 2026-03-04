@@ -1,7 +1,8 @@
 global:
   edition: ce
   hosts:
-    domain: devops.internal # 내부 도메인에 맞게 변경
+    domain: devops.internal # 내부 도메인에 맞게 변경 (DNS 없이 쓸 경우 /etc/hosts에 등록)
+    externalIP: 1.1.1.213   # 실제 노드 IP로 변경 — GitLab이 external_url 생성에 사용
     https: false
 
   image:
