@@ -36,7 +36,7 @@ CHART_PATH="./jenkins"
 # ==============================================================================
 set -e # 에러 발생 시 스크립트 중단
 
-echo "🔄 [1/5] 네임스페이스 확인 및 생성..."
+echo "🔄 [1/6] 네임스페이스 확인 및 생성..."
 if kubectl get namespace "$NAMESPACE" > /dev/null 2>&1; then
     echo "   ✅ 네임스페이스 '$NAMESPACE'가 이미 존재합니다."
 else
@@ -45,11 +45,25 @@ else
 fi
 
 # ==============================================================================
-# 🖥️ [2/5] 노드 지정 (Node Pinning) 로직 추가
+# 📂 [2/6] PV / PVC 생성 (Jenkins 홈 + Gradle 캐시)
+# ==============================================================================
+echo ""
+echo "📂 [2/6] PV / PVC 생성 중..."
+
+echo "   - Jenkins 홈 PV 적용 중..."
+kubectl apply -f ./pv-volume.yaml
+
+echo "   - Gradle 캐시 PV/PVC 적용 중..."
+kubectl apply -f ./gradle-cache-pv-pvc.yaml
+
+echo "   ✅ PV / PVC 적용 완료."
+
+# ==============================================================================
+# 🖥️ [3/6] 노드 지정 (Node Pinning) 로직 추가
 # ==============================================================================
 echo ""
 echo "--------------------------------------------------------"
-echo "🖥️  [설정] Jenkins Controller가 배포될 노드 지정"
+echo "🖥️  [설정] Jenkins Controller가 배포될 노드 지정 [3/6]"
 echo "--------------------------------------------------------"
 
 # 기존 라벨 정리 (중복 방지)
@@ -79,10 +93,10 @@ echo "✅ 노드 고정 설정 완료."
 
 
 # ==============================================================================
-# 📦 [3/5] Jenkins Helm 차트 배포
+# 📦 [4/6] Jenkins Helm 차트 배포
 # ==============================================================================
 echo ""
-echo "📦 [3/5] Jenkins Helm 차트 배포 중..."
+echo "📦 [4/6] Jenkins Helm 차트 배포 중..."
 
 # 기존에 설치된 릴리스가 있다면 upgrade, 없다면 install
 if helm status jenkins -n "$NAMESPACE" > /dev/null 2>&1; then
@@ -127,14 +141,14 @@ helm $ACTION jenkins "$CHART_PATH" \
   \
   --set controller.installPlugins=false
 
-echo "⏳ [4/5] Pod가 준비될 때까지 대기 중... (최대 5분)"
+echo "⏳ [5/6] Pod가 준비될 때까지 대기 중... (최대 5분)"
 # Pod가 Running 및 Ready 상태가 될 때까지 대기
 kubectl wait --namespace "$NAMESPACE" \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=jenkins-controller \
   --timeout=300s
 
-echo "🔑 [5/5] 초기 관리자 비밀번호 확인"
+echo "🔑 [6/6] 초기 관리자 비밀번호 확인"
 echo "--------------------------------------------------------"
 PASSWORD=$(kubectl get secret -n "$NAMESPACE" jenkins -o jsonpath="{.data.jenkins-admin-password}" | base64 --decode)
 echo "   👤 ID: admin"

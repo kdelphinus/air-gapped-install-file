@@ -1,0 +1,85 @@
+# ============================================================
+# Jenkins Gradle 캐시용 PV / PVC
+#
+# 용도: Jenkins K8s agent Pod에서 Gradle 의존성 캐시를 유지하여
+#       빌드 시 매번 Nexus에서 다시 다운로드하는 것을 방지
+#
+# 적용 방법:
+#   1. PV/PVC 생성: kubectl apply -f gradle-cache-pv-pvc.yaml
+#   2. 생성 확인:   kubectl get pv gradle-cache-pv
+#                   kubectl get pvc gradle-cache-pvc -n jenkins
+#   3. Jenkinsfile의 Pod template에 볼륨 마운트 추가 (아래 예시 참고)
+#
+# 삭제 방법:
+#   kubectl delete -f gradle-cache-pv-pvc.yaml
+# ============================================================
+
+---
+# PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gradle-cache-pv
+  labels:
+    purpose: gradle-cache
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  # hostPath 방식: 워커 노드의 로컬 디스크에 저장
+  # 기존 Jenkins PV와 같은 방식(NFS, local 등)으로 변경 가능
+  hostPath:
+    path: /data/gradle-cache
+    type: DirectoryOrCreate
+  persistentVolumeReclaimPolicy: Retain
+
+---
+# PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gradle-cache-pvc
+  namespace: jenkins
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # 특정 PV에 바인딩하려면 아래 selector 사용
+  selector:
+    matchLabels:
+      purpose: gradle-cache
+
+# ============================================================
+# Jenkinsfile Pod template 수정 예시
+# ============================================================
+#
+# 기존 Pod template YAML에 아래 내용을 추가하세요.
+#
+# [1] shell 컨테이너에 volumeMounts 추가:
+#
+#     - name: shell
+#       image: '<NODE_IP>:30002/library/cmp-jenkins-full:2.528.3'
+#       command: ['/bin/sh', '-c', 'sleep 86400']
+#       tty: true
+#       volumeMounts:
+#         - mountPath: "/home/jenkins/agent"
+#           name: "workspace-volume"
+#         - mountPath: "/var/jenkins_home/.gradle"    # 추가
+#           name: "gradle-cache"                      # 추가
+#
+# [2] volumes 섹션에 PVC 추가:
+#
+#     volumes:
+#       - name: workspace-volume
+#         emptyDir: {}
+#       - name: gradle-cache                          # 추가
+#         persistentVolumeClaim:                      # 추가
+#           claimName: gradle-cache-pvc               # 추가
+#
+# mountPath는 Gradle 홈 경로와 일치해야 합니다.
+# 빌드 로그에서 "Gradle user home" 경로를 확인하세요.
+# (예: /var/jenkins_home/.gradle)
+# ============================================================
