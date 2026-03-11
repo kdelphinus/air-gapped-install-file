@@ -75,6 +75,34 @@ NodePort 모드 포트 확인:
 netstat -tlpn | grep 30443
 ```
 
+### Gateway 주소 수동 바인딩 (1분 이상 false 상태 시)
+
+Gateway 리소스가 설치 후 1분이 지나도 `false` 상태로 남아 있는 경우, 노드 IP를 직접 할당합니다.
+
+단일 노드:
+
+```bash
+kubectl patch gateway cmp-gateway -n envoy-gateway-system \
+  --type='merge' \
+  -p '{"spec":{"addresses":[{"type":"IPAddress","value":"<NODE_IP>"}]}}'
+```
+
+다중 노드 (DaemonSet 구성):
+
+```bash
+kubectl patch gateway cmp-gateway -n envoy-gateway-system \
+  --type='merge' \
+  -p '{
+    "spec":{
+      "addresses":[
+        {"type":"IPAddress","value":"<NODE_IP_1>"},
+        {"type":"IPAddress","value":"<NODE_IP_2>"},
+        {"type":"IPAddress","value":"<NODE_IP_3>"}
+      ]
+    }
+  }'
+```
+
 ## Phase 5: 서비스 노출 (HTTPRoute 생성)
 
 신규 서비스를 Envoy Gateway를 통해 노출하려면 HTTPRoute 리소스를 생성합니다.
