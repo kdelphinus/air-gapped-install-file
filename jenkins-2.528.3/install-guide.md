@@ -59,9 +59,13 @@ hostPath:
 | `CONTROLLER_TAG` | Jenkins Controller 이미지 태그 | `2.528.3` |
 | `AGENT_REPO` | Jenkins Agent 이미지 경로 | `library/inbound-agent` |
 | `SIDECAR_REPO` | Config Auto Reload 사이드카 이미지 | `library/k8s-sidecar` |
+| `DOMAIN` | CoreDNS 등록 도메인 (`""` 이면 NodePort로만 접속) | `""` |
 | `NAMESPACE` | Jenkins 설치 네임스페이스 | `jenkins` |
 | `STORAGE_SIZE` | Jenkins 홈 PVC 크기 | `20Gi` |
 | `NODE_PORT` | Jenkins 웹 NodePort | `30000` |
+
+> DNS 서버 없이 도메인을 사용하는 경우 `DOMAIN`을 설정하면 스크립트가 클러스터 내부 CoreDNS에
+> 자동으로 등록합니다. 클라이언트(PC) `/etc/hosts`는 별도로 추가해야 합니다.
 
 ## Phase 4: Harbor ImagePullSecret 생성
 
@@ -94,6 +98,7 @@ chmod +x deploy-jenkins.sh
 - Helm 배포 (신규 install 또는 기존 upgrade)
 - Pod Ready 대기 (최대 5분)
 - 초기 관리자 비밀번호 출력
+- CoreDNS에 `DOMAIN` 등록 (`DOMAIN` 설정 시)
 
 ## Phase 6: 설치 확인
 

@@ -25,6 +25,25 @@ GATEWAY_NAME="cmp-gateway"
 GATEWAY_NAMESPACE="envoy-gateway-system"
 # ================================================
 
+# CoreDNS 호스트 등록 함수 (DOMAIN 설정 시 Pod 내부 DNS 해석을 위해 등록)
+add_coredns_host() {
+    local ip="$1"
+    local domain="$2"
+    if kubectl get configmap coredns -n kube-system \
+            -o jsonpath='{.data.NodeHosts}' | grep -qw "$domain"; then
+        echo "  - CoreDNS: ${domain} 이미 등록됨, 건너뜁니다."
+        return 0
+    fi
+    local new_hosts
+    new_hosts="$(kubectl get configmap coredns -n kube-system \
+        -o jsonpath='{.data.NodeHosts}')
+${ip} ${domain}"
+    kubectl get configmap coredns -n kube-system -o json \
+        | jq --arg h "$new_hosts" '.data.NodeHosts = $h' \
+        | kubectl apply -f -
+    echo "  - CoreDNS: ${ip} ${domain} 등록 완료 (15초 내 자동 반영)"
+}
+
 NAMESPACE="argocd"
 CHART_PATH="./argo-cd"
 VALUES_FILE="./values.yaml"
@@ -157,6 +176,18 @@ EOF
 else
     echo ""
     echo ">>> DOMAIN not set, skipping HTTPRoute"
+fi
+
+# ---- CoreDNS 등록 ----
+if [ -n "$DOMAIN" ]; then
+    echo ""
+    echo ">>> CoreDNS에 ${DOMAIN} 등록 중..."
+    NODE_IP=$(kubectl get nodes \
+        -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    add_coredns_host "$NODE_IP" "$DOMAIN"
+else
+    echo ""
+    echo ">>> DOMAIN 미설정 — CoreDNS 등록을 건너뜁니다. (NodePort로만 접속)"
 fi
 
 echo ""

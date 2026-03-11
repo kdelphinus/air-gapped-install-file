@@ -64,6 +64,10 @@ HARBOR_PROJECT="<PROJECT>"
 | `RELEASE_NAME` | Helm release 이름 | `gitlab` |
 | `HARBOR_REGISTRY` | Harbor 레지스트리 주소 | `<NODE_IP>:30002` |
 | `HARBOR_PROJECT` | Harbor 프로젝트 이름 | `library` |
+| `DOMAIN` | CoreDNS 등록 도메인 (`""` 이면 등록 안 함) | `gitlab.devops.internal` |
+
+> DNS 서버 없이 도메인을 사용하는 경우 `DOMAIN`을 설정하면 스크립트가 클러스터 내부 CoreDNS에
+> 자동으로 등록합니다. 클라이언트(PC) `/etc/hosts`는 별도로 추가해야 합니다.
 
 ## Phase 5: 설치 실행
 
@@ -84,6 +88,7 @@ chmod +x install-gitlab.sh
 - PV 생성 및 노드 라벨 적용
 - Harbor 이미지 경로 오버라이드 파일 자동 생성
 - Helm 배포
+- CoreDNS에 `DOMAIN` 등록 (`DOMAIN` 설정 시)
 
 ## Phase 6: 설치 확인
 

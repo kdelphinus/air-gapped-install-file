@@ -22,6 +22,7 @@ SIDECAR_REPO="library/k8s-sidecar"
 SIDECAR_TAG="1.30.7"
 
 # 2. 쿠버네티스 설정
+DOMAIN=""                       # HTTPRoute 도메인, "" 이면 NodePort로만 접속 (CoreDNS 등록 건너뜀)
 NAMESPACE="jenkins"
 IMAGE_PULL_SECRET="regcred"     # Private Registry 접근을 위한 시크릿 이름
 STORAGE_CLASS="manual"          # PV 스토리지 클래스 이름 (HostPath 사용 시 manual)
@@ -157,3 +158,33 @@ echo "   🖥️  Node: $TARGET_NODE"
 echo "--------------------------------------------------------"
 echo "🎉 Jenkins 배포가 완료되었습니다!"
 echo "👉 접속 주소: http://<NodeIP>:$NODE_PORT"
+
+# ---- CoreDNS 등록 ----
+add_coredns_host() {
+    local ip="$1"
+    local domain="$2"
+    if kubectl get configmap coredns -n kube-system \
+            -o jsonpath='{.data.NodeHosts}' | grep -qw "$domain"; then
+        echo "  - CoreDNS: ${domain} 이미 등록됨, 건너뜁니다."
+        return 0
+    fi
+    local new_hosts
+    new_hosts="$(kubectl get configmap coredns -n kube-system \
+        -o jsonpath='{.data.NodeHosts}')
+${ip} ${domain}"
+    kubectl get configmap coredns -n kube-system -o json \
+        | jq --arg h "$new_hosts" '.data.NodeHosts = $h' \
+        | kubectl apply -f -
+    echo "  - CoreDNS: ${ip} ${domain} 등록 완료 (15초 내 자동 반영)"
+}
+
+if [ -n "$DOMAIN" ]; then
+    echo ""
+    echo ">>> CoreDNS에 ${DOMAIN} 등록 중..."
+    NODE_IP=$(kubectl get nodes \
+        -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    add_coredns_host "$NODE_IP" "$DOMAIN"
+else
+    echo ""
+    echo ">>> DOMAIN 미설정 — CoreDNS 등록을 건너뜁니다. (NodePort로만 접속)"
+fi

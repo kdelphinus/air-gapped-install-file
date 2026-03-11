@@ -50,7 +50,7 @@ NAS_REPO_PATH="/nas/argocd/repo"
 
 # Networking
 NODEPORT="30001"
-DOMAIN="argocd.devops.internal"   # "" 이면 HTTPRoute 미생성
+DOMAIN="argocd.devops.internal"   # "" 이면 HTTPRoute 미생성 및 CoreDNS 등록 건너뜀
 TLS_ENABLED="false"               # "true" | "false" — https/http 결정
 GATEWAY_NAME="cmp-gateway"
 GATEWAY_NAMESPACE="envoy-gateway-system"
@@ -80,6 +80,10 @@ chmod +x install-argocd.sh
 - Helm 설치 (Harbor 이미지 경로 + 스토리지 설정)
 - NodePort 서비스 생성
 - HTTPRoute 생성 (`DOMAIN` 설정 시)
+- CoreDNS에 `DOMAIN` 등록 (`DOMAIN` 설정 시)
+
+> DNS 서버 없이 도메인을 사용하는 경우 `DOMAIN`을 설정하면 스크립트가 클러스터 내부 CoreDNS에
+> 자동으로 등록합니다. 클라이언트(PC) `/etc/hosts`는 별도로 추가해야 합니다.
 
 ## Phase 5: 설치 확인
 

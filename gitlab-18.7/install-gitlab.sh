@@ -12,6 +12,7 @@ NODE_LABEL_KEY="gitlab-node"
 NODE_LABEL_VALUE="true"
 HARBOR_REGISTRY="harbor.test.com:30002"  # Harbor 주소
 HARBOR_PROJECT="cmp"           # Harbor 프로젝트 명
+DOMAIN="gitlab.devops.internal" # CoreDNS 등록 도메인, "" 이면 건너뜀
 
 echo "========================================================"
 echo "🚀 GitLab 완전 초기화 및 재설치 스크립트를 시작합니다."
@@ -277,6 +278,38 @@ else
     -f $IMAGE_VALUES_FILE \
     --namespace $NAMESPACE \
     --timeout 600s
+fi
+
+# ==========================================
+# CoreDNS 등록
+# ==========================================
+add_coredns_host() {
+    local ip="$1"
+    local domain="$2"
+    if kubectl get configmap coredns -n kube-system \
+            -o jsonpath='{.data.NodeHosts}' | grep -qw "$domain"; then
+        echo "  - CoreDNS: ${domain} 이미 등록됨, 건너뜁니다."
+        return 0
+    fi
+    local new_hosts
+    new_hosts="$(kubectl get configmap coredns -n kube-system \
+        -o jsonpath='{.data.NodeHosts}')
+${ip} ${domain}"
+    kubectl get configmap coredns -n kube-system -o json \
+        | jq --arg h "$new_hosts" '.data.NodeHosts = $h' \
+        | kubectl apply -f -
+    echo "  - CoreDNS: ${ip} ${domain} 등록 완료 (15초 내 자동 반영)"
+}
+
+if [ -n "$DOMAIN" ]; then
+    echo ""
+    echo ">>> CoreDNS에 GitLab 도메인 등록 중..."
+    NODE_IP=$(kubectl get nodes \
+        -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    add_coredns_host "$NODE_IP" "$DOMAIN"
+else
+    echo ""
+    echo ">>> DOMAIN 미설정 — CoreDNS 등록을 건너뜁니다. (IP로 직접 접속)"
 fi
 
 echo ""
