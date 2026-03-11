@@ -51,6 +51,7 @@ NAS_REPO_PATH="/nas/argocd/repo"
 # Networking
 NODEPORT="30001"
 DOMAIN="argocd.devops.internal"   # "" 이면 HTTPRoute 미생성
+TLS_ENABLED="false"               # "true" | "false" — https/http 결정
 GATEWAY_NAME="cmp-gateway"
 GATEWAY_NAMESPACE="envoy-gateway-system"
 # ================================================

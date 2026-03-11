@@ -20,6 +20,7 @@ HOSTPATH_REPO="/data/argocd/repo-cache"
 # Networking
 NODEPORT="30001"
 DOMAIN="argocd.devops.internal"   # HTTPRoute hostname, "" 이면 HTTPRoute 미생성
+TLS_ENABLED="false"               # "true" | "false" — https/http 결정
 GATEWAY_NAME="cmp-gateway"
 GATEWAY_NAMESPACE="envoy-gateway-system"
 # ================================================
@@ -55,7 +56,11 @@ ARGOCD_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/argocd"
 REDIS_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/redis"
 HAPROXY_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/haproxy"
 
+PROTOCOL="http"
+[ "$TLS_ENABLED" = "true" ] && PROTOCOL="https"
+
 HELM_SET_ARGS=(
+    --set "configs.cm.url=${PROTOCOL}://${DOMAIN}"
     --set "global.image.repository=${ARGOCD_IMAGE}"
     --set "server.image.repository=${ARGOCD_IMAGE}"
     --set "repoServer.image.repository=${ARGOCD_IMAGE}"
