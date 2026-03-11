@@ -90,6 +90,19 @@ stringData:
 kubectl apply -f gitops-repo-secret.yaml
 ```
 
+### 1-4. 웹 UI(GUI)로 등록
+
+1. ArgoCD 웹 접속 (`http://<NODE_IP>:30001`) 및 로그인
+2. 좌측 메뉴 **Settings** > **Repositories** 클릭
+3. 상단 **+ CONNECT REPO** 버튼 클릭
+4. 설정 입력:
+    - **Choose connection method**: `VIA HTTPS`
+    - **Type**: `git`
+    - **Repository URL**: `http://<GITLAB_IP>:<PORT>/.../<GITOPS_REPO>.git`
+    - **Username / Password**: GitLab 사용자명 및 Access Token 입력
+    - **TLS Skip Server Verification**: 체크 (사설 인증서 사용 시)
+5. **CONNECT** 클릭하여 `Successful` 상태 확인
+
 ---
 
 ## 2. ArgoCD Application 생성
@@ -137,6 +150,22 @@ spec:
 ```bash
 kubectl apply -f argocd-app.yaml
 ```
+
+### 2-3. 웹 UI(GUI)로 생성
+
+1. ArgoCD 메인 화면에서 **+ NEW APP** 클릭
+2. **General** 설정:
+    - **Application Name**: `my-app`
+    - **Project Name**: `default`
+    - **Sync Policy**: `Automatic` (권장) 또는 `Manual`
+3. **Source** 설정:
+    - **Repository URL**: 위에서 등록한 GitLab 레포지토리 선택
+    - **Revision**: `main` (또는 배포 브랜치)
+    - **Path**: `k8s/overlays/prod` (매니페스트 경로)
+4. **Destination** 설정:
+    - **Cluster URL**: `https://kubernetes.default.svc` (내부 배포 시)
+    - **Namespace**: `my-app`
+5. 상단 **CREATE** 클릭하여 배포 상태 확인
 
 ---
 
