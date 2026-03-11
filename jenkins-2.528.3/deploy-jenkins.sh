@@ -180,11 +180,30 @@ ${ip} ${domain}"
 
 if [ -n "$DOMAIN" ]; then
     echo ""
-    echo ">>> CoreDNS에 ${DOMAIN} 등록 중..."
-    NODE_IP=$(kubectl get nodes \
-        -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-    add_coredns_host "$NODE_IP" "$DOMAIN"
+    read -p "❓ ${DOMAIN} 이 DNS 서버에 이미 등록되어 있나요? (y/n): " DNS_REGISTERED
+    if [[ "$DNS_REGISTERED" == "y" || "$DNS_REGISTERED" == "Y" ]]; then
+        echo "  - DNS 서버에 등록됨 — CoreDNS 등록을 건너뜁니다."
+    else
+        echo ">>> CoreDNS에 ${DOMAIN} 등록 중..."
+        NODE_IP=$(kubectl get nodes \
+            -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+        add_coredns_host "$NODE_IP" "$DOMAIN"
+    fi
 else
     echo ""
     echo ">>> DOMAIN 미설정 — CoreDNS 등록을 건너뜁니다. (NodePort로만 접속)"
+fi
+
+if [ -n "$DOMAIN" ]; then
+    echo ""
+    echo "==========================================="
+    echo " [주의] 클라이언트 hosts 등록 필요"
+    echo "==========================================="
+    echo " 도메인으로 접속하려면 접속할 PC의 hosts 파일에 아래 항목을 추가하세요."
+    echo ""
+    echo "   <GATEWAY_IP>  ${DOMAIN}"
+    echo ""
+    echo " - Windows: C:\\Windows\\System32\\drivers\\etc\\hosts"
+    echo " - Linux/Mac: /etc/hosts"
+    echo "==========================================="
 fi
