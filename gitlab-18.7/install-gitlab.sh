@@ -33,8 +33,8 @@ fi
 
 # 1-2. 네임스페이스 삭제
 if kubectl get ns $NAMESPACE > /dev/null 2>&1; then
-    echo "  - Namespace '$NAMESPACE' 삭제 중 (시간이 걸릴 수 있습니다)..."
-    kubectl delete ns $NAMESPACE --wait=true
+    echo "  - Namespace '$NAMESPACE' 삭제 명령 전달 (백그라운드 진행)..."
+    kubectl delete ns $NAMESPACE --wait=false
 else
     echo "  - Namespace '$NAMESPACE'가 이미 없습니다."
 fi
@@ -281,8 +281,15 @@ fi
 
 echo ""
 echo "========================================================"
-echo "🎉 초기화 및 재배포 명령이 완료되었습니다."
-echo "   지정된 노드: $TARGET_NODE"
-echo "⏳ 파드가 Running 상태가 될 때까지 기다려주세요."
-echo "👉 모니터링 명령: kubectl get pods -n $NAMESPACE -w"
+echo "🎉 GitLab 설치 명령이 성공적으로 전달되었습니다."
+echo "========================================================"
+echo "📊 [모니터링] 설치 상태 확인:"
+echo "   - Pod 상태: kubectl get pods -n $NAMESPACE -w"
+echo "   - PV 상태:  kubectl get pv | grep gitlab"
+echo "   - 이벤트:   kubectl get events -n $NAMESPACE --sort-by='.lastTimestamp'"
+echo ""
+echo "🧹 [삭제/초기화] 필요 시 아래 명령을 실행하세요:"
+echo "   - helm uninstall $RELEASE_NAME -n $NAMESPACE"
+echo "   - kubectl delete ns $NAMESPACE"
+echo "   - kubectl delete -f $PV_FILE"
 echo "========================================================"

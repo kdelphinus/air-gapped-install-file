@@ -1,0 +1,193 @@
+// ==============================================================================
+// Jenkins CI/CD Pipeline Template — Kaniko 이미지 빌드 & Harbor Push
+//
+// [사용 전 필수 수정 항목]
+//   1. <HARBOR_IP>:<PORT>  — Harbor 레지스트리 주소 (예: 10.9.42.91:30002)
+//   2. <HARBOR_PROJECT>    — Harbor 프로젝트명 (예: library, goe)
+//   3. <GITLAB_IP>:<PORT>  — GitLab NodePort 주소 (예: 10.9.42.91:30599)
+//   4. GIT_URL defaultValue — 실제 GitLab 저장소 URL
+//   5. IMAGE_NAME defaultValue — 생성할 이미지명 (예: goe/my-app:1.0.0)
+//   6. ARTIFACT_NAME       — Gradle 빌드 결과 JAR 파일명
+//   7. credentialsId 값    — Jenkins Credentials 에 등록한 ID 와 일치해야 함
+//
+// [사전 조건 — Jenkins Credentials 등록]
+//   - <GITLAB_IP>:<PORT>         : Kind = Username with password (GitLab 계정)
+//   - 0-harbor-product-Credential : Kind = Username with password (Harbor 계정)
+//
+// [사전 조건 — PVC]
+//   - gradle-cache-pvc 가 jenkins 네임스페이스에 존재해야 합니다.
+//   - 적용 방법: kubectl apply -f gradle-cache-pv-pvc.yaml
+// ==============================================================================
+
+pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: builder
+spec:
+  containers:
+  # 1. 빌드용 컨테이너 (Java, Gradle, Git, Kubectl 포함)
+  - name: shell
+    image: '<HARBOR_IP>:<PORT>/<HARBOR_PROJECT>/cmp-jenkins-full:2.528.3'
+    command: ['/bin/sh', '-c', 'sleep 86400']
+    tty: true
+    volumeMounts:
+      - mountPath: "/home/jenkins/agent"
+        name: "workspace-volume"
+      - mountPath: "/var/jenkins_home/.gradle"
+        name: "gradle-cache"
+
+  # 2. 이미지 빌드용 컨테이너 (Kaniko)
+  - name: kaniko
+    image: '<HARBOR_IP>:<PORT>/<HARBOR_PROJECT>/executor:debug'
+    command: ['/busybox/sh', '-c', 'sleep 86400']
+    tty: true
+    volumeMounts:
+      - mountPath: "/home/jenkins/agent"
+        name: "workspace-volume"
+
+  # 3. Jenkins 에이전트 (기본 통신용)
+  - name: jnlp
+    image: '<HARBOR_IP>:<PORT>/<HARBOR_PROJECT>/inbound-agent:1.0.0'
+    volumeMounts:
+      - mountPath: "/home/jenkins/agent"
+        name: "workspace-volume"
+
+  volumes:
+    - name: workspace-volume
+      emptyDir: {}
+    - name: gradle-cache
+      persistentVolumeClaim:
+        claimName: gradle-cache-pvc
+"""
+        }
+    }
+
+    // 빌드 시 입력받을 파라미터 정의
+    parameters {
+        string(
+            name: 'GIT_URL',
+            defaultValue: 'http://<GITLAB_IP>:<PORT>/<GROUP>/<REPO>.git',
+            description: 'Git 저장소 URL'
+        )
+        string(
+            name: 'GIT_BRANCH',
+            defaultValue: 'main',
+            description: '빌드 브랜치'
+        )
+        string(
+            name: 'ACTIVE_PROFILE',
+            defaultValue: 'prod',
+            description: 'Spring Profile (dev, prod)'
+        )
+        string(
+            name: 'IMAGE_NAME',
+            defaultValue: '<HARBOR_PROJECT>/my-app:1.0.0',
+            description: '생성할 이미지명 (레지스트리 주소 제외)'
+        )
+    }
+
+    environment {
+        REGISTRY_URL        = '<HARBOR_IP>:<PORT>'
+        GIT_CLONE_URL       = "${params.GIT_URL}"
+        BRANCH              = "${params.GIT_BRANCH}"
+        ACTIVE_PROFILE      = "${params.ACTIVE_PROFILE}"
+        CONTAINER_IMAGE_NAME = "${params.IMAGE_NAME}"
+        // [수정] 실제 Gradle 빌드 결과 JAR 파일명으로 변경
+        ARTIFACT_NAME       = 'my-app-0.0.1-SNAPSHOT.jar'
+    }
+
+    stages {
+        stage('1. Checkout & Build Application') {
+            steps {
+                container('shell') {
+                    script {
+                        // GitLab Credentials ID = GitLab 접속 주소와 동일하게 설정
+                        // Jenkins > Credentials 에서 ID: <GITLAB_IP>:<PORT> 로 등록
+                        withCredentials([usernamePassword(
+                            credentialsId: '<GITLAB_IP>:<PORT>',
+                            passwordVariable: 'GIT_PASS',
+                            usernameVariable: 'GIT_USER'
+                        )]) {
+                            def authUrl = env.GIT_CLONE_URL.replaceFirst('://', "://${GIT_USER}:${GIT_PASS}@")
+                            sh """
+                                echo "Git clone 시작: ${env.BRANCH}"
+                                git clone -b ${env.BRANCH} ${authUrl} .
+                            """
+                        }
+
+                        sh 'java -version'
+                        // [수정] 프로젝트 구조에 맞게 cp 경로 및 빌드 명령 조정
+                        sh """
+                            chmod +x ./gradlew
+                            ./gradlew build -x test -Dspring.profiles.active=${env.ACTIVE_PROFILE}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('2. Kaniko Build & Push') {
+            steps {
+                script {
+                    // [수정] Dockerfile 이 위치한 경로 (프로젝트 루트 기준 상대 경로)
+                    def buildLocation = './k8s'
+                    def imageName = "${env.REGISTRY_URL}/${env.CONTAINER_IMAGE_NAME}"
+                    def artifactPath = './build/libs/'
+
+                    // Dockerfile 내 ARTIFACT_NAME 예약어를 실제 파일명으로 치환
+                    sh "sed -i 's/ARTIFACT_NAME/${env.ARTIFACT_NAME}/g' ${buildLocation}/Dockerfile"
+                    sh "cp ${artifactPath}${env.ARTIFACT_NAME} ${buildLocation}/"
+
+                    container('kaniko') {
+                        // Harbor Credentials ID = 0-harbor-product-Credential
+                        withCredentials([usernamePassword(
+                            credentialsId: '0-harbor-product-Credential',
+                            passwordVariable: 'HARBOR_PASS',
+                            usernameVariable: 'HARBOR_USER'
+                        )]) {
+                            def auth = sh(
+                                script: "echo -n '${HARBOR_USER}:${HARBOR_PASS}' | base64",
+                                returnStdout: true
+                            ).trim()
+
+                            writeFile file: '/kaniko/.docker/config.json', text: """{
+  "auths": {
+    "${env.REGISTRY_URL}": {
+      "auth": "${auth}"
+    }
+  }
+}"""
+
+                            sh """
+                                /kaniko/executor \\
+                                    --context ${env.WORKSPACE}/${buildLocation} \\
+                                    --dockerfile ${env.WORKSPACE}/${buildLocation}/Dockerfile \\
+                                    --destination ${imageName} \\
+                                    --cache=true \\
+                                    --cache-repo=${env.REGISTRY_URL}/<HARBOR_PROJECT>/kaniko-cache \\
+                                    --cleanup
+                            """
+                        }
+                    }
+
+                    // 빌드에 복사했던 JAR 파일 정리
+                    sh "rm ${buildLocation}/${env.ARTIFACT_NAME}"
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "빌드 성공: ${env.REGISTRY_URL}/${env.CONTAINER_IMAGE_NAME}"
+        }
+        failure {
+            echo "빌드 실패. Jenkins 로그를 확인하세요."
+        }
+    }
+}
