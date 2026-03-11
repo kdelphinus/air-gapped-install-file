@@ -135,6 +135,10 @@ BASE_OPTS="-n $NAMESPACE --set envoy.image=$IMG_PROXY --set gateway.name=$GW_NAM
 
 if [ "$INSTALL_MODE" == "2" ]; then
     # NodePort 모드: values.yaml + nodeport-values.yaml 함께 적용
+    # [참고] 앞단에 외부 하드웨어 LB(VIP)가 있는 경우:
+    #   - Service EXTERNAL-IP와 Gateway 주소에 VIP 대신 Worker Node IP가 표시되는 것은 정상입니다.
+    #   - VIP는 외부 LB가 소유하며 Kubernetes는 알 수 없습니다. Gateway spec.addresses 패치 불필요.
+    #   - 트래픽 흐름: 클라이언트 → VIP(외부 LB) → Worker Node IP:30080/30443 → Envoy → 백엔드
     if [ ! -f "$INFRA_CHART/nodeport-values.yaml" ]; then
         echo "❌ 에러: $INFRA_CHART/nodeport-values.yaml 파일이 없습니다!"
         exit 1
