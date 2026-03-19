@@ -13,7 +13,8 @@ echo "[2/3] 이미지 다운로드..."
 IMAGES=(
     "docker.io/velero/velero:v1.14.1"
     "docker.io/velero/velero-plugin-for-aws:v1.10.1"
-    "docker.io/velero/velero-node-agent:v1.14.1"
+    # velero-node-agent 는 별도 이미지 없음 — velero:v1.14.1 과 동일 이미지 사용
+    # bitnami/kubectl 은 Docker Hub 에서 제거됨 — upgradeCRDs: false 로 훅 비활성화
 )
 for IMG in "${IMAGES[@]}"; do
     SAFE_NAME=$(echo $IMG | sed 's/docker.io\///' | tr ':/' '-')
@@ -25,7 +26,7 @@ done
 
 echo "[3/3] CLI 다운로드..."
 VELERO_VER="v1.14.1"
-if [ ! -f "${SCRIPT_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz" ]; then
-    wget -q https://github.com/vmware-tanzu/velero/releases/download/${VELERO_VER}/velero-${VELERO_VER}-linux-amd64.tar.gz -O "${SCRIPT_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz"
+if [ ! -f "${BASE_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz" ]; then
+    wget -q https://github.com/vmware-tanzu/velero/releases/download/${VELERO_VER}/velero-${VELERO_VER}-linux-amd64.tar.gz -O "${BASE_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz"
 fi
 echo "[완료] Velero 에셋 저장 완료."

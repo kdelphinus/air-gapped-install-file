@@ -1,39 +1,43 @@
 # Velero v1.14.1 Values for Air-gapped
 
-# 1. 이미지 설정 (Harbor)
+# 1. 이미지 설정 (Harbor) — nodeAgent 도 이 image 를 공유
 image:
-  repository: library/velero
+  repository: <NODE_IP>:30002/library/velero
   tag: v1.14.1
   pullPolicy: IfNotPresent
+
+# CRD 업그레이드 훅 비활성화
+# bitnami/kubectl 이미지가 Docker Hub 에서 제거됨 + 신규 설치에는 불필요
+upgradeCRDs: false
 
 # 2. 플러그인 설정 (AWS 플러그인이 S3/MinIO/NFS 연동에 공통 사용됨)
 initContainers:
   - name: velero-plugin-for-aws
-    image: 192.168.1.100:30002/library/velero-plugin-for-aws:v1.10.1
+    image: <NODE_IP>:30002/library/velero-plugin-for-aws:v1.10.1
     volumeMounts:
       - mountPath: /target
         name: plugins
 
-# 3. 백업 저장소 설정 (NFS를 S3 API처럼 사용하거나 직접 마운트)
+# 3. 백업 저장소 설정
+# configuration.backupStorageLocation 은 slice 구조 (chart v7+)
+# provider 는 configuration 레벨이 아닌 각 backupStorageLocation 항목에 지정
 configuration:
-  # ---------------------------------------------------------
-  # Case A: MinIO가 있을 경우
-  # ---------------------------------------------------------
-  provider: aws
   backupStorageLocation:
-    name: default
+    # ---------------------------------------------------------
+    # Case A: MinIO가 있을 경우
+    # ---------------------------------------------------------
+  - name: default
+    provider: aws
     bucket: velero
     config:
       region: minio
-      s3ForcePathStyle: true
+      s3ForcePathStyle: "true"
       s3Url: http://minio.monitoring.svc.cluster.local:9000
 
 # 4. PVC 데이터 백업 (Kopia 사용 권장)
+# nodeAgent 는 별도 image 키가 없으며 상위 image.repository 를 그대로 사용
 deployNodeAgent: true
-nodeAgent:
-  image:
-    repository: library/velero-node-agent
-    tag: v1.14.1
+nodeAgent: {}
 
 # 5. 스케줄링 설정
 schedules:
