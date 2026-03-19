@@ -58,7 +58,7 @@ by OS:
   dealing with container images.
 - **Commit Strategy**: When performing multiple independent tasks, always
   separate them into multiple logical commits instead of a single monolithic
-  commit.
+  commit. **All git commit messages must be written in Korean.**
 - Handle OS-specific package management:
   - RHEL/Rocky: `dnf localinstall` / `yum`
   - Ubuntu/Debian: `dpkg -i` / `apt install`
