@@ -1,15 +1,17 @@
 # Air-gapped Infrastructure Install Assets
 
 폐쇄망(인터넷 차단) 환경에 전체 인프라 스택을 설치하기 위한 자산 보관소입니다.
-RPM/DEB 패키지, 바이너리, 컨테이너 이미지(.tar), Helm 차트, 설치 스크립트를 포함합니다.
+RPM/DEB 패키지, 바이너리, 컨테이너 이미지(.tar), Helm 차트, 설치 스크립트를
+포함합니다.
 
-> **핵심 전제:** 모든 툴·패키지·이미지는 이 레포 또는 로컬 네트워크에서만 조달합니다.
-> 외부 인터넷 접근을 전제로 한 명령어(`curl`, `wget`, `yum install` 등)는 사용하지 않습니다.
+> **핵심 전제:** 모든 툴·패키지·이미지는 이 레포 또는 로컬 네트워크에서만
+> 조달합니다. 외부 인터넷 접근을 전제로 한 명령어(`curl`, `wget`,
+> `yum install` 등)는 사용하지 않습니다.
 
 ## 설치 파일 다운로드
 
-컨테이너 이미지(`.tar`) 등 대용량 파일은 GitHub 대신 Google Drive에서 제공합니다.
-레포와 동일한 폴더 구조로 구성되어 있습니다.
+컨테이너 이미지(`.tar`) 등 대용량 파일은 GitHub 대신 Google Drive에서
+제공합니다. 레포와 동일한 폴더 구조로 구성되어 있습니다.
 
 **[Google Drive — 설치 파일 보관소](https://drive.google.com/drive/folders/1joMQRpZPWzKgU9BBsdxy3b0qzJMWpBC8?hl=ko)**
 

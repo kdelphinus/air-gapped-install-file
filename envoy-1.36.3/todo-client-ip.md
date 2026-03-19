@@ -164,7 +164,7 @@ kubectl patch svc -n envoy-gateway-system $SVC_NAME \
 ## 관련 파일
 
 | 파일 | 설명 |
-|------|------|
+| :--- | :--- |
 | `strato-gateway-infra/nodeport-values.yaml` | NodePort + PROXY Protocol 활성화 values |
 | `strato-gateway-infra/values.yaml` | 기본 values (`clientIP.proxyProtocol: false`) |
 | `strato-gateway-infra/templates/main.yaml` | ClientTrafficPolicy 조건부 포함 |

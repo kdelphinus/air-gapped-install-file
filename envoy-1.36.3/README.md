@@ -104,14 +104,14 @@
 
 ### 적용 방법
 
-**신규 설치 — Local + DaemonSet (기본값, 추가 옵션 불필요)**
+#### 신규 설치 — Local + DaemonSet (기본값, 추가 옵션 불필요)
 
 ```bash
 helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
   -n envoy-gateway-system
 ```
 
-**신규 설치 — Cluster + Deployment**
+#### 신규 설치 — Cluster + Deployment
 
 ```bash
 helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
@@ -120,7 +120,7 @@ helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
   --set envoy.deploymentType=Deployment
 ```
 
-**기존 설치 변경 — Cluster + Deployment → Local + DaemonSet**
+#### 기존 설치 변경 — Cluster + Deployment → Local + DaemonSet
 
 > 전환 중 약 10~30초 트래픽 중단이 발생합니다. 점검 시간에 진행하십시오.
 
@@ -142,7 +142,7 @@ helm upgrade strato-gateway-infra ./strato-gateway-infra \
 Envoy가 백엔드(Jenkins, GitLab 등)로 요청을 전달하는 구간은 ClusterIP를 통한
 일반 클러스터 라우팅을 사용하므로, 백엔드 Pod의 위치와 무관하게 정상 동작합니다.
 
-```
+```text
 클라이언트 (실IP 보존)
     ↓  ← externalTrafficPolicy: Local 적용 구간
 Envoy Pod (DaemonSet, 모든 노드)

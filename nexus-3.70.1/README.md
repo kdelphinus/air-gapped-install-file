@@ -13,13 +13,16 @@
 ## 🛠️ 주요 설정 (변수화)
 
 ### 1. Registry (Harbor)
+
 - `values.yaml` 내 `image.repository`
 
 ### 2. Storage Strategy
+
 - **NFS (추천)**: 여러 노드에서 데이터 접근이 용이하며 백업이 쉽습니다.
 - **HostPath**: 단일 노드 기반 설치 시 사용합니다.
 
 ### 3. JVM 최적화
+
 - `values.yaml` 내 `nexus.env`에서 힙 메모리를 조절할 수 있습니다.
 
 ## 💡 운영 팁 (오프라인 라이브러리 반입)
