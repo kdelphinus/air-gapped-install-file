@@ -2,26 +2,26 @@
 # Version: 0.14.8
 
 # 레지스트리 설정 (Harbor 주소로 변경 필요)
-image:
-  repository: library/metallb-controller
-  tag: v0.14.8
-  pullPolicy: IfNotPresent
+# MetalLB chart 는 global.imageRegistry 를 지원하지 않으므로 full path 로 지정
+controller:
+  image:
+    repository: <NODE_IP>:30002/library/metallb-controller
+    tag: v0.14.8
+    pullPolicy: IfNotPresent
 
 speaker:
   image:
-    repository: library/metallb-speaker
+    repository: <NODE_IP>:30002/library/metallb-speaker
     tag: v0.14.8
     pullPolicy: IfNotPresent
   # FRR (BGP) 기능을 사용하지 않는다면 L2 모드만으로 충분함
   frr:
     enabled: false
 
-# ---------------------------------------------------------
-# 이미지 레지스트리 전역 설정 (필요 시)
-# ---------------------------------------------------------
-global:
-  imageRegistry: "192.168.1.100:30002"  # 실제 Harbor IP:Port
-
-# RBAC 및 서비스 어카운트 설정
+# Prometheus 모니터링 비활성화 (연동 필요 시 podMonitor/serviceMonitor.enabled: true 로 변경)
 prometheus:
-  enabled: false # 모니터링 연동은 나중에 별도 설정 가능
+  scrapeAnnotations: false
+  podMonitor:
+    enabled: false
+  serviceMonitor:
+    enabled: false

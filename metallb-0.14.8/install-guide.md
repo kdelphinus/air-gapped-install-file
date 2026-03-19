@@ -8,16 +8,19 @@
 
 ```bash
 # 1. 이미지 로드 (ctr 사용)
-# ctr은 이미지를 직접 pull/export 한 tar 파일을 import 할 수 있습니다.
 sudo ctr -n k8s.io images import images/quay.io-metallb-controller-v0.14.8.tar
 sudo ctr -n k8s.io images import images/quay.io-metallb-speaker-v0.14.8.tar
+```
 
-# 2. 태그 변경 및 푸시 (Harbor IP 입력 필요)
-# ctr은 직접 push 기능이 제한적이므로, nerdctl 또는 docker tag/push 환경을 권장합니다.
-# 만약 호스트에 도커가 있다면 아래 명령어를 사용하세요.
-HARBOR_IP="192.168.1.100"
-docker tag quay.io/metallb/controller:v0.14.8 ${HARBOR_IP}:30002/library/metallb-controller:v0.14.8
-docker push ${HARBOR_IP}:30002/library/metallb-controller:v0.14.8
+```bash
+# 2. Harbor push — 공통 업로드 스크립트 사용
+# harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh 내 아래 변수를 수정 후 실행합니다.
+#   IMAGE_DIR      : <이 디렉터리>/images
+#   HARBOR_REGISTRY: <NODE_IP>:30002
+#   HARBOR_PROJECT : library
+#   HARBOR_USER    : admin
+#   HARBOR_PASSWORD: <Harbor 관리자 비밀번호>
+bash ../harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh
 ```
 
 ## 2단계: Helm 설치 (폴더 방식)

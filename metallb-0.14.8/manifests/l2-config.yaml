@@ -7,9 +7,9 @@ metadata:
   name: first-pool
   namespace: metallb-system
 spec:
-  # LoadBalancer가 할당할 수 있는 IP 대역 (예: 192.168.1.200-192.168.1.250)
+  # 기존 호스트와 충돌하지 않는 유휴 IP 대역으로 수정 (예: 10.0.0.200-10.0.0.250)
   addresses:
-    - {{ .Values.loadBalancerIPRange }}
+    - 192.168.1.200-192.168.1.250
 
 ---
 apiVersion: metallb.io/v1beta1

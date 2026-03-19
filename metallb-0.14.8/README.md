@@ -13,7 +13,7 @@
 
 ## 🛠️ 주요 설정 (변수화)
 
-- **Registry**: `values.yaml` 내 `global.imageRegistry` (기본: `30002`)
+- **Registry**: `values.yaml` 내 `controller.image.repository` / `speaker.image.repository` (형식: `<NODE_IP>:30002/library/<name>`)
 - **IP Range**: `manifests/l2-config.yaml` 내 `addresses` (기본: `192.168.1.200-250`)
 
 ## 💡 운영 팁
