@@ -1,0 +1,38 @@
+# Nexus Repository Manager v3.70.1 Values for Air-gapped
+
+# 1. 레지스트리 설정 (Harbor)
+image:
+  repository: library/nexus3
+  tag: 3.70.1
+  pullPolicy: IfNotPresent
+
+# 2. 스토리지 설정 (NFS vs HostPath)
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  # ---------------------------------------------------------
+  # Case A: NFS 사용 시
+  # ---------------------------------------------------------
+  storageClass: "nfs-provisioner"
+  
+  # ---------------------------------------------------------
+  # Case B: HostPath 사용 시
+  # ---------------------------------------------------------
+  # storageClass: "hostpath"
+  
+  size: 100Gi # 라이브러리 용량에 따라 확장 필요
+
+# 3. 네트워크 설정
+service:
+  type: NodePort # 또는 LoadBalancer (MetalLB 설치 후)
+  ports:
+    - name: nexus-ui
+      port: 8081
+      nodePort: 30081
+
+# 4. 리소스 제한 (JVM 메모리 설정 필수)
+nexus:
+  # JVM 최적화 (대용량 전송 시 증가 권장)
+  env:
+    - name: INSTALL4J_ADD_VM_PARAMS
+      value: "-Xms2703m -Xmx2703m -XX:MaxDirectMemorySize=2703m"
