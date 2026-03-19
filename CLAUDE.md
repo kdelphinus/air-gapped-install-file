@@ -50,7 +50,7 @@ air-gapped/
 
 - **스크립트**: Bash (`*.sh`), OS별 분기 처리
 - **이미지 관리**: `.tar`/`.tgz` export → Harbor push 패턴
-  - 기존 `upload_images_to_harbor_v2.sh` 스크립트 참조
+  - 기존 `upload_images_to_harbor_v3-lite.sh` 스크립트 참조
 - **패키지**: OS에 따라 분기
   - RHEL/Rocky → RPM (`dnf localinstall -y --disablerepo='*' *.rpm`)
   - Ubuntu/Debian → DEB (`dpkg -i` 또는 `apt install ./*.deb`)
@@ -81,7 +81,7 @@ air-gapped/
 - 인터넷 접근 불가 환경 — `curl`, `wget`, `yum install` 등으로 외부에서 받는 코드 생성 금지
 - 스크립트 생성 시 대상 OS 확인 후 작성, 멀티 OS 지원 시 RHEL계/Debian계 분기 처리
 - K8s 리소스는 `Retain` policy 우선
-- 이미지 관련 작업 시 기존 `upload_images_to_harbor_v2.sh` 패턴 참조
+- 이미지 관련 작업 시 기존 `upload_images_to_harbor_v3-lite.sh` 패턴 참조
 - 각 컴포넌트 폴더의 `README.md` / `guide.md` 먼저 확인
 - **Markdown 파일 작성 시 markdownlint 규칙 준수**
   - 제목은 ATX 스타일 (`#`), 레벨은 순서대로 (h1 → h2 → h3)

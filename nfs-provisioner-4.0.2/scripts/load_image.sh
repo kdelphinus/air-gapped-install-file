@@ -27,10 +27,9 @@ if command -v ctr &> /dev/null; then
     echo "   확인: sudo ctr -n k8s.io images list | grep nfs"
     
     echo ""
-    echo "   [참고] 내부 레지스트리를 사용한다면 태그 변경 및 푸시가 필요합니다."
-    echo "   Containerd에서는 'ctr images tag'와 'ctr images push'를 사용하세요."
-    echo "   예: sudo ctr -n k8s.io images tag $IMAGE_TAG $TARGET_REGISTRY/nfs-subdir-external-provisioner:v4.0.2"
-    echo "       sudo ctr -n k8s.io images push $TARGET_REGISTRY/nfs-subdir-external-provisioner:v4.0.2 --plain-http"
+    echo "   [Harbor push] 내부 레지스트리로 업로드하려면 upload_images_to_harbor_v3-lite.sh 를 사용합니다."
+    echo "   스크립트 내 IMAGE_DIR, HARBOR_REGISTRY, HARBOR_PROJECT, HARBOR_USER, HARBOR_PASSWORD 변수를 수정 후 실행:"
+    echo "   bash ../../harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh"
 
 # 2. Docker 확인
 elif command -v docker &> /dev/null; then

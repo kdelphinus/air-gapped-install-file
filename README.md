@@ -109,7 +109,7 @@ apt install ./*.deb
 ### 컨테이너 이미지 업로드
 
 ```bash
-# scripts/upload_images.sh (또는 upload_images_to_harbor_v2.sh) 상단 설정 후 실행
+# scripts/upload_images.sh (또는 upload_images_to_harbor_v3-lite.sh) 상단 설정 후 실행
 HARBOR_REGISTRY="<NODE_IP>:30002"
 HARBOR_PROJECT="<PROJECT>"
 HARBOR_USER="admin"
