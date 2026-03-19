@@ -7,9 +7,8 @@
 | 경로 | 설명 |
 | :--- | :--- |
 | `charts/` | Nexus Helm 차트 |
-| `manifests/` | 추가 PVC 또는 Ingress 설정 |
-| `images/` | Nexus3 공식 이미지 및 보조 도구 이미지 |
-| `scripts/` | 오프라인 이미지 푸시 및 설정 자동화 |
+| `images/` | Nexus3 공식 이미지 |
+| `scripts/` | 오프라인 에셋 다운로드 스크립트 |
 
 ## 🛠️ 주요 설정 (변수화)
 

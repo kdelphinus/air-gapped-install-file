@@ -7,11 +7,17 @@
 ```bash
 # 1. 이미지 로드 (ctr 사용)
 sudo ctr -n k8s.io images import images/sonatype-nexus3-3.70.1.tar
+```
 
-# 2. Harbor로 푸시
-HARBOR_IP="192.168.1.100"
-docker tag sonatype/nexus3:3.70.1 ${HARBOR_IP}:30002/library/nexus3:3.70.1
-docker push ${HARBOR_IP}:30002/library/nexus3:3.70.1
+```bash
+# 2. Harbor push — 공통 업로드 스크립트 사용
+# harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh 내 아래 변수를 수정 후 실행합니다.
+#   IMAGE_DIR      : <이 디렉터리>/images
+#   HARBOR_REGISTRY: <NODE_IP>:30002
+#   HARBOR_PROJECT : library
+#   HARBOR_USER    : admin
+#   HARBOR_PASSWORD: <Harbor 관리자 비밀번호>
+bash ../harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh
 ```
 
 ## 2단계: Helm 설치 (폴더 방식)
