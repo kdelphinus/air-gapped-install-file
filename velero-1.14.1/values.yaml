@@ -1,0 +1,44 @@
+# Velero v1.14.1 Values for Air-gapped
+
+# 1. 이미지 설정 (Harbor)
+image:
+  repository: library/velero
+  tag: v1.14.1
+  pullPolicy: IfNotPresent
+
+# 2. 플러그인 설정 (AWS 플러그인이 S3/MinIO/NFS 연동에 공통 사용됨)
+initContainers:
+  - name: velero-plugin-for-aws
+    image: 192.168.1.100:30002/library/velero-plugin-for-aws:v1.10.1
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# 3. 백업 저장소 설정 (NFS를 S3 API처럼 사용하거나 직접 마운트)
+configuration:
+  # ---------------------------------------------------------
+  # Case A: MinIO가 있을 경우
+  # ---------------------------------------------------------
+  provider: aws
+  backupStorageLocation:
+    name: default
+    bucket: velero
+    config:
+      region: minio
+      s3ForcePathStyle: true
+      s3Url: http://minio.monitoring.svc.cluster.local:9000
+
+# 4. PVC 데이터 백업 (Kopia 사용 권장)
+deployNodeAgent: true
+nodeAgent:
+  image:
+    repository: library/velero-node-agent
+    tag: v1.14.1
+
+# 5. 스케줄링 설정
+schedules:
+  daily-backup:
+    schedule: "0 1 * * *" # 매일 새벽 1시
+    template:
+      includedNamespaces: ["*"]
+      ttl: 720h # 30일 보관
