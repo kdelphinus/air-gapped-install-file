@@ -18,6 +18,11 @@ IMAGES=(
     "quay.io/prometheus-operator/prometheus-config-reloader:v0.76.1"
     "registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.12.0"
     "quay.io/prometheus-operator/prometheus-operator:v0.76.1"
+    # Grafana 보조 이미지 (sidecar, init)
+    "quay.io/kiwigrid/k8s-sidecar:1.27.4"
+    "docker.io/library/busybox:1.31.1"
+    # Prometheus Operator admission webhook certgen
+    "registry.k8s.io/ingress-nginx/kube-webhook-certgen:v20221220-controller-v1.5.1-58-g787ea74b6"
 )
 
 for IMG in "${IMAGES[@]}"; do

@@ -4,16 +4,26 @@
 
 ## 1단계: 오프라인 이미지 로드 및 푸시
 
-모니터링 스택은 여러 이미지를 사용합니다. `images/` 폴더 내의 모든 `.tar` 파일을 로드합니다.
+모니터링 스택은 여러 이미지를 사용합니다. `images/` 폴더 내의 모든 `.tar` 파일(총 11개)을 로드합니다.
+
+> Prometheus, Alertmanager, Prometheus Operator, Config Reloader, Webhook Certgen,
+> Grafana, Grafana Sidecar (k8s-sidecar), busybox (initChownData),
+> Node Exporter, kube-state-metrics, Prometheus Adapter
 
 ```bash
 # 1. 이미지 로드 (ctr 사용)
-# images/ 폴더의 모든 tar 파일을 k8s.io 네임스페이스로 임포트합니다.
 for f in images/*.tar; do sudo ctr -n k8s.io images import "$f"; done
+```
 
-# 2. Harbor로 푸시 (도커 환경이 있는 노드에서 수행 권장)
-HARBOR_IP="192.168.1.100"
-# (각 이미지별로 docker tag & push 진행)
+```bash
+# 2. Harbor push — 공통 업로드 스크립트 사용
+# harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh 내 아래 변수를 수정 후 실행합니다.
+#   IMAGE_DIR      : <이 디렉터리>/images
+#   HARBOR_REGISTRY: <NODE_IP>:30002
+#   HARBOR_PROJECT : library
+#   HARBOR_USER    : admin
+#   HARBOR_PASSWORD: <Harbor 관리자 비밀번호>
+bash ../harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh
 ```
 
 ## 2단계: Helm 설치 (폴더 방식)
