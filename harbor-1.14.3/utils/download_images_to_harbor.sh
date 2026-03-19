@@ -4,7 +4,7 @@
 # ================================================================
 
 # [설정 1] Harbor 주소
-REGISTRY_DOMAIN="harbor-product.strato.co.kr:8443"
+REGISTRY_DOMAIN="harbor.example.com:8443"
 PROJECT_NAME="goe"
 
 REGISTRY_URL="${REGISTRY_DOMAIN}/${PROJECT_NAME}"

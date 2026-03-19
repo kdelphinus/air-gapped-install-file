@@ -1,11 +1,11 @@
 // ==============================================================================
-// Jenkins CI/CD Pipeline Example — Python GitOps (Kaniko + GitLab Update)
+// Jenkins CI/CD Pipeline Example — Python GitOps (Podman + GitLab Update)
 //
 // [설명]
 // 1. Python Flask 앱을 빌드하여 Harbor에 푸시합니다.
-// 2. 빌드가 성공하면 GitOps 매니페스트(deployment.yaml)의 이미지 태그를 
+// 2. 빌드가 성공하면 GitOps 매니페스트(deployment.yaml)의 이미지 태그를
 //    자동으로 업데이트하고 GitLab에 푸시합니다.
-// 3. Kaniko의 권한 문제를 피하기 위해 .docker 설정을 워크스페이스에 생성합니다.
+// 3. Podman은 privileged 컨테이너로 실행하여 빌드 권한을 확보합니다.
 // ==============================================================================
 
 pipeline {
@@ -20,23 +20,25 @@ metadata:
 spec:
   containers:
   - name: shell
-    image: 'harbor-product.strato.co.kr:8443/strato-solution-baseimage/cmp-jenkins-full:2.528.3'
+    image: 'harbor.example.com:8443/jenkins/cmp-jenkins-full:2.528.3'
     command: ['/bin/sh', '-c', 'sleep 86400']
     tty: true
     volumeMounts:
       - mountPath: "/home/jenkins/agent"
         name: "workspace-volume"
 
-  - name: kaniko
-    image: 'harbor-product.strato.co.kr:8443/strato-solution-baseimage/executor:debug'
-    command: ['/busybox/sh', '-c', 'sleep 86400']
+  - name: podman
+    image: 'harbor.example.com:8443/jenkins/podman:v5'
+    command: ['/bin/sh', '-c', 'sleep 86400']
     tty: true
+    securityContext:
+      privileged: true
     volumeMounts:
       - mountPath: "/home/jenkins/agent"
         name: "workspace-volume"
 
   - name: jnlp
-    image: 'harbor-product.strato.co.kr:8443/strato-solution-baseimage/inbound-agent:1.0.0'
+    image: 'harbor.example.com:8443/jenkins/inbound-agent:1.0.0'
     volumeMounts:
       - mountPath: "/home/jenkins/agent"
         name: "workspace-volume"
@@ -55,7 +57,7 @@ spec:
     }
 
     environment {
-        REGISTRY_URL = 'harbor-product.strato.co.kr:8443'
+        REGISTRY_URL = 'harbor.example.com:8443'
         GIT_CLONE_URL = "${params.GIT_URL}"
         BRANCH = "${params.GIT_BRANCH}"
         CONTAINER_IMAGE_NAME = "${params.IMAGE_NAME}"
@@ -83,33 +85,29 @@ spec:
             }
         }
 
-        stage('2. Kaniko Build & Push') {
+        stage('2. Podman Build & Push') {
             steps {
                 script {
                     def fullImageName = "${env.REGISTRY_URL}/${env.CONTAINER_IMAGE_NAME}:${env.BUILD_NUMBER}"
-                    
-                    container('kaniko') {
+
+                    container('podman') {
                         withCredentials([usernamePassword(
                             credentialsId: env.HARBOR_CRED_ID,
                             passwordVariable: 'HARBOR_PASS',
                             usernameVariable: 'HARBOR_USER'
                         )]) {
-                            // [FIX] 모든 인증 파일 생성을 sh 내부에서 처리하여 유저 권한 불일치 해결
-                            // chmod를 추가하여 이후 단계나 다른 컨테이너에서의 접근 권한 보장
                             sh """
-                                mkdir -p ${env.WORKSPACE}/.docker
-                                AUTH_BASE64=\$(echo -n "\${HARBOR_USER}:\${HARBOR_PASS}" | base64 | tr -d '\\n')
-                                echo "{\\"auths\\": {\\"${env.REGISTRY_URL}\\": {\\"auth\\": \\"\$AUTH_BASE64\\"}}}" > ${env.WORKSPACE}/.docker/config.json
-                                chmod -R 777 ${env.WORKSPACE}/.docker
+                                podman login ${env.REGISTRY_URL} \\
+                                    --username \${HARBOR_USER} \\
+                                    --password \${HARBOR_PASS} \\
+                                    --tls-verify=false
 
-                                export DOCKER_CONFIG=${env.WORKSPACE}/.docker
-                                /kaniko/executor \\
-                                    --context ${env.WORKSPACE} \\
-                                    --dockerfile ${env.WORKSPACE}/Dockerfile \\
-                                    --destination ${fullImageName} \\
-                                    --insecure \\
-                                    --skip-tls-verify \\
-                                    --cleanup
+                                podman build \\
+                                    -t ${fullImageName} \\
+                                    -f ${env.WORKSPACE}/Dockerfile \\
+                                    ${env.WORKSPACE}
+
+                                podman push ${fullImageName} --tls-verify=false
                             """
                         }
                     }

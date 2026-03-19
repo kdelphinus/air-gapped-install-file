@@ -2,8 +2,8 @@
 
 # ==================== Config ====================
 # Harbor Registry
-HARBOR_REGISTRY="harbor-product.strato.co.kr:8443"
-HARBOR_PROJECT="strato-solution-baseimage"
+HARBOR_REGISTRY="harbor.example.com:8443"
+HARBOR_PROJECT="example-project"
 
 # Storage: "none" | "nas" | "hostpath"
 STORAGE_TYPE="hostpath"

@@ -1,5 +1,5 @@
 // ==============================================================================
-// Jenkins CI/CD Pipeline Template — Kaniko 이미지 빌드 & Harbor Push
+// Jenkins CI/CD Pipeline Template — Podman 이미지 빌드 & Harbor Push
 //
 // [사용 전 필수 수정 항목]
 //   1. <HARBOR_IP>:<PORT>  — Harbor 레지스트리 주소 (예: 10.9.42.91:30002)
@@ -17,6 +17,10 @@
 // [사전 조건 — PVC]
 //   - gradle-cache-pvc 가 jenkins 네임스페이스에 존재해야 합니다.
 //   - 적용 방법: kubectl apply -f gradle-cache-pv-pvc.yaml
+//
+// [Podman 사전 조건]
+//   - podman 컨테이너는 privileged: true 로 실행됩니다.
+//   - Harbor 가 HTTP 또는 자체 서명 TLS 인 경우 --tls-verify=false 를 사용합니다.
 // ==============================================================================
 
 pipeline {
@@ -32,7 +36,7 @@ spec:
   containers:
   # 1. 빌드용 컨테이너 (Java, Gradle, Git, Kubectl 포함)
   - name: shell
-    image: '<HARBOR_IP>:<PORT>/<HARBOR_PROJECT>/cmp-jenkins-full:2.528.3'
+    image: 'harbor.example.com:8443/jenkins/cmp-jenkins-full:2.528.3'
     command: ['/bin/sh', '-c', 'sleep 86400']
     tty: true
     volumeMounts:
@@ -41,18 +45,20 @@ spec:
       - mountPath: "/var/jenkins_home/.gradle"
         name: "gradle-cache"
 
-  # 2. 이미지 빌드용 컨테이너 (Kaniko)
-  - name: kaniko
-    image: '<HARBOR_IP>:<PORT>/<HARBOR_PROJECT>/executor:debug'
-    command: ['/busybox/sh', '-c', 'sleep 86400']
+  # 2. 이미지 빌드용 컨테이너 (Podman)
+  - name: podman
+    image: 'harbor.example.com:8443/jenkins/podman:v5'
+    command: ['/bin/sh', '-c', 'sleep 86400']
     tty: true
+    securityContext:
+      privileged: true
     volumeMounts:
       - mountPath: "/home/jenkins/agent"
         name: "workspace-volume"
 
   # 3. Jenkins 에이전트 (기본 통신용)
   - name: jnlp
-    image: '<HARBOR_IP>:<PORT>/<HARBOR_PROJECT>/inbound-agent:1.0.0'
+    image: 'harbor.example.com:8443/jenkins/inbound-agent:latest'
     volumeMounts:
       - mountPath: "/home/jenkins/agent"
         name: "workspace-volume"
@@ -92,7 +98,7 @@ spec:
     }
 
     environment {
-        REGISTRY_URL        = '<HARBOR_IP>:<PORT>'
+        REGISTRY_URL        = 'harbor.example.com:8443'
         GIT_CLONE_URL       = "${params.GIT_URL}"
         BRANCH              = "${params.GIT_BRANCH}"
         ACTIVE_PROFILE      = "${params.ACTIVE_PROFILE}"
@@ -131,7 +137,7 @@ spec:
             }
         }
 
-        stage('2. Kaniko Build & Push') {
+        stage('2. Podman Build & Push') {
             steps {
                 script {
                     // [수정] Dockerfile 이 위치한 경로 (프로젝트 루트 기준 상대 경로)
@@ -143,34 +149,25 @@ spec:
                     sh "sed -i 's/ARTIFACT_NAME/${env.ARTIFACT_NAME}/g' ${buildLocation}/Dockerfile"
                     sh "cp ${artifactPath}${env.ARTIFACT_NAME} ${buildLocation}/"
 
-                    container('kaniko') {
+                    container('podman') {
                         // Harbor Credentials ID = 0-harbor-product-Credential
                         withCredentials([usernamePassword(
                             credentialsId: '0-harbor-product-Credential',
                             passwordVariable: 'HARBOR_PASS',
                             usernameVariable: 'HARBOR_USER'
                         )]) {
-                            def auth = sh(
-                                script: "echo -n '${HARBOR_USER}:${HARBOR_PASS}' | base64",
-                                returnStdout: true
-                            ).trim()
-
-                            writeFile file: '/kaniko/.docker/config.json', text: """{
-  "auths": {
-    "${env.REGISTRY_URL}": {
-      "auth": "${auth}"
-    }
-  }
-}"""
-
                             sh """
-                                /kaniko/executor \\
-                                    --context ${env.WORKSPACE}/${buildLocation} \\
-                                    --dockerfile ${env.WORKSPACE}/${buildLocation}/Dockerfile \\
-                                    --destination ${imageName} \\
-                                    --cache=true \\
-                                    --cache-repo=${env.REGISTRY_URL}/<HARBOR_PROJECT>/kaniko-cache \\
-                                    --cleanup
+                                podman login ${env.REGISTRY_URL} \\
+                                    --username \${HARBOR_USER} \\
+                                    --password \${HARBOR_PASS} \\
+                                    --tls-verify=false
+
+                                podman build \\
+                                    -t ${imageName} \\
+                                    -f ${env.WORKSPACE}/${buildLocation}/Dockerfile \\
+                                    ${env.WORKSPACE}/${buildLocation}
+
+                                podman push ${imageName} --tls-verify=false
                             """
                         }
                     }

@@ -11,7 +11,7 @@
 ################################################################################
 
 # ==================== 설정 ====================
-HARBOR_REGISTRY="harbor-product.strato.co.kr:8443"
+HARBOR_REGISTRY="harbor.example.com:8443"
 HARBOR_PROJECT="goe"
 HARBOR_USER="name"
 HARBOR_PASSWORD="password"

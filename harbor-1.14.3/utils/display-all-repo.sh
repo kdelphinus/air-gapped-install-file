@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PROJECT="strato-solution-install-goe"
-HARBOR_ADDR="harbor-product.strato.co.kr:8443"
+HARBOR_ADDR="harbor.example.com:8443"
 HARBOR_HTTP="https"
 HARBOR_URL="$HARBOR_HTTP://$HARBOR_ADDR"
 #USER=""
