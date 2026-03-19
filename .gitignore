@@ -238,6 +238,7 @@ git_offline_bundle/
 # --- Rclone & Sync ---
 # 자동 동기화 스크립트 및 로그
 auto_sync.sh
+sync_now.sh
 *.log
 .rcloneignore
 
