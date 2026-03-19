@@ -45,6 +45,7 @@ Each top-level directory represents a component of the stack, often organized by
 - When generating scripts, prefer Bash and ensure they are compatible with the target OS (Rocky Linux 9.6, Ubuntu 24.04, etc.).
 - For Kubernetes resources, prioritize stability and data persistence (`Retain` policy for PVs).
 - Reference existing `upload_images_to_harbor_v2.sh` scripts when dealing with container images.
+- **Commit Strategy**: When performing multiple independent tasks, always separate them into multiple logical commits instead of a single monolithic commit.
 - Handle OS-specific package management:
   - RHEL/Rocky: `dnf localinstall` / `yum`
   - Ubuntu/Debian: `dpkg -i` / `apt install`
