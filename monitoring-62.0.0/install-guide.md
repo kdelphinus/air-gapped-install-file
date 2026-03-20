@@ -43,7 +43,35 @@ helm install prometheus ./charts/kube-prometheus-stack \
   -f values.yaml
 ```
 
-## 3단계: 접속 및 확인
+## 3단계: 재설치 시 PVC 처리
+
+Helm은 `uninstall` 시 PVC를 삭제하지 않습니다. StorageClass의 `reclaimPolicy: Retain` 설정 시 PVC를 삭제해도 PV와 실제 데이터는 보존됩니다.
+
+### 재설치 절차
+
+```bash
+# 1. Helm 릴리즈 제거 (PVC는 남음)
+helm uninstall prometheus -n monitoring
+
+# 2. PVC 확인
+kubectl get pvc -n monitoring
+
+# 3-A. 데이터 초기화 후 재설치: PVC와 PV 모두 삭제
+kubectl delete pvc --all -n monitoring
+kubectl delete pv <PV_NAME>   # PVC 삭제 후 남은 PV 수동 삭제 (Retain 정책)
+
+# 3-B. 데이터 유지하며 재설치: PVC 그대로 두고 재설치
+# → Helm이 기존 PVC를 재사용하므로 데이터 보존됨
+
+# 4. 재설치
+helm install prometheus ./charts/kube-prometheus-stack \
+  -n monitoring \
+  -f values.yaml
+```
+
+> StorageClass `reclaimPolicy: Delete`인 경우 PVC 삭제 시 PV와 데이터도 함께 삭제됩니다.
+
+## 4단계: 접속 및 확인
 
 ```bash
 # Grafana 접속 (Port-forward 예시)

@@ -1,0 +1,88 @@
+# Monitoring (kube-prometheus-stack) Values - 로컬 ctr 이미지용 (임시)
+# ctr로 이미지 로드 후 Harbor 없이 배포할 때 사용
+# 배포: helm upgrade --install ... -f values-local.yaml
+
+# 전역 레지스트리 비활성화
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# Prometheus
+prometheus:
+  prometheusSpec:
+    image:
+      registry: quay.io
+      repository: prometheus/prometheus
+      tag: "v2.54.1"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: "local-path-retain"
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+
+# Alertmanager
+alertmanager:
+  alertmanagerSpec:
+    image:
+      registry: quay.io
+      repository: prometheus/alertmanager
+      tag: "v0.27.0"
+
+# Prometheus Operator
+prometheusOperator:
+  image:
+    registry: quay.io
+    repository: prometheus-operator/prometheus-operator
+    tag: "v0.76.1"
+  prometheusConfigReloader:
+    image:
+      registry: quay.io
+      repository: prometheus-operator/prometheus-config-reloader
+      tag: "v0.76.1"
+  admissionWebhooks:
+    patch:
+      image:
+        registry: registry.k8s.io
+        repository: ingress-nginx/kube-webhook-certgen
+        tag: "v20221220-controller-v1.5.1-58-g787ea74b6"
+
+# Grafana
+grafana:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: grafana/grafana
+    tag: "11.1.0"
+  sidecar:
+    image:
+      registry: quay.io
+      repository: kiwigrid/k8s-sidecar
+      tag: "1.27.4"
+  initChownData:
+    image:
+      registry: docker.io
+      repository: library/busybox
+      tag: "1.31.1"
+  persistence:
+    enabled: true
+    storageClassName: "local-path-retain"
+    size: 10Gi
+  adminPassword: "admin"
+
+# 서브차트 이미지
+prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false  # WSL2 환경에서 mount propagation 미지원으로 비활성화
+  image:
+    registry: quay.io
+    repository: prometheus/node-exporter
+    tag: v1.8.2
+
+kube-state-metrics:
+  image:
+    registry: registry.k8s.io
+    repository: kube-state-metrics/kube-state-metrics
+    tag: v2.13.0
