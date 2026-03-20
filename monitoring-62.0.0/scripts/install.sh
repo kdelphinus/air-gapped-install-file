@@ -12,3 +12,9 @@ helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
   --namespace $NAMESPACE \
   -f "$VALUES_FILE" \
   --wait
+
+# HTTPRoute 적용 (Envoy Gateway 사용 시)
+if [ -f "./manifests/httproute.yaml" ]; then
+    echo "📡 HTTPRoute 적용 중..."
+    kubectl apply -f ./manifests/httproute.yaml
+fi

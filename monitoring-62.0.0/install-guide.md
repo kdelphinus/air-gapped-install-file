@@ -28,7 +28,18 @@ chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-## 3단계: 재설치 시 PVC 처리 (선택)
+## 3단계: HTTPRoute 적용 (Envoy Gateway 사용 시)
+
+Envoy Gateway를 Ingress로 사용하는 경우 HTTPRoute를 적용합니다.
+`manifests/httproute.yaml` 상단의 hostname을 실제 도메인으로 수정한 뒤 실행합니다.
+
+```bash
+# hostname 확인 및 수정
+# grafana.devops.internal / prometheus.devops.internal / alertmanager.devops.internal
+kubectl apply -f manifests/httproute.yaml
+```
+
+## 4단계: 재설치 시 PVC 처리 (선택)
 
 Helm은 `uninstall` 시 PVC를 삭제하지 않습니다. 데이터를 초기화하려면 수동으로 삭제해야 합니다.
 
@@ -41,7 +52,7 @@ kubectl delete pvc --all -n monitoring
 # (ReclaimPolicy가 Retain인 경우 PV도 수동 삭제 필요)
 ```
 
-## 4단계: 설치 확인 및 접속
+## 5단계: 설치 확인 및 접속
 
 ```bash
 # Grafana 접속 (Port-forward 테스트)
