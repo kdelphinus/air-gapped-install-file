@@ -119,8 +119,16 @@ fi
 # ==========================================
 echo ""
 echo "🚀 [1/2] Envoy Gateway Controller 설치 중..."
+
+CONTROLLER_VALUES=""
+if [ -f "./values-controller.yaml" ]; then
+    CONTROLLER_VALUES="-f ./values-controller.yaml"
+    echo "ℹ️  루트의 values-controller.yaml 설정을 적용합니다."
+fi
+
 helm upgrade --install eg $CONTROLLER_CHART \
   -n $NAMESPACE --create-namespace \
+  $CONTROLLER_VALUES \
   --set global.images.envoyGateway.image=$IMG_GATEWAY \
   --set global.images.envoyGateway.pullPolicy="IfNotPresent"
 
@@ -132,15 +140,17 @@ kubectl wait --timeout=5m -n $NAMESPACE deployment/envoy-gateway --for=condition
 # ==========================================
 echo "🚀 [2/2] Infrastructure 배포 중..."
 
+INFRA_VALUES=""
+if [ -f "./values-infra.yaml" ]; then
+    INFRA_VALUES="-f ./values-infra.yaml"
+    echo "ℹ️  루트의 values-infra.yaml 설정을 적용합니다."
+fi
+
 # 공통 옵션
-BASE_OPTS="-n $NAMESPACE --set envoy.image=$IMG_PROXY --set gateway.name=$GW_NAME $NODE_FLAG"
+BASE_OPTS="-n $NAMESPACE --set envoy.image=$IMG_PROXY --set gateway.name=$GW_NAME $NODE_FLAG $INFRA_VALUES"
 
 if [ "$INSTALL_MODE" == "2" ]; then
     # NodePort 모드: values.yaml + nodeport-values.yaml 함께 적용
-    # [참고] 앞단에 외부 하드웨어 LB(VIP)가 있는 경우:
-    #   - Service EXTERNAL-IP와 Gateway 주소에 VIP 대신 Worker Node IP가 표시되는 것은 정상입니다.
-    #   - VIP는 외부 LB가 소유하며 Kubernetes는 알 수 없습니다. Gateway spec.addresses 패치 불필요.
-    #   - 트래픽 흐름: 클라이언트 → VIP(외부 LB) → Worker Node IP:30080/30443 → Envoy → 백엔드
     if [ ! -f "$INFRA_CHART/nodeport-values.yaml" ]; then
         echo "❌ 에러: $INFRA_CHART/nodeport-values.yaml 파일이 없습니다!"
         exit 1

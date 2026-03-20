@@ -1,4 +1,4 @@
-# Envoy Gateway v1.36.3 오프라인 설치 가이드
+# 🚀 Envoy Gateway v1.36.3 오프라인 설치 가이드
 
 폐쇄망 환경에서 Envoy Gateway를 Kubernetes 위에 설치하는 절차를 안내합니다.
 
@@ -9,133 +9,78 @@
 - `kubectl` CLI 사용 가능
 - Harbor 레지스트리 접근 가능 (`<NODE_IP>:30002`)
 
-## 디렉토리 구조
+## 1단계: 이미지 Harbor 업로드
 
-| 경로 | 설명 |
-| :--- | :--- |
-| `images/envoy-gateway.tar` | Envoy Gateway 컨트롤러 이미지 |
-| `images/envoy-proxy.tar` | Envoy Proxy 데이터 플레인 이미지 |
-| `images/upload_images.sh` | Harbor 이미지 업로드 스크립트 |
-| `gateway-1.6.1/` | Envoy Gateway Controller Helm 차트 |
-| `strato-gateway-infra/` | Infrastructure Helm 차트 (GatewayClass, Gateway 정의) |
-| `install_envoy-gateway.sh` | 설치 자동화 스크립트 |
-| `policy-global-config.yaml` | 전역 정책 설정 (EnvoyPatchPolicy 등) |
-
-## Phase 1: 이미지 Harbor 업로드
+모든 작업은 컴포넌트 루트 디렉토리에서 실행합니다.
 
 ```bash
-cd images
+# upload_images_to_harbor_v3-lite.sh 상단 Config 수정
+# IMAGE_DIR      : ./images (현재 디렉터리의 이미지 폴더 지정)
+# HARBOR_REGISTRY: <NODE_IP>:30002
 
-# upload_images.sh 상단 Config 수정
-# HARBOR_REGISTRY, HARBOR_PROJECT, HARBOR_USER, HARBOR_PASSWORD 항목
-
-chmod +x upload_images.sh
-./upload_images.sh
+chmod +x images/upload_images_to_harbor_v3-lite.sh
+./images/upload_images_to_harbor_v3-lite.sh
 ```
 
-## Phase 2: 설치 스크립트 변수 설정
+## 2단계: 설치 및 운영 설정 (values.yaml)
 
-`install_envoy-gateway.sh` 상단 설정 변수를 환경에 맞게 수정합니다.
+루트 디렉토리의 설정 파일들을 환경에 맞게 수정합니다.
 
-| 변수 | 설명 | 기본값 |
+| 파일명 | 용도 | 비고 |
 | :--- | :--- | :--- |
-| `NAMESPACE` | 설치 네임스페이스 | `envoy-gateway-system` |
-| `GW_NAME` | Gateway 리소스 이름 | `cmp-gateway` |
-| `GW_CLASS_NAME` | GatewayClass 이름 | `eg-cluster-entry` |
-| `IMG_GATEWAY` | Envoy Gateway 이미지 주소 | Harbor 주소로 변경 |
-| `IMG_PROXY` | Envoy Proxy 이미지 주소 | Harbor 주소로 변경 |
+| **`values-controller.yaml`** | Envoy Gateway Controller 설정 | 이미지 경로 및 리소스 제한 등 |
+| **`values-infra.yaml`** | Infrastructure (Gateway) 설정 | 서비스 타입(LB/NodePort), 포트 등 |
+| **`manifests/policy-global.yaml`** | 전역 보안 및 트래픽 정책 | EnvoyPatchPolicy 등 |
 
-## Phase 3: 설치 실행
+## 3단계: 설치 실행
 
 ```bash
-chmod +x install_envoy-gateway.sh
-./install_envoy-gateway.sh
+chmod +x scripts/install_envoy-gateway.sh
+./scripts/install_envoy-gateway.sh
 ```
 
-스크립트 실행 중 아래 항목을 인터랙티브하게 선택합니다.
+스크립트 실행 중 다음 항목을 선택합니다:
 
-1. 기존 설치 감지 시: 삭제 후 재설치 여부 (y/n)
-2. 설치 모드 선택:
-   - `1` — LoadBalancer Mode (HostNetwork/MetalLB)
-   - `2` — NodePort Mode (권장, 30080/30443 포트)
-3. 노드 고정 여부: 특정 노드 이름 입력 또는 Enter로 자동 배치
-4. 전역 정책 적용 여부 (`policy-global-config.yaml`)
+1. **설치 모드**: `1` (LoadBalancer) 또는 `2` (NodePort - 권장)
+2. **노드 고정**: Envoy Proxy를 배치할 특정 노드 이름 입력 (선택)
+3. **전역 정책**: `manifests/policy-global.yaml` 적용 여부
 
-## Phase 4: 설치 확인
+## 4단계: 설치 확인
 
 ```bash
+# 파드 상태 확인
 kubectl get pods -n envoy-gateway-system
-kubectl get gateway -n envoy-gateway-system
-kubectl get svc -n envoy-gateway-system
+
+# Gateway 및 서비스 확인
+kubectl get gateway,svc -n envoy-gateway-system
 ```
 
-NodePort 모드 포트 확인:
+## 5단계: 서비스 노출 (HTTPRoute)
 
-```bash
-netstat -tlpn | grep 30443
-```
-
-### Gateway 주소 수동 바인딩 (1분 이상 false 상태 시)
-
-Gateway 리소스가 설치 후 1분이 지나도 `false` 상태로 남아 있는 경우, 노드 IP를 직접 할당합니다.
-
-단일 노드:
-
-```bash
-kubectl patch gateway cmp-gateway -n envoy-gateway-system \
-  --type='merge' \
-  -p '{"spec":{"addresses":[{"type":"IPAddress","value":"<NODE_IP>"}]}}'
-```
-
-다중 노드 (DaemonSet 구성):
-
-```bash
-kubectl patch gateway cmp-gateway -n envoy-gateway-system \
-  --type='merge' \
-  -p '{
-    "spec":{
-      "addresses":[
-        {"type":"IPAddress","value":"<NODE_IP_1>"},
-        {"type":"IPAddress","value":"<NODE_IP_2>"},
-        {"type":"IPAddress","value":"<NODE_IP_3>"}
-      ]
-    }
-  }'
-```
-
-## Phase 5: 서비스 노출 (HTTPRoute 생성)
-
-신규 서비스를 Envoy Gateway를 통해 노출하려면 HTTPRoute 리소스를 생성합니다.
+신규 서비스를 Envoy를 통해 노출하려면 `HTTPRoute` 리소스를 생성하여 적용합니다.
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: my-service-route
-  namespace: my-namespace
+  name: my-app-route
+  namespace: default
 spec:
   parentRefs:
     - name: cmp-gateway
       namespace: envoy-gateway-system
   hostnames:
-    - "my-service.internal"
+    - "my-app.internal"
   rules:
     - matches:
-        - path:
-            type: PathPrefix
-            value: /
+        - path: { type: PathPrefix, value: / }
       backendRefs:
-        - name: my-service
+        - name: my-app-service
           port: 80
 ```
 
-```bash
-kubectl apply -f my-service-route.yaml
-```
+## 💡 운영 팁
 
-## 배포 모드 선택 기준
-
-| 요구사항 | 권장 모드 |
-| :--- | :--- |
-| 클라이언트 실IP 보존 필요 (접근 로그, IP 차단 등) | `Local + DaemonSet` |
-| 단순 라우팅만 필요 (IP 불필요, 단일 노드) | `Cluster + Deployment` |
+- **클라이언트 실IP 보존**: `values-infra.yaml`에서 `externalTrafficPolicy: Local` 설정을 확인하십시오.
+- **NodePort 확인**: NodePort 모드 사용 시 호스트에서 `30080`(HTTP), `30443`(HTTPS) 포트가 리스닝 중인지 확인하십시오.
+- **트러블슈팅**: Gateway 상태가 `false`일 경우 `kubectl describe gateway cmp-gateway` 명령어로 원인을 파악하십시오.

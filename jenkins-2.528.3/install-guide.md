@@ -1,4 +1,4 @@
-# Jenkins v2.528.3 오프라인 설치 가이드
+# 🚀 Jenkins v2.528.3 오프라인 설치 가이드
 
 폐쇄망 환경에서 Jenkins v2.528.3을 Kubernetes 위에 Helm으로 설치하는 절차를 안내합니다.
 
@@ -8,138 +8,69 @@
 - Helm v3.14.0 설치 완료
 - `kubectl` CLI 사용 가능
 - Harbor 레지스트리 접근 가능 (`<NODE_IP>:30002`)
-- `images/upload_images_to_harbor_v3-lite.sh` 로 Harbor에 이미지 업로드 완료 (Phase 1 참고)
 
-## 디렉토리 구조
+## 1단계: 호스트 디렉토리 생성
 
-| 경로 | 설명 |
-| :--- | :--- |
-| `jenkins/` | Jenkins Helm 차트 |
-| `images/` | Jenkins 컨테이너 이미지 `.tar` 파일 |
-| `deploy-jenkins.sh` | 설치 자동화 스크립트 |
-| `pv-volume.yaml` | Jenkins 홈 PV 정의 (20Gi) |
-| `gradle-cache-pv-pvc.yaml` | Gradle 캐시 PV/PVC 정의 (5Gi) |
-| `route-jenkins.yaml` | HTTPRoute 정의 (Envoy Gateway 사용 시) |
-| `setup-host-dirs.sh` | 호스트 디렉토리 사전 생성 스크립트 |
-
-## Phase 1: 이미지 Harbor 업로드
+모든 작업은 컴포넌트 루트 디렉토리에서 실행합니다. PV 데이터 저장 경로를 대상 노드에 미리 생성합니다.
 
 ```bash
-cd images
+chmod +x scripts/setup-host-dirs.sh
+./scripts/setup-host-dirs.sh
+```
 
+## 2단계: 이미지 Harbor 업로드
+
+```bash
 # upload_images_to_harbor_v3-lite.sh 상단 Config 수정
-# IMAGE_DIR      : . (현재 디렉터리의 .tar 파일을 직접 사용)
+# IMAGE_DIR      : ./images (현재 디렉터리의 이미지 폴더 지정)
 # HARBOR_REGISTRY: <NODE_IP>:30002
-# HARBOR_PROJECT : <PROJECT>
-# HARBOR_USER    : admin
-# HARBOR_PASSWORD: <Harbor 관리자 비밀번호>
 
-chmod +x upload_images_to_harbor_v3-lite.sh
-./upload_images_to_harbor_v3-lite.sh
-cd ..
+chmod +x images/upload_images_to_harbor_v3-lite.sh
+./images/upload_images_to_harbor_v3-lite.sh
 ```
 
-## Phase 2: 호스트 디렉토리 생성
+## 3단계: 운영 설정 (values.yaml 및 PV)
 
-PV 데이터 저장 경로를 대상 노드에 미리 생성합니다.
+루트 디렉토리의 설정 파일들을 환경에 맞게 수정합니다.
 
-```bash
-chmod +x setup-host-dirs.sh
-./setup-host-dirs.sh
-```
-
-## Phase 3: PV 파일 설정
-
-`pv-volume.yaml` 에서 아래 항목을 환경에 맞게 수정합니다.
-
-| 항목 | 설명 | 기본값 |
+| 파일명 | 용도 | 주요 수정 항목 |
 | :--- | :--- | :--- |
-| `hostPath.path` | Jenkins 홈 데이터 저장 경로 | `/var/jenkins_home` |
-| `nodeAffinity` 노드명 | PV가 위치할 워커 노드 이름 | - |
-| `storage` 용량 | Jenkins 홈 용량 | `20Gi` |
+| **`values.yaml`** | Jenkins 운영 설정 | 이미지 경로, 리소스 제한, 서비스 타입 등 |
+| **`manifests/pv-volume.yaml`** | Jenkins 홈 PV 정의 | 노드 이름(`nodeAffinity`), 저장 경로 |
+| **`manifests/gradle-cache-pv-pvc.yaml`** | Gradle 캐시 PV/PVC | 저장 경로 |
 
-`gradle-cache-pv-pvc.yaml` 에서 Gradle 캐시 경로도 수정합니다.
-
-```yaml
-hostPath:
-  path: /data/gradle-cache
-```
-
-## Phase 4: deploy-jenkins.sh 설정
-
-`deploy-jenkins.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
-
-| 변수 | 설명 | 기본값 |
-| :--- | :--- | :--- |
-| `REGISTRY_URL` | Harbor 레지스트리 주소 | `<NODE_IP>:30002` |
-| `CONTROLLER_REPO` | Jenkins Controller 이미지 경로 | `library/cmp-jenkins-full` |
-| `CONTROLLER_TAG` | Jenkins Controller 이미지 태그 | `2.528.3` |
-| `AGENT_REPO` | Jenkins Agent 이미지 경로 | `library/inbound-agent` |
-| `SIDECAR_REPO` | Config Auto Reload 사이드카 이미지 | `library/k8s-sidecar` |
-| `DOMAIN` | CoreDNS 등록 도메인 (`""` 이면 NodePort로만 접속) | `""` |
-| `NAMESPACE` | Jenkins 설치 네임스페이스 | `jenkins` |
-| `STORAGE_SIZE` | Jenkins 홈 PVC 크기 | `20Gi` |
-| `NODE_PORT` | Jenkins 웹 NodePort | `30000` |
-
-> DNS 서버 없이 도메인을 사용하는 경우 `DOMAIN`을 설정하면 스크립트가 클러스터 내부 CoreDNS에
-> 자동으로 등록합니다. 클라이언트(PC) `/etc/hosts`는 별도로 추가해야 합니다.
-
-## Phase 5: Harbor ImagePullSecret 생성
-
-Harbor 이미지를 pull하기 위한 Secret을 생성합니다.
+## 4단계: 설치 실행
 
 ```bash
-kubectl create namespace jenkins
-
-kubectl create secret docker-registry regcred \
-  --docker-server=<NODE_IP>:30002 \
-  --docker-username=admin \
-  --docker-password=<HARBOR_PASSWORD> \
-  -n jenkins
+chmod +x scripts/deploy-jenkins.sh
+./scripts/deploy-jenkins.sh
 ```
 
-## Phase 6: 설치 실행
+스크립트 실행 중 Jenkins를 배포할 노드 이름을 입력합니다.
 
-```bash
-chmod +x deploy-jenkins.sh
-./deploy-jenkins.sh
-```
-
-스크립트 실행 중 배포할 노드 이름을 입력합니다.
-
-스크립트가 자동으로 처리하는 항목:
-
-- Namespace 생성 확인
-- PV/PVC 적용 (Jenkins 홈 + Gradle 캐시)
+스크립트 자동 처리 항목:
+- 네임스페이스 및 PV/PVC 적용
 - 노드 라벨 적용 (`jenkins-node=true`)
-- Helm 배포 (신규 install 또는 기존 upgrade)
-- Pod Ready 대기 (최대 5분)
-- 초기 관리자 비밀번호 출력
-- CoreDNS에 `DOMAIN` 등록 (`DOMAIN` 설정 시)
+- Helm 배포 및 초기 관리자 비밀번호 출력
+- CoreDNS 도메인 자동 등록 (`DOMAIN` 설정 시)
 
-## Phase 7: 설치 확인
+## 5단계: 설치 확인
 
 ```bash
-kubectl get pods -n jenkins
-kubectl get pv | grep jenkins
-kubectl get svc -n jenkins
-```
+# 파드 및 서비스 상태 확인
+kubectl get pods,svc -n jenkins
 
-## Phase 8: 초기 접속
-
-| 항목 | 값 |
-| :--- | :--- |
-| 접속 주소 | `http://<NODE_IP>:30000` |
-| 계정 | `admin` |
-| 비밀번호 | 스크립트 출력에서 확인 |
-
-비밀번호 수동 확인:
-
-```bash
+# 초기 관리자 비밀번호 확인
 kubectl get secret jenkins -n jenkins \
   -o jsonpath="{.data.jenkins-admin-password}" | base64 -d && echo
 ```
 
-## 참고: 마이그레이션 가이드
+| 접속 방식 | 주소 | 비고 |
+| :--- | :--- | :--- |
+| **NodePort** | `http://<NODE_IP>:30000` | 기본 접속 포트 |
+| **관리자 계정** | `admin` | 초기 ID |
 
-Jenkins 인스턴스 이전(Export/Import) 절차는 `export_import/guide.md` 를 참조하세요.
+## 💡 참고 사항
+
+- **마이그레이션**: 파이프라인 이전 절차는 `export_import/guide.md`를 참조하십시오.
+- **빌드 이미지**: Jenkins 관리 메뉴에서 `docker-registry` 시크릿을 등록하여 빌드 노드에서 Harbor 이미지를 사용할 수 있습니다.
