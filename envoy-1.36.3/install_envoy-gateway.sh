@@ -29,7 +29,7 @@ function cleanup_resources() {
   # 2. [핵심] 이름($GW_NAME)을 지정하지 않고, 종류별로 싹 다 찾아서 Finalizer 제거
   # (Gateway 이름이 달라도, 여러 개여도 모두 처리됨)
   echo "🔫 좀비 리소스(Finalizer) 일괄 제거 중..."
-  for KIND in gateway gatewayclass envoyproxy httproute; do
+  for KIND in gateway gatewayclass envoyproxy httproute service; do
     kubectl get $KIND -n $NAMESPACE -o name 2>/dev/null | \
     xargs -r -I {} kubectl patch {} -n $NAMESPACE -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null
   done
