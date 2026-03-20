@@ -45,9 +45,9 @@ ${ip} ${domain}"
 }
 
 NAMESPACE="argocd"
-CHART_PATH="./argo-cd"
+CHART_PATH="./charts/argo-cd"
 VALUES_FILE="./values.yaml"
-NAS_PV_FILE="./nas-pv.yaml"
+NAS_PV_FILE="./manifests/nas-pv.yaml"
 
 echo "==========================================="
 echo " Installing ArgoCD 2.12.1 (Offline)"
