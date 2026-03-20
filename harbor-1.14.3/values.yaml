@@ -1,17 +1,15 @@
 # Harbor v1.14.3 — 에어갭 기본 설정
 #
-# [편집 대상]
-# - image.repository: 이미지를 push한 Harbor 레지스트리 주소로 변경
-#   예) <NODE_IP>:30002/library
+# [이미지 공급 방법]
+# 이미지는 ctr import 로 노드에 직접 로드합니다.
+# imagePullPolicy: IfNotPresent 로 containerd 캐시를 사용하므로
+# 각 컴포넌트의 image.repository 를 별도로 덮어쓰지 않아도 됩니다.
 #
 # [동적 설정] TLS, 관리자 비밀번호, 스토리지 경로, 노드명은
 # scripts/harbor_install_offline.sh 상단 변수에서 설정합니다.
 
-# 이미지 레지스트리 (Harbor push 대상)
-# 빈 값("")이면 기본 upstream 이미지(docker.io/goharbor/...)를 사용합니다.
-image:
-  repository: ""
-  pullPolicy: IfNotPresent
+# 이미지를 외부에서 당기지 않고 로컬 캐시 사용
+imagePullPolicy: IfNotPresent
 
 # NodePort 고정 (Harbor: 30002, HTTPS: 30003)
 expose:

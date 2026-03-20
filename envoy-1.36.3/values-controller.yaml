@@ -10,13 +10,13 @@ global:
   # Override image-specific values directly if a global override is not desired.
   images:
     envoyGateway:
-      # TODO 이미지 경로 변경 필요
-      image: "docker.io/envoyproxy/gateway:v1.6.1"
+      # 배포 전 <NODE_IP>를 실제 노드 IP로 변경하세요.
+      image: "<NODE_IP>:30002/library/gateway:v1.6.1"
       pullPolicy: IfNotPresent
       pullSecrets: []
     ratelimit:
       # 안 쓰는 서비스로 현재는 무시해도 괜찮습니다.
-      image: "docker.io/envoyproxy/ratelimit:99d85510"
+      image: "<NODE_IP>:30002/library/ratelimit:99d85510"
       # Specify image pull policy if default behavior isn't desired.
       # Default behavior: latest images will be Always else IfNotPresent.
       pullPolicy: IfNotPresent
