@@ -18,6 +18,11 @@ for f in ./manifests/servicemonitors-*.yaml ./manifests/podmonitors-*.yaml; do
     [ -f "$f" ] && echo "📊 $f 적용 중..." && kubectl apply -f "$f"
 done
 
+# 커스텀 알림 룰 적용
+for f in ./manifests/alertrules-*.yaml; do
+    [ -f "$f" ] && echo "🔔 $f 적용 중..." && kubectl apply -f "$f"
+done
+
 # Grafana 커스텀 대시보드 적용
 for f in ./manifests/grafana-dashboard-*.yaml; do
     [ -f "$f" ] && echo "📈 $f 적용 중..." && kubectl apply -f "$f"
