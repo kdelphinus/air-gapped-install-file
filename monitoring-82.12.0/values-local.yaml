@@ -71,6 +71,9 @@ grafana:
     storageClassName: "local-path-retain"
     size: 10Gi
   adminPassword: "admin"
+  grafana.ini:
+    date_formats:
+      default_timezone: Asia/Seoul
 
 # 서브차트 이미지
 prometheus-node-exporter:

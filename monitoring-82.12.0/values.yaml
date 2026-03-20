@@ -125,6 +125,9 @@ grafana:
   #   enabled: true
   #   existingClaim: "grafana-pvc"   # 미리 생성한 PVC 이름
   adminPassword: "admin" # 초기 비밀번호
+  grafana.ini:
+    date_formats:
+      default_timezone: Asia/Seoul
 
 # 6. 서브차트 이미지
 prometheus-node-exporter:
