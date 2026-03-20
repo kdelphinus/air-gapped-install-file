@@ -4,13 +4,13 @@
 # [설정] 기본 변수
 # ==========================================
 NAMESPACE="envoy-gateway-system"
-CONTROLLER_CHART="./gateway-1.6.1"
-INFRA_CHART="./strato-gateway-infra"
+CONTROLLER_CHART="./charts/gateway-1.6.1"
+INFRA_CHART="./charts/strato-gateway-infra"
 GW_NAME="cmp-gateway"
 IMG_GATEWAY="docker.io/envoyproxy/gateway:v1.6.1"
 IMG_PROXY="docker.io/envoyproxy/envoy:distroless-v1.36.3"
 GW_CLASS_NAME="eg-cluster-entry"
-GLOBAL_POLICY_FILE="policy-global-config.yaml"
+GLOBAL_POLICY_FILE="./manifests/policy-global-config.yaml"
 
 # ==========================================
 # [함수] 클린업 로직
