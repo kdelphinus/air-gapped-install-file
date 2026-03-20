@@ -12,7 +12,7 @@ NAMESPACE="ingress-nginx"
 RELEASE_NAME="ingress-nginx"
 
 # 2. 폐쇄망 환경 설정
-HELM_CHART_PATH="./charts/ingress-nginx-4.10.1.tgz"
+HELM_CHART_PATH="./charts/ingress-nginx"
 
 # 3. 고급 설정
 HELM_CHART_VERSION="4.10.1"

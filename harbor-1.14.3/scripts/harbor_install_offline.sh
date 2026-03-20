@@ -12,7 +12,7 @@ HARBOR_NAMESPACE="harbor"
 HARBOR_RELEASE_NAME="harbor"
 
 # 2. 폐쇄망 환경 설정
-HELM_CHART_PATH="./charts/harbor-1.14.3.tgz"
+HELM_CHART_PATH="./charts/harbor"
 PRIVATE_REGISTRY="" # 노드에 직접 이미지를 로드했다면 빈 문자열("")로 설정
 
 # 3. 외부 접속 설정 (TLS 사용 시 인증서의 domain과 일치 해야함)
