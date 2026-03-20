@@ -6,28 +6,27 @@ IMAGE_DIR="${BASE_DIR}/images"
 mkdir -p "$CHART_DIR" "$IMAGE_DIR"
 
 echo "[1/2] Helm 차트 다운로드 중..."
-helm pull prometheus-community/kube-prometheus-stack --version 62.0.0 -d "$CHART_DIR" || true
+# 82.12.0 버전으로 다운로드
+helm pull prometheus-community/kube-prometheus-stack --version 82.12.0 -d "$CHART_DIR" || true
 
 echo "[2/2] 컨테이너 이미지 다운로드 및 저장 중..."
 IMAGES=(
-    "quay.io/prometheus/prometheus:v2.54.1"
-    "quay.io/prometheus/alertmanager:v0.27.0"
-    "quay.io/prometheus/node-exporter:v1.8.2"
-    "docker.io/grafana/grafana:12.4.1"
-    "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0"
-    "quay.io/prometheus-operator/prometheus-config-reloader:v0.76.1"
-    "registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.12.0"
-    "quay.io/prometheus-operator/prometheus-operator:v0.76.1"
-    # Grafana 보조 이미지 (sidecar, init)
-    "quay.io/kiwigrid/k8s-sidecar:1.27.4"
-    "docker.io/library/busybox:1.31.1"
-    # Prometheus Operator admission webhook certgen
-    "registry.k8s.io/ingress-nginx/kube-webhook-certgen:v20221220-controller-v1.5.1-58-g787ea74b6"
+    "quay.io/prometheus/prometheus:v3.10.0"
+    "quay.io/prometheus/alertmanager:v0.31.1"
+    "quay.io/prometheus/node-exporter:v1.10.2"
+    "docker.io/grafana/grafana:11.3.3"
+    "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.18.0"
+    "quay.io/prometheus-operator/prometheus-config-reloader:v0.89.0"
+    "quay.io/prometheus-operator/prometheus-operator:v0.89.0"
+    "quay.io/kiwigrid/k8s-sidecar:2.5.0"
+    "docker.io/library/busybox:1.37.0"
+    "ghcr.io/jkroepke/kube-webhook-certgen:v1.7.8"
 )
 
 for IMG in "${IMAGES[@]}"; do
-    SAFE_NAME=$(echo $IMG | sed 's/docker.io\///' | tr ':/' '-')
-    echo "-> 처리 중: $IMG"
+    # SAFE_NAME logic matching the actual files in images/ directory
+    SAFE_NAME=$(echo $IMG | tr ':/' '-')
+    echo "-> 처리 중: $IMG (File: ${SAFE_NAME}.tar)"
     if [ ! -f "${IMAGE_DIR}/${SAFE_NAME}.tar" ]; then
         sudo ctr images pull "$IMG" || continue
         sudo ctr images export "${IMAGE_DIR}/${SAFE_NAME}.tar" "$IMG"
