@@ -8,7 +8,7 @@
 - Helm v3.14.0 설치 완료
 - `kubectl` CLI 사용 가능
 - Harbor 레지스트리 접근 가능 (`<NODE_IP>:30002`)
-- Harbor에 Jenkins 이미지 사전 업로드 완료
+- `images/upload_images_to_harbor_v3-lite.sh` 로 Harbor에 이미지 업로드 완료 (Phase 1 참고)
 
 ## 디렉토리 구조
 
@@ -22,7 +22,24 @@
 | `route-jenkins.yaml` | HTTPRoute 정의 (Envoy Gateway 사용 시) |
 | `setup-host-dirs.sh` | 호스트 디렉토리 사전 생성 스크립트 |
 
-## Phase 1: 호스트 디렉토리 생성
+## Phase 1: 이미지 Harbor 업로드
+
+```bash
+cd images
+
+# upload_images_to_harbor_v3-lite.sh 상단 Config 수정
+# IMAGE_DIR      : . (현재 디렉터리의 .tar 파일을 직접 사용)
+# HARBOR_REGISTRY: <NODE_IP>:30002
+# HARBOR_PROJECT : <PROJECT>
+# HARBOR_USER    : admin
+# HARBOR_PASSWORD: <Harbor 관리자 비밀번호>
+
+chmod +x upload_images_to_harbor_v3-lite.sh
+./upload_images_to_harbor_v3-lite.sh
+cd ..
+```
+
+## Phase 2: 호스트 디렉토리 생성
 
 PV 데이터 저장 경로를 대상 노드에 미리 생성합니다.
 
@@ -31,7 +48,7 @@ chmod +x setup-host-dirs.sh
 ./setup-host-dirs.sh
 ```
 
-## Phase 2: PV 파일 설정
+## Phase 3: PV 파일 설정
 
 `pv-volume.yaml` 에서 아래 항목을 환경에 맞게 수정합니다.
 
@@ -48,7 +65,7 @@ hostPath:
   path: /data/gradle-cache
 ```
 
-## Phase 3: deploy-jenkins.sh 설정
+## Phase 4: deploy-jenkins.sh 설정
 
 `deploy-jenkins.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
 
@@ -67,7 +84,7 @@ hostPath:
 > DNS 서버 없이 도메인을 사용하는 경우 `DOMAIN`을 설정하면 스크립트가 클러스터 내부 CoreDNS에
 > 자동으로 등록합니다. 클라이언트(PC) `/etc/hosts`는 별도로 추가해야 합니다.
 
-## Phase 4: Harbor ImagePullSecret 생성
+## Phase 5: Harbor ImagePullSecret 생성
 
 Harbor 이미지를 pull하기 위한 Secret을 생성합니다.
 
@@ -81,7 +98,7 @@ kubectl create secret docker-registry regcred \
   -n jenkins
 ```
 
-## Phase 5: 설치 실행
+## Phase 6: 설치 실행
 
 ```bash
 chmod +x deploy-jenkins.sh
@@ -100,7 +117,7 @@ chmod +x deploy-jenkins.sh
 - 초기 관리자 비밀번호 출력
 - CoreDNS에 `DOMAIN` 등록 (`DOMAIN` 설정 시)
 
-## Phase 6: 설치 확인
+## Phase 7: 설치 확인
 
 ```bash
 kubectl get pods -n jenkins
@@ -108,7 +125,7 @@ kubectl get pv | grep jenkins
 kubectl get svc -n jenkins
 ```
 
-## Phase 7: 초기 접속
+## Phase 8: 초기 접속
 
 | 항목 | 값 |
 | :--- | :--- |

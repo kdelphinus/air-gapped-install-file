@@ -8,7 +8,7 @@
 | :--- | :--- |
 | `charts/` | MetalLB Helm 차트 (오프라인용) |
 | `manifests/` | L2Advertisement 등 IP 대역 설정 리소스 |
-| `images/` | 컨트롤러 및 스피커 이미지 저장 폴더 (`.tar` 파일 위치) |
+| `images/` | 컨트롤러 및 스피커 이미지 `.tar` 및 `upload_images_to_harbor_v3-lite.sh` |
 | `scripts/` | 이미지 로드 및 헬름 설치 자동화 스크립트 |
 
 ## 🛠️ 주요 설정 (변수화)

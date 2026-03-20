@@ -14,16 +14,17 @@
 ## Phase 1: 이미지 Harbor 업로드
 
 ```bash
-cd scripts
+cd images
 
-# upload_images.sh 상단 Config 수정
-HARBOR_REGISTRY="<NODE_IP>:30002"
-HARBOR_PROJECT="<PROJECT>"
-HARBOR_USER="admin"
-HARBOR_PASSWORD="<PASSWORD>"
+# upload_images_to_harbor_v3-lite.sh 상단 Config 수정
+# IMAGE_DIR      : . (현재 디렉터리의 .tar 파일을 직접 사용)
+# HARBOR_REGISTRY: <NODE_IP>:30002
+# HARBOR_PROJECT : <PROJECT>
+# HARBOR_USER    : admin
+# HARBOR_PASSWORD: <Harbor 관리자 비밀번호>
 
-chmod +x upload_images.sh
-./upload_images.sh
+chmod +x upload_images_to_harbor_v3-lite.sh
+./upload_images_to_harbor_v3-lite.sh
 ```
 
 ## Phase 2: install-argocd.sh 설정

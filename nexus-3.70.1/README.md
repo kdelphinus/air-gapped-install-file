@@ -7,7 +7,7 @@
 | 경로 | 설명 |
 | :--- | :--- |
 | `charts/` | Nexus Helm 차트 |
-| `images/` | Nexus3 공식 이미지 |
+| `images/` | Nexus3 공식 이미지 `.tar` 및 `upload_images_to_harbor_v3-lite.sh` |
 | `scripts/` | 오프라인 에셋 다운로드 스크립트 |
 
 ## 🛠️ 주요 설정 (변수화)

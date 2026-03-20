@@ -50,8 +50,8 @@
 | 경로 | 설명 |
 | :--- | :--- |
 | `argo-cd/` | Helm 차트 원본 |
-| `images/` | 컨테이너 이미지 `.tar` 파일 |
-| `scripts/` | 이미지 업로드 스크립트 |
+| `images/` | 컨테이너 이미지 `.tar` 파일 및 `upload_images_to_harbor_v3-lite.sh` |
+| `scripts/` | 이미지 다운로드/업로드 스크립트 |
 | `values.yaml` | ArgoCD Helm 설정 |
 | `nas-pv.yaml` | NAS(NFS) 사용 시 PV/PVC 정의 |
 | `install-argocd.sh` | 설치 자동화 스크립트 |

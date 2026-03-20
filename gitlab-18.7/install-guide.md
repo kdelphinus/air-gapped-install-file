@@ -33,16 +33,22 @@ chmod +x setup-host-dirs.sh
 
 ## Phase 2: Harbor에 이미지 업로드
 
-`install-gitlab.sh` 내 `HARBOR_REGISTRY`, `HARBOR_PROJECT` 변수를 설정하고,
-`images/` 디렉토리의 이미지를 Harbor에 업로드합니다.
+`images/upload_images_to_harbor_v3-lite.sh` 상단 Config를 수정한 후 실행합니다.
 
 ```bash
-# install-gitlab.sh 상단 변수 수정
-HARBOR_REGISTRY="<NODE_IP>:30002"
-HARBOR_PROJECT="<PROJECT>"
-```
+cd images
 
-이미지 업로드는 설치 스크립트 실행 시 자동으로 처리됩니다.
+# upload_images_to_harbor_v3-lite.sh 상단 Config 수정
+# IMAGE_DIR      : . (현재 디렉터리의 .tar 파일을 직접 사용)
+# HARBOR_REGISTRY: <NODE_IP>:30002
+# HARBOR_PROJECT : <PROJECT>
+# HARBOR_USER    : admin
+# HARBOR_PASSWORD: <Harbor 관리자 비밀번호>
+
+chmod +x upload_images_to_harbor_v3-lite.sh
+./upload_images_to_harbor_v3-lite.sh
+cd ..
+```
 
 ## Phase 3: PV 파일 설정
 
