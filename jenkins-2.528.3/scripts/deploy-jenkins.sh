@@ -1,4 +1,6 @@
 #!/bin/bash
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동 (scripts/ 하위에서 실행해도 경로 안전)
+cd "$(dirname "$0")/.." || exit 1
 
 # ==============================================================================
 # 🛠️ [설정 변수] 환경에 맞게 이 부분만 수정하세요.
@@ -30,7 +32,7 @@ STORAGE_SIZE="20Gi"
 NODE_PORT="30000"
 
 # 3. 헬름 차트 경로 (현재 경로 기준)
-CHART_PATH="./jenkins"
+CHART_PATH="./charts/jenkins"
 
 # ==============================================================================
 # 🚀 스크립트 실행 시작
@@ -52,10 +54,10 @@ echo ""
 echo "📂 [2/6] PV / PVC 생성 중..."
 
 echo "   - Jenkins 홈 PV 적용 중..."
-kubectl apply -f ./pv-volume.yaml
+kubectl apply -f ./manifests/pv-volume.yaml
 
 echo "   - Gradle 캐시 PV/PVC 적용 중..."
-kubectl apply -f ./gradle-cache-pv-pvc.yaml
+kubectl apply -f ./manifests/gradle-cache-pv-pvc.yaml
 
 echo "   ✅ PV / PVC 적용 완료."
 

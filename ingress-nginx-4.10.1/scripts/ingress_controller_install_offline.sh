@@ -1,4 +1,6 @@
 #!/bin/bash
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동 (scripts/ 하위에서 실행해도 경로 안전)
+cd "$(dirname "$0")/.." || exit 1
 set -e # 오류 발생 시 즉시 스크립트 중단
 
 # =================================================================
@@ -10,7 +12,7 @@ NAMESPACE="ingress-nginx"
 RELEASE_NAME="ingress-nginx"
 
 # 2. 폐쇄망 환경 설정
-HELM_CHART_PATH="./ingress-nginx-4.10.1.tgz"
+HELM_CHART_PATH="./charts/ingress-nginx-4.10.1.tgz"
 
 # 3. 고급 설정
 HELM_CHART_VERSION="4.10.1"

@@ -1,4 +1,6 @@
 #!/bin/bash
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동 (scripts/ 하위에서 실행해도 경로 안전)
+cd "$(dirname "$0")/.." || exit 1
 set -e # 오류 발생 시 즉시 스크립트 중단
 
 # =================================================================
@@ -10,7 +12,7 @@ HARBOR_NAMESPACE="harbor"
 HARBOR_RELEASE_NAME="harbor"
 
 # 2. 폐쇄망 환경 설정
-HELM_CHART_PATH="./harbor-1.14.3.tgz"
+HELM_CHART_PATH="./charts/harbor-1.14.3.tgz"
 PRIVATE_REGISTRY="" # 노드에 직접 이미지를 로드했다면 빈 문자열("")로 설정
 
 # 3. 외부 접속 설정 (TLS 사용 시 인증서의 domain과 일치 해야함)

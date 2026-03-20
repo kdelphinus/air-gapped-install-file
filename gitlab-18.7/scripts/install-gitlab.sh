@@ -1,13 +1,16 @@
 #!/bin/bash
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동 (scripts/ 하위에서 실행해도 경로 안전)
+cd "$(dirname "$0")/.." || exit 1
 
 # ==========================================
 # [설정] 변수 정의
 # ==========================================
 NAMESPACE="gitlab"
 RELEASE_NAME="gitlab"
-PV_FILE="gitlab-pv.yaml"
-HTTPROUTE_FILE="gitlab-httproutes.yaml"
-VALUES_FILE="install-gitlab-values.yaml"
+CHART_PATH="./charts/gitlab"
+PV_FILE="./manifests/gitlab-pv.yaml"
+HTTPROUTE_FILE="./manifests/gitlab-httproutes.yaml"
+VALUES_FILE="./values.yaml"
 NODE_LABEL_KEY="gitlab-node"
 NODE_LABEL_VALUE="true"
 HARBOR_REGISTRY="harbor.test.com:30002"  # Harbor 주소
@@ -265,7 +268,7 @@ echo "   Applying Images from: $IMAGE_VALUES_FILE"
 # 노드 선택 여부에 따른 로그 출력
 if [ -n "$NODE_SELECTOR_ARGS" ]; then
     echo "   Target Node Label: $NODE_LABEL_KEY=$NODE_LABEL_VALUE"
-    helm upgrade --install $RELEASE_NAME gitlab \
+    helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f $VALUES_FILE \
     -f $IMAGE_VALUES_FILE \
     --namespace $NAMESPACE \
@@ -273,7 +276,7 @@ if [ -n "$NODE_SELECTOR_ARGS" ]; then
     $NODE_SELECTOR_ARGS
 else
     echo "   Node Selector: None (Automatic Scheduling)"
-    helm upgrade --install $RELEASE_NAME gitlab \
+    helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f $VALUES_FILE \
     -f $IMAGE_VALUES_FILE \
     --namespace $NAMESPACE \
