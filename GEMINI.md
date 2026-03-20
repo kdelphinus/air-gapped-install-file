@@ -59,6 +59,24 @@ by OS:
 - **Commit Strategy**: When performing multiple independent tasks, always
   separate them into multiple logical commits instead of a single monolithic
   commit. **All git commit messages must be written in Korean.**
+- **Engineering Standards**:
+  - **Markdownlint**: Always adhere to markdownlint standards (including headers, language tags for code blocks, and list spacing).
+  - **Directory Structure**: All service components must follow the standard structure below:
+
+    ```text
+    <component>/
+    ├── charts/          # Helm charts (folder or .tgz)
+    ├── images/          # .tar files + Harbor upload script
+    ├── manifests/       # K8s manifests (HTTPRoute, PV/PVC, etc.)
+    ├── scripts/         # Install/Operation scripts (Root-relative execution)
+    ├── values.yaml      # Production values (Harbor-based)
+    ├── README.md        # Service specifications and specs
+    └── install-guide.md # Phase-based installation instructions
+    ```
+
+  - **Execution Logic**:
+    - All scripts in `scripts/` must work relative to the component root using `cd "$(dirname "$0")/.."`.
+    - All installation guides must instruct users to execute commands from the component root (e.g., `./scripts/install.sh`).
 - Handle OS-specific package management:
   - RHEL/Rocky: `dnf localinstall` / `yum`
   - Ubuntu/Debian: `dpkg -i` / `apt install`
