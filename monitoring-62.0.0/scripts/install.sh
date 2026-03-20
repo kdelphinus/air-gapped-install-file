@@ -13,6 +13,16 @@ helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
   -f "$VALUES_FILE" \
   --wait
 
+# ServiceMonitor / PodMonitor 적용 (Prometheus 스크레이프 대상 등록)
+for f in ./manifests/servicemonitors-*.yaml ./manifests/podmonitors-*.yaml; do
+    [ -f "$f" ] && echo "📊 $f 적용 중..." && kubectl apply -f "$f"
+done
+
+# Grafana 커스텀 대시보드 적용
+for f in ./manifests/grafana-dashboard-*.yaml; do
+    [ -f "$f" ] && echo "📈 $f 적용 중..." && kubectl apply -f "$f"
+done
+
 # HTTPRoute 적용 (Envoy Gateway 사용 시)
 if [ -f "./manifests/httproute.yaml" ]; then
     echo "📡 HTTPRoute 적용 중..."
