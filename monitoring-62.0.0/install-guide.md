@@ -57,7 +57,11 @@ kubectl delete pvc --all -n monitoring
 ```bash
 # Grafana 접속 (Port-forward 테스트)
 kubectl port-forward svc/prometheus-grafana 3000:80 -n monitoring
-
-# 초기 정보 (values.yaml 설정값 확인)
-# ID: admin / PW: admin
 ```
+
+Grafana 초기 로그인 정보 (변경 시 `values.yaml`의 `grafana.adminUser` / `grafana.adminPassword` 참고):
+
+| 항목 | 기본값 |
+| :--- | :--- |
+| ID | `admin` |
+| Password | `admin` |
