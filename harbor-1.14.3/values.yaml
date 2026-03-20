@@ -1,0 +1,36 @@
+# Harbor v1.14.3 — 에어갭 기본 설정
+#
+# [편집 대상]
+# - image.repository: 이미지를 push한 Harbor 레지스트리 주소로 변경
+#   예) <NODE_IP>:30002/library
+#
+# [동적 설정] TLS, 관리자 비밀번호, 스토리지 경로, 노드명은
+# scripts/harbor_install_offline.sh 상단 변수에서 설정합니다.
+
+# 이미지 레지스트리 (Harbor push 대상)
+# 빈 값("")이면 기본 upstream 이미지(docker.io/goharbor/...)를 사용합니다.
+image:
+  repository: ""
+  pullPolicy: IfNotPresent
+
+# NodePort 고정 (Harbor: 30002, HTTPS: 30003)
+expose:
+  type: nodePort
+  tls:
+    enabled: false
+  nodePort:
+    ports:
+      http:
+        nodePort: 30002
+      https:
+        nodePort: 30003
+
+# 폐쇄망: trivy 비활성화 (DB 업데이트 인터넷 필요)
+trivy:
+  enabled: false
+  skipUpdate: true
+  offlineScan: true
+
+# 내부 컴포넌트 간 TLS 비활성화
+internalTLS:
+  enabled: false

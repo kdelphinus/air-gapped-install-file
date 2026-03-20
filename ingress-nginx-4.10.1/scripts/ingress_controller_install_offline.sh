@@ -82,6 +82,7 @@ helm upgrade --install "$RELEASE_NAME" "$HELM_CHART_PATH" \
 --namespace "$NAMESPACE" \
 --atomic \
 --wait \
+-f ./values.yaml \
 --set controller.image.pullPolicy=IfNotPresent \
 --set controller.admissionWebhooks.patch.image.pullPolicy=IfNotPresent \
 --set defaultBackend.image.pullPolicy=IfNotPresent \

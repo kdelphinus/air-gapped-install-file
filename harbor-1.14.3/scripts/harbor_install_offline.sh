@@ -206,7 +206,6 @@ VALUES_FILE="harbor-generated-values.yaml"
 cat > "$VALUES_FILE" <<EOF
 image:
   repository: ${PRIVATE_REGISTRY}
-  pullPolicy: IfNotPresent
 
 externalURL: ${EXTERNAL_URL}
 
@@ -258,21 +257,11 @@ persistence:
       subPath: trivy
   imageChartStorage:
     type: filesystem
-# 내부 컴포넌트 TLS (전역 설정)
-internalTLS:
-  enabled: false
-
-# trivy 인터넷 연결이 필요하므로 비활성화
-trivy:
-  enabled: false
-  skipUpdate: true
-  offlineScan: true
-  internalTLS:
-    enabled: false   # ✅ Trivy는 항상 TLS OFF
 EOF
 
 helm upgrade --install "$HARBOR_RELEASE_NAME" "$HELM_CHART_PATH" \
     --namespace "$HARBOR_NAMESPACE" \
+    -f ./values.yaml \
     -f "$VALUES_FILE" \
     --atomic \
     --wait

@@ -1,0 +1,16 @@
+# Ingress-Nginx v4.10.1 — Harbor 레지스트리 대상 values
+# 배포 전 <NODE_IP>를 실제 노드 IP로 변경하세요.
+
+controller:
+  image:
+    registry: "<NODE_IP>:30002"
+    image: library/controller
+    tag: "v1.10.1"
+    pullPolicy: IfNotPresent
+  admissionWebhooks:
+    patch:
+      image:
+        registry: "<NODE_IP>:30002"
+        image: library/kube-webhook-certgen
+        tag: "v1.4.1"
+        pullPolicy: IfNotPresent
