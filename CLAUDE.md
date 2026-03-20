@@ -46,6 +46,28 @@ air-gapped/
 6. `ingress-nginx` 또는 `envoy` — 인그레스
 7. `gitlab`, `jenkins`, `argocd`, `mariadb` — 앱 레이어
 
+## Helm Component Directory Structure
+
+새 Helm 컴포넌트 폴더를 생성할 때는 반드시 아래 표준 구조를 따른다.
+
+```text
+<component>/
+├── charts/       ← Helm 차트 (압축 해제된 폴더 또는 .tgz)
+├── images/       ← 이미지 .tar + upload_images_to_harbor_v3-lite.sh
+├── manifests/    ← 보조 K8s 매니페스트 (HTTPRoute, PV/PVC 등)
+├── scripts/      ← 설치·운영 스크립트
+├── values.yaml   ← Harbor 레지스트리 대상 (운영 환경)
+├── README.md
+└── install-guide.md
+```
+
+- `scripts/` 내 모든 스크립트 상단에 반드시 추가:
+  ```bash
+  cd "$(dirname "$0")/.." || exit 1
+  ```
+- Helm chart 경로는 `./charts/<name>` 또는 `./charts/<name>.tgz` 형식 사용
+- 매니페스트(HTTPRoute 등)는 루트가 아닌 `./manifests/` 에 위치
+
 ## Key Conventions
 
 - **스크립트**: Bash (`*.sh`), OS별 분기 처리

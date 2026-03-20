@@ -119,18 +119,25 @@ harbor, ingress-nginx, metallb, monitoring, envoy, nexus, gitlab, jenkins, argoc
 
 ```text
 <component>/
-├── charts/            # Helm 차트 (압축 해제된 폴더 또는 .tgz)
-├── images/            # 컨테이너 이미지 .tar 파일 + Harbor 업로드 스크립트
-├── manifests/         # 보조 K8s 매니페스트 (HTTPRoute, PV/PVC 등)
-├── scripts/           # 설치·운영 스크립트 (install, setup-host-dirs 등)
-├── values.yaml        # Helm values — Harbor 레지스트리 대상 (운영 환경)
-├── README.md          # 서비스 스펙 (버전, 컴포넌트, 네트워크, 구조 설명)
-└── install-guide.md   # Phase 기반 설치 절차 가이드
+├── charts/
+├── images/
+├── manifests/
+├── scripts/
+├── values.yaml
+├── README.md
+└── install-guide.md
 ```
 
-- `values-local.yaml`: 일부 컴포넌트는 로컬(ctr 직접 로드) 환경용 values 파일을 별도 제공합니다.
-- `scripts/` 내 스크립트는 어느 위치에서 실행해도 동작하도록
-  스크립트 상단에서 컴포넌트 루트로 자동 이동합니다 (`cd "$(dirname "$0")/.."`)
+| 경로 | 내용 |
+| :--- | :--- |
+| `charts/` | Helm 차트 (압축 해제된 폴더 또는 `.tgz`) |
+| `images/` | 컨테이너 이미지 `.tar` + Harbor 업로드 스크립트 |
+| `manifests/` | 보조 K8s 매니페스트 (HTTPRoute, PV/PVC 등) |
+| `scripts/` | 설치·운영 스크립트 (어느 위치에서 실행해도 컴포넌트 루트 기준으로 동작) |
+| `values.yaml` | Helm values — Harbor 레지스트리 대상 (운영 환경) |
+| `values-local.yaml` | 로컬(ctr 직접 로드) 환경용 values — 일부 컴포넌트만 제공 |
+| `README.md` | 서비스 스펙 (버전, 컴포넌트, 네트워크, 구조 설명) |
+| `install-guide.md` | Phase 기반 설치 절차 가이드 |
 
 ---
 
