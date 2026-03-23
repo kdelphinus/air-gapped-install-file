@@ -7,10 +7,7 @@
 모든 작업은 컴포넌트 루트 디렉토리에서 실행합니다.
 
 ```bash
-# 1. 이미지 로드 (ctr 사용)
-sudo ctr -n k8s.io images import images/sonatype-nexus3-3.70.1.tar
-
-# 2. upload_images_to_harbor_v3-lite.sh 상단 Config 수정
+# upload_images_to_harbor_v3-lite.sh 상단 Config 수정
 # IMAGE_DIR      : ./images (현재 디렉터리의 이미지 폴더 지정)
 # HARBOR_REGISTRY: <NODE_IP>:30002
 
