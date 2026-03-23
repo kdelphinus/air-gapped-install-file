@@ -14,6 +14,9 @@ prometheus:
       registry: quay.io
       repository: prometheus/prometheus
       tag: "v3.10.0"
+    # 특정 기준에 따라 데이터 삭제
+    retention: "10d"
+    retentionSize: "40GB"
     storageSpec:
       volumeClaimTemplate:
         spec:
