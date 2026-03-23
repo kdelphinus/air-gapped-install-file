@@ -1,6 +1,5 @@
 # Velero v1.14.1 Values - 로컬 ctr 이미지용
 # ctr로 이미지 로드 후 Harbor 없이 배포할 때 사용
-# 배포: helm upgrade --install ... -f values-local.yaml
 
 # 1. 이미지 설정 (ctr import 후 로컬)
 image:
@@ -9,10 +8,28 @@ image:
   pullPolicy: IfNotPresent
 
 # CRD 업그레이드 훅 비활성화
-# bitnami/kubectl 이미지가 Docker Hub 에서 제거됨 + 신규 설치에는 불필요
 upgradeCRDs: false
 
-# 2. 플러그인 설정 (AWS 플러그인이 S3/MinIO/NFS 연동에 공통 사용됨)
+# 2. 플러그인 및 스토리지 설정
+configuration:
+  backupStorageLocation:
+  - name: default
+    provider: aws
+    bucket: velero
+    config:
+      region: minio
+      s3ForcePathStyle: "true"
+      s3Url: http://minio:9000
+  
+  # 메인 Pod 환경 변수 설정
+  extraEnvVars:
+    AWS_EC2_METADATA_DISABLED: "true"
+
+# [주의] Secret을 사용하되, 스크립트에서 Helm 소유권을 주입하여 생성합니다.
+credentials:
+  useSecret: true
+  name: velero-s3-credentials
+
 initContainers:
   - name: velero-plugin-for-aws
     image: velero/velero-plugin-for-aws:v1.10.1
@@ -21,31 +38,17 @@ initContainers:
       - mountPath: /target
         name: plugins
 
-# 3. 백업 저장소 설정
-# configuration.backupStorageLocation 은 slice 구조 (chart v7+)
-# provider 는 configuration 레벨이 아닌 각 backupStorageLocation 항목에 지정
-configuration:
-  backupStorageLocation:
-    # ---------------------------------------------------------
-    # Case A: MinIO가 있을 경우
-    # ---------------------------------------------------------
-  - name: default
-    provider: aws
-    bucket: velero
-    config:
-      region: minio
-      s3ForcePathStyle: "true"
-      s3Url: http://minio.monitoring.svc.cluster.local:9000
-
 # 4. PVC 데이터 백업 (Kopia 사용 권장)
-# nodeAgent 는 별도 image 키가 없으며 상위 image.repository 를 그대로 사용
+snapshotsEnabled: false
 deployNodeAgent: true
-nodeAgent: {}
+nodeAgent:
+  extraEnvVars:
+    AWS_EC2_METADATA_DISABLED: "true"
 
 # 5. 스케줄링 설정
 schedules:
   daily-backup:
-    schedule: "0 1 * * *" # 매일 새벽 1시
+    schedule: "0 1 * * *" 
     template:
       includedNamespaces: ["*"]
-      ttl: 720h # 30일 보관
+      ttl: 720h

@@ -1,35 +1,31 @@
-# 💾 Velero v1.14.1 (Backup & Recovery)
+# Velero v1.14.1 Offline Installation
 
-K8s 클러스터의 리소스 정의서(YAML) 및 영구 볼륨(PVC) 데이터를 백업하고 복구하는 재해 복구(DR) 도구입니다.
+이 폴더는 폐쇄망 환경에서 Kubernetes 클러스터의 백업 및 복구를 수행하기 위한 Velero 설치 에셋을 포함합니다.
 
-## 📦 구성 요소
+## 구성 요소
 
-| 경로 | 설명 |
-| :--- | :--- |
-| `charts/` | Velero Helm 차트 |
-| `images/` | Velero, AWS 플러그인 이미지 `.tar` (node-agent 는 velero 이미지 재사용) 및 `upload_images_to_harbor_v3-lite.sh` |
-| `scripts/` | 에셋 다운로드 스크립트 |
+- **Velero CLI**: v1.14.1
+- **Velero Helm Chart**: v7.2.1
+- **MinIO**: RELEASE.2024-12-18T13-15-44Z (전용 백업 스토리지)
+- **MinIO Client (mc)**: RELEASE.2024-11-21T17-21-54Z
 
-## 🛠️ 주요 설정 (변수화)
+## 디렉토리 구조
 
-### 1. Registry (Harbor)
+```text
+velero-1.14.1/
+├── charts/          # Velero 헬름 차트
+├── images/          # .tar 이미지 파일 및 Harbor 업로드 스크립트
+├── manifests/       # MinIO 배포용 매니페스트
+├── scripts/         # 설치 및 에셋 다운로드 스크립트
+├── values.yaml      # Harbor용 헬름 설정
+├── values-local.yaml # 로컬 이미지용 헬름 설정
+└── install-guide.md # 상세 설치 가이드
+```
 
-- `values.yaml` 내 `image.repository` 및 플러그인 경로.
+## 빠른 시작
 
-### 2. Backup Target
+1. `scripts/download_assets.sh`를 실행하여 모든 에셋을 다운로드합니다.
+2. 에셋을 폐쇄망으로 반입한 뒤, `install-guide.md`를 참고하여 설치를 진행합니다.
+3. Harbor 사용 시 `scripts/install.sh`의 IP를 수정한 후 실행하십시오.
 
-- **MinIO**: 폐쇄망에서 S3 API를 제공하는 가장 보편적인 방법입니다.
-- **NFS**: MinIO 없이 NFS를 직접 백엔드로 사용할 수도 있습니다. (Restic/Kopia 활용)
-
-### 3. CLI Binary
-
-- Velero는 `kubectl`처럼 전용 CLI 바이너리가 필요합니다. (컴포넌트 루트의 `velero-v1.14.1-linux-amd64.tar.gz`)
-
-### 4. CRD 업그레이드 훅
-
-- `upgradeCRDs: false` — bitnami/kubectl 이미지가 Docker Hub 에서 제거되어 비활성화. 신규 설치 시 CRD 는 차트가 직접 생성.
-
-## 💡 운영 팁
-
-- **Full Backup**: `velero backup create <name> --all-namespaces` 명령으로 클러스터 전체를 백업할 수 있습니다.
-- **Partial Restore**: 특정 네임스페이스만 골라서 복구하는 것도 가능합니다.
+상세한 설치 및 운영 방법은 [install-guide.md](./install-guide.md)를 참조하십시오.
