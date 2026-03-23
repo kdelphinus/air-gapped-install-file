@@ -5,7 +5,9 @@ containerd v2.2.0을 컨테이너 런타임으로, Calico를 CNI로 사용합니
 
 ## 전제 조건
 
-- Rocky Linux 9.6 서버 (컨트롤 플레인 1대 + 워커 노드 1대 이상)
+- Rocky Linux 9.6 서버
+  - **단일 구성**: 컨트롤 플레인 1대 + 워커 노드 1대 이상
+  - **HA(3중화) 구성**: 컨트롤 플레인 3대 + 워커 노드 1대 이상 + VIP 1개
 - 모든 노드에서 아래 설치 파일 접근 가능
 - swap 비활성화 완료 (`swapoff -a` 및 `/etc/fstab` 주석 처리)
 
@@ -18,7 +20,24 @@ containerd v2.2.0을 컨테이너 런타임으로, Calico를 CNI로 사용합니
 | `k8s/binaries/` | helm, cri-dockerd 등 바이너리 |
 | `k8s/images/` | kubeadm, Calico 등 컨테이너 이미지 `.tar` |
 | `k8s/charts/` | Helm 차트 |
-| `k8s/utils/` | calico.yaml, ingress-nginx.yaml 등 매니페스트 |
+| `k8s/utils/` | calico.yaml 등 매니페스트 |
+
+## Phase 0: 설치 파일 배포 (Master-1 → 전체 노드)
+
+마스터-1에 설치 파일이 있다고 가정하고, 나머지 노드에 배포합니다.
+
+```bash
+# 배포 대상 노드 IP 목록 (환경에 맞게 수정)
+NODES=("10.10.10.71" "10.10.10.72" "10.10.10.73" "10.10.10.74" "10.10.10.75")
+
+for IP in "${NODES[@]}"; do
+    echo "Sending to $IP..."
+    scp ~/k8s-1.30.tar.gz rocky@$IP:~/
+done
+
+# 모든 노드에서 압축 해제
+tar -zxvf ~/k8s-1.30.tar.gz
+```
 
 ## Phase 1: 공통 RPM 설치 (전체 노드)
 
@@ -33,25 +52,14 @@ sudo dnf localinstall -y --disablerepo='*' k8s/rpms/*.rpm
 sudo systemctl enable kubelet
 ```
 
-## Phase 2: containerd 설정 (전체 노드)
+## Phase 2: OS 사전 설정 (전체 노드)
 
 ```bash
-# containerd 기본 설정 생성
-sudo mkdir -p /etc/containerd
-sudo containerd config default | sudo tee /etc/containerd/config.toml
+# 1. SELinux permissive 모드
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 
-# cgroup driver를 systemd로 변경
-sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-
-# containerd 시작 및 활성화
-sudo systemctl enable --now containerd
-sudo systemctl status containerd
-```
-
-## Phase 3: 시스템 사전 설정 (전체 노드)
-
-```bash
-# 커널 모듈 로드
+# 2. 커널 모듈 로드
 sudo modprobe overlay
 sudo modprobe br_netfilter
 
@@ -60,7 +68,7 @@ overlay
 br_netfilter
 EOF
 
-# sysctl 설정
+# 3. sysctl 설정
 cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -68,41 +76,284 @@ net.ipv4.ip_forward                 = 1
 EOF
 
 sudo sysctl --system
+
+# 4. hosts 파일 등록 (환경에 맞게 수정)
+sudo tee -a /etc/hosts <<EOF
+10.10.10.70 master1
+10.10.10.71 master2
+10.10.10.72 master3
+10.10.10.73 worker1
+EOF
 ```
 
-## Phase 4: kubeadm init (컨트롤 플레인 노드)
+## Phase 3: containerd 설정 (전체 노드)
 
 ```bash
-# 컨테이너 이미지 로드
+# containerd 기본 설정 생성
+sudo mkdir -p /etc/containerd
+sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+# cgroup driver를 systemd로 변경 (필수)
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
+# Harbor 인증서 경로 설정
+sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+
+# containerd 시작 및 활성화
+sudo systemctl enable --now containerd
+sudo systemctl status containerd
+```
+
+> containerd 재시작 후에도 `SystemdCgroup = true` 가 적용되지 않으면 아래 명령으로 확인하세요.
+>
+> ```bash
+> grep SystemdCgroup /etc/containerd/config.toml
+> ```
+
+## Phase 4: 이미지 로드 (전체 노드)
+
+```bash
 for tar_file in k8s/images/*.tar; do
-  sudo ctr -n k8s.io images import "$tar_file"
+    echo "Loading $tar_file..."
+    sudo ctr -n k8s.io images import "$tar_file"
 done
 
-# kubeadm init 실행
+# 확인
+sudo ctr -n k8s.io images list | grep kube-apiserver
+```
+
+## Phase 5: 로드밸런서 구성 (HA 3중화 시에만 / 단일 구성이면 Phase 6으로)
+
+HA 구성을 위해 로드밸런서가 필요합니다. 환경에 따라 아래 두 가지 방식 중 하나를 선택합니다.
+
+### 옵션 A: VIP 방식 (표준, 권장)
+
+Master 3대(`10.10.10.70`, `71`, `72`)와 가상 IP(VIP, `10.10.10.200`) 환경을 가정합니다.
+VIP를 K8s API Server(6443) 앞단에 두어 마스터 노드 장애 시에도 API 통신이 끊기지 않게 합니다.
+
+#### 5-A-1. 커널 파라미터 설정 (전체 마스터 노드)
+
+VIP가 자신의 인터페이스에 없어도 바인딩할 수 있도록 설정합니다.
+
+```bash
+cat <<EOF | sudo tee /etc/sysctl.d/haproxy.conf
+net.ipv4.ip_nonlocal_bind = 1
+EOF
+
+sudo sysctl --system
+```
+
+#### 5-A-2. HAProxy 설정 (전체 마스터 노드)
+
+```bash
+sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
+
+cat <<EOF | sudo tee /etc/haproxy/haproxy.cfg
+global
+    log         127.0.0.1 local2
+    maxconn     4000
+    daemon
+
+defaults
+    mode                    tcp
+    log                     global
+    option                  tcplog
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+
+# Kubernetes API Server LB
+frontend k8s-api
+    bind 10.10.10.200:6443      # VIP로 바인딩 (API 서버와 포트 충돌 방지)
+    mode tcp
+    option tcplog
+    default_backend k8s-masters
+
+backend k8s-masters
+    mode tcp
+    balance roundrobin
+    option tcp-check
+    server master1 10.10.10.70:6443 check fall 3 rise 2
+    server master2 10.10.10.71:6443 check fall 3 rise 2
+    server master3 10.10.10.72:6443 check fall 3 rise 2
+EOF
+```
+
+#### 5-A-3. Keepalived 설정 (전체 마스터 노드)
+
+각 마스터 노드별로 `state`, `priority`, `interface` 값을 다르게 설정합니다.
+
+| 노드 | state | priority |
+| :--- | :--- | :--- |
+| Master-1 | `MASTER` | `101` |
+| Master-2 | `BACKUP` | `100` |
+| Master-3 | `BACKUP` | `99` |
+
+```bash
+# Master-1 기준 예시 (Master-2, 3은 state/priority 값 수정)
+cat <<EOF | sudo tee /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_DEVEL
+}
+
+vrrp_script check_haproxy {
+    script "/usr/bin/killall -0 haproxy"
+    interval 3
+    weight -2
+    fall 10
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state MASTER              # Master-2, 3은 BACKUP
+    interface eth0            # 본인 네트워크 인터페이스명으로 변경 필수
+    virtual_router_id 51
+    priority 101              # M1: 101, M2: 100, M3: 99
+    advert_int 1
+
+    authentication {
+        auth_type PASS
+        auth_pass 42          # 모든 노드 동일하게 설정
+    }
+
+    virtual_ipaddress {
+        10.10.10.200          # VIP 주소
+    }
+
+    track_script {
+        check_haproxy
+    }
+}
+EOF
+```
+
+#### 5-A-4. 서비스 시작 및 VIP 확인
+
+```bash
+sudo systemctl enable --now haproxy
+sudo systemctl enable --now keepalived
+
+# VIP 활성화 확인 (Master-1에서 VIP가 보여야 함)
+ip addr show eth0 | grep 10.10.10.200
+```
+
+---
+
+### 옵션 B: Localhost LB 방식 (VIP 사용 불가 환경)
+
+VIP를 사용할 수 없는 환경에서 각 노드에 HAProxy를 띄워 Loopback(`127.0.0.1:8443`)으로 통신합니다.
+**전체 마스터 및 워커 노드에 동일하게 설정합니다.**
+
+```bash
+sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
+
+cat <<EOF | sudo tee /etc/haproxy/haproxy.cfg
+global
+    maxconn     4000
+    daemon
+
+defaults
+    mode                    tcp
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+
+frontend k8s-api-proxy
+    bind 127.0.0.1:8443
+    default_backend k8s-masters
+
+backend k8s-masters
+    balance roundrobin
+    option tcp-check
+    server master1 10.10.10.70:6443 check
+    server master2 10.10.10.71:6443 check
+    server master3 10.10.10.72:6443 check
+EOF
+
+sudo systemctl enable --now haproxy
+```
+
+## Phase 6: kubeadm init (Master-1)
+
+### 옵션 A: HA(3중화) 구성 (VIP 사용)
+
+`--apiserver-cert-extra-sans`에 VIP와 전체 마스터 IP를 포함해야 RHEL/Rocky 9계열의 엄격한 SAN 검증을 통과할 수 있습니다.
+
+```bash
 sudo kubeadm init \
+  --control-plane-endpoint "10.10.10.200:6443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="10.10.10.200,10.10.10.70,10.10.10.71,10.10.10.72,127.0.0.1" \
   --pod-network-cidr=192.168.0.0/16 \
   --service-cidr=10.96.0.0/12 \
-  --cri-socket=unix:///run/containerd/containerd.sock
+  --kubernetes-version v1.30.0
+```
 
-# kubectl 설정
+초기화 완료 후 **API 서버 bind-address를 해당 노드의 실제 IP로 수정**합니다.
+설정하지 않으면 API 서버가 `0.0.0.0`으로 바인딩되어 HAProxy(VIP:6443)와 포트 충돌이 발생합니다.
+
+```bash
+sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+
+# spec.containers[].command 섹션에 추가
+# - --bind-address=10.10.10.70   (Master-1의 실제 IP)
+```
+
+### 옵션 B: 단일 구성
+
+```bash
+sudo kubeadm init \
+  --control-plane-endpoint "10.10.10.70:6443" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.30.0
+```
+
+### kubeconfig 설정 (컨트롤 플레인 공통)
+
+```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-## Phase 5: Calico CNI 설치 (컨트롤 플레인 노드)
+## Phase 6-1: 추가 마스터 노드 조인 (Master-2, 3 — HA 구성 시에만)
+
+Master-1 초기화 출력에서 **`--control-plane`** 조인 명령을 복사하여 실행합니다.
+
+```bash
+sudo kubeadm join 10.10.10.200:6443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH> \
+    --control-plane --certificate-key <CERT_KEY>
+```
+
+조인 완료 후 **즉시** 해당 노드의 IP로 bind-address를 수정합니다.
+
+```bash
+sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+
+# Master-2: - --bind-address=10.10.10.71
+# Master-3: - --bind-address=10.10.10.72
+```
+
+kubeconfig도 각 노드에 설정합니다.
+
+```bash
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+## Phase 7: Calico CNI 설치 (Master-1)
 
 ```bash
 kubectl apply -f k8s/utils/calico.yaml
-```
 
-Calico Pod가 Running 상태가 될 때까지 대기합니다.
-
-```bash
+# Calico Pod가 Running이 될 때까지 대기
 kubectl get pods -n kube-system -w
 ```
 
-## Phase 6: Helm 설치 (컨트롤 플레인 노드)
+## Phase 8: Helm 설치 (컨트롤 플레인 노드)
 
 ```bash
 cd k8s/binaries
@@ -111,18 +362,17 @@ sudo mv linux-amd64/helm /usr/local/bin/helm
 helm version
 ```
 
-## Phase 7: 워커 노드 조인
+## Phase 9: 워커 노드 조인
 
-컨트롤 플레인 노드의 `kubeadm init` 출력에서 조인 명령을 복사합니다.
+Master-1의 `kubeadm init` 출력에서 워커 조인 명령을 복사하여 실행합니다.
 
 ```bash
-# 워커 노드에서 실행 (kubeadm init 출력의 join 명령 사용)
-sudo kubeadm join <CONTROL_PLANE_IP>:6443 \
+sudo kubeadm join <CONTROL_PLANE_ENDPOINT>:6443 \
   --token <TOKEN> \
   --discovery-token-ca-cert-hash sha256:<HASH>
 ```
 
-## Phase 8: 설치 확인
+## Phase 10: 설치 확인
 
 ```bash
 kubectl get nodes
@@ -130,3 +380,35 @@ kubectl get pods -n kube-system
 ```
 
 모든 노드가 `Ready` 상태이고 kube-system Pod들이 `Running` 이면 설치 완료입니다.
+
+```bash
+# HA 구성 시 CIDR 설정 확인
+kubectl get pod -n kube-system -l component=kube-controller-manager -o yaml | grep cluster
+
+# Calico IP Pool 확인
+kubectl get ippools -o yaml
+```
+
+## 재설치 시 초기화
+
+오류 발생 등으로 재설치가 필요한 경우 아래 순서로 초기화합니다.
+
+```bash
+# 1. kubeadm reset
+sudo kubeadm reset -f
+
+# 2. CNI 및 kube 설정 파일 삭제
+sudo rm -rf /etc/cni/net.d
+rm -rf $HOME/.kube
+sudo rm -rf /root/.kube
+
+# 3. etcd, kubelet 데이터 삭제
+sudo rm -rf /var/lib/etcd
+sudo rm -rf /var/lib/kubelet
+
+# 4. iptables 규칙 초기화
+sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sudo iptables -X
+
+# 5. containerd 재시작
+sudo systemctl restart containerd
+```
