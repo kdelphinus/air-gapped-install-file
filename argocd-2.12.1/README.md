@@ -54,7 +54,8 @@
 | `scripts/` | 이미지 다운로드/업로드 스크립트 |
 | `values.yaml` | ArgoCD Helm 설정 |
 | `nas-pv.yaml` | NAS(NFS) 사용 시 PV/PVC 정의 |
-| `install-argocd.sh` | 설치 자동화 스크립트 |
+| `install.sh` | 설치 자동화 스크립트 |
+| `uninstall.sh` | 삭제 자동화 스크립트 |
 | `argocd-nodeport-svc.yaml` | NodePort 서비스 정의 (참고용) |
 | `argocd-httproute.yaml` | HTTPRoute 정의 (참고용) |
 

@@ -30,12 +30,12 @@ chmod +x scripts/rhel_rocky/download_nfs_offline.sh
 
 ```bash
 # Ubuntu의 경우
-chmod +x scripts/ubuntu/install_nfs_offline.sh
-./scripts/ubuntu/install_nfs_offline.sh
+chmod +x scripts/ubuntu/install.sh
+./scripts/ubuntu/install.sh
 
 # RHEL / Rocky Linux의 경우
-chmod +x scripts/rhel_rocky/install_nfs_offline.sh
-./scripts/rhel_rocky/install_nfs_offline.sh
+chmod +x scripts/rhel_rocky/install.sh
+./scripts/rhel_rocky/install.sh
 ```
 
 ## Phase 3: 컨테이너 이미지 로드
@@ -75,3 +75,13 @@ kubectl get storageclass
 - NFS 서버 노드는 고정 IP를 사용하고 `nodeSelector` 로 특정 노드에 고정 배포를 권장합니다.
 - 노드 간 **TCP/UDP 2049(NFS), 111(RPC)** 포트가 열려 있는지 확인합니다.
 - `StorageClass` 의 `archiveOnDelete: "false"` 설정은 PVC 삭제 시 데이터를 삭제합니다. 데이터 보호가 필요하면 `true` 로 변경하세요.
+
+## 삭제
+
+```bash
+# Ubuntu
+./scripts/ubuntu/uninstall.sh
+
+# Rocky/RHEL
+./scripts/rhel_rocky/uninstall.sh
+```

@@ -32,3 +32,9 @@ chmod +x scripts/install.sh
 ```bash
 kubectl exec -it nexus-0 -n nexus -- cat /nexus-data/admin.password
 ```
+
+## 삭제
+
+```bash
+./scripts/uninstall.sh
+```

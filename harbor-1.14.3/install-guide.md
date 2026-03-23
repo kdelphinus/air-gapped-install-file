@@ -36,7 +36,7 @@ sudo ctr -n k8s.io images list | grep harbor
 
 ## 2단계: 설치 스크립트 설정
 
-`scripts/harbor_install_offline.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
+`scripts/install.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
 
 | 변수 | 설명 | 예시 |
 | :--- | :--- | :--- |
@@ -51,8 +51,8 @@ sudo ctr -n k8s.io images list | grep harbor
 ## 3단계: 설치 실행
 
 ```bash
-chmod +x scripts/harbor_install_offline.sh
-./scripts/harbor_install_offline.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 스크립트 실행 중 아래 항목을 인터랙티브하게 입력합니다.
@@ -100,4 +100,10 @@ kubectl get svc -n harbor
 docker login <NODE_IP>:30002 -u admin
 docker tag my-image:v1 <NODE_IP>:30002/library/my-image:v1
 docker push <NODE_IP>:30002/library/my-image:v1
+```
+
+## 삭제
+
+```bash
+./scripts/uninstall.sh
 ```

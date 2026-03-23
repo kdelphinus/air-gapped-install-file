@@ -30,7 +30,7 @@ sudo ctr -n k8s.io images list | grep ingress
 
 ## 2단계: 설치 스크립트 설정
 
-`scripts/ingress_controller_install_offline.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
+`scripts/install.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
 
 | 변수 | 설명 | 기본값 |
 | :--- | :--- | :--- |
@@ -41,8 +41,8 @@ sudo ctr -n k8s.io images list | grep ingress
 ## 3단계: Ingress Controller 설치 실행
 
 ```bash
-chmod +x scripts/ingress_controller_install_offline.sh
-./scripts/ingress_controller_install_offline.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 특정 노드를 지정하여 설치합니다. 외부에서 해당 노드의 IP로 접근 가능하면 Ingress Controller를 통해 Kubernetes 서비스에 접근할 수 있습니다.
@@ -66,3 +66,9 @@ kubectl get svc -n ingress-nginx
 - **HostNetwork 모드**: HostNetwork 모드로 동작하므로 해당 노드에서 80, 443 포트를 다른 프로세스가 사용하고 있지 않아야 합니다.
 - **TLS 설정**: TLS 사용 시 DNS 등록과 TLS 인증서 내 도메인이 일치해야 합니다.
 - **트러블슈팅**: 문제 발생 시 `kubectl logs`로 Ingress Pod 로그를 확인합니다.
+
+## 삭제
+
+```bash
+./scripts/uninstall.sh
+```

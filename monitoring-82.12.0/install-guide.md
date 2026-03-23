@@ -52,6 +52,12 @@ kubectl delete pvc --all -n monitoring
 # (ReclaimPolicy가 Retain인 경우 PV도 수동 삭제 필요)
 ```
 
+## 삭제
+
+```bash
+./scripts/uninstall.sh
+```
+
 ## 5단계: 설치 확인 및 접속
 
 ```bash

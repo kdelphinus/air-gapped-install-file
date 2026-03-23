@@ -43,8 +43,8 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 ## 4단계: 설치 실행
 
 ```bash
-chmod +x scripts/install-gitlab.sh
-./scripts/install-gitlab.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 스크립트 실행 중 다음 항목을 선택/입력합니다:
@@ -83,3 +83,9 @@ kubectl get secret gitlab-gitlab-initial-root-password \
 | **비밀번호** | 위 명령으로 확인한 값 |
 
 > **보안 권고**: 최초 로그인 후 비밀번호를 즉시 변경하십시오.
+
+## 삭제
+
+```bash
+./scripts/uninstall.sh
+```

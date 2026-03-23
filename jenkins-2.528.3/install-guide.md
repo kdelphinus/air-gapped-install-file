@@ -42,8 +42,8 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 ## 4단계: 설치 실행
 
 ```bash
-chmod +x scripts/deploy-jenkins.sh
-./scripts/deploy-jenkins.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 스크립트 실행 중 Jenkins를 배포할 노드 이름을 입력합니다.
@@ -74,3 +74,9 @@ kubectl get secret jenkins -n jenkins \
 
 - **마이그레이션**: 파이프라인 이전 절차는 `export_import/guide.md`를 참조하십시오.
 - **빌드 이미지**: Jenkins 관리 메뉴에서 `docker-registry` 시크릿을 등록하여 빌드 노드에서 Harbor 이미지를 사용할 수 있습니다.
+
+## 삭제
+
+```bash
+./scripts/uninstall.sh
+```

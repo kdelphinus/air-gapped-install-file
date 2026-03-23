@@ -35,8 +35,8 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 ## 3단계: 설치 실행
 
 ```bash
-chmod +x scripts/install_envoy-gateway.sh
-./scripts/install_envoy-gateway.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 스크립트 실행 중 다음 항목을 선택합니다:
@@ -84,3 +84,9 @@ spec:
 - **클라이언트 실IP 보존**: `values-infra.yaml`에서 `externalTrafficPolicy: Local` 설정을 확인하십시오.
 - **NodePort 확인**: NodePort 모드 사용 시 호스트에서 `30080`(HTTP), `30443`(HTTPS) 포트가 리스닝 중인지 확인하십시오.
 - **트러블슈팅**: Gateway 상태가 `false`일 경우 `kubectl describe gateway cmp-gateway` 명령어로 원인을 파악하십시오.
+
+## 삭제
+
+```bash
+./scripts/uninstall.sh
+```

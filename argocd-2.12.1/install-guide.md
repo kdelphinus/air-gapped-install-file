@@ -26,7 +26,7 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 
 ## 2단계: 설치 스크립트 설정
 
-`scripts/install-argocd.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
+`scripts/install.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
 
 ```bash
 # ==================== Config ====================
@@ -66,8 +66,8 @@ kubectl apply -f manifests/nas-pv.yaml
 ## 4단계: 설치 실행
 
 ```bash
-chmod +x scripts/install-argocd.sh
-./scripts/install-argocd.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
 스크립트 자동 처리 항목:
@@ -103,3 +103,9 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 > **보안 권고**: 최초 로그인 후 비밀번호를 변경하고 초기 Secret을 삭제하십시오.
 > `kubectl delete secret argocd-initial-admin-secret -n argocd`
+
+## 삭제
+
+```bash
+./scripts/uninstall.sh
+```
