@@ -56,7 +56,7 @@ spec:
                       name: https
       {{- end }}
 
-      service:
+      envoyService:
         type: {{ .Values.service.type }}
         externalTrafficPolicy: {{ .Values.service.trafficPolicy | default "Local" }}
 
