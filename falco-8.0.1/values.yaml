@@ -1,0 +1,36 @@
+# Falco 8.0.1 폐쇄망 배포 설정 (values.yaml)
+# 작성: Gemini CLI
+
+# 1. Driver 설정
+driver:
+  kind: modern_ebpf
+
+# 2. Containerd 소켓 설정 (표준 K8s 기본값)
+collectors:
+  containerd:
+    enabled: true
+    socket: /run/containerd/containerd.sock
+
+# 3. 이미지 설정 (로컬 Harbor 레지스트리)
+image:
+  registry: <NODE_IP>:30002
+  repository: library/falco
+  tag: 0.43.0
+  pullPolicy: IfNotPresent
+
+# 4. falcoctl artifact 다운로드 비활성화
+falcoctl:
+  artifact:
+    install:
+      enabled: false
+    follow:
+      enabled: false
+
+# 5. FalcoSidekick
+falcosidekick:
+  enabled: true
+  image:
+    registry: <NODE_IP>:30002
+    repository: library/falcosidekick
+    tag: 2.29.0
+    pullPolicy: IfNotPresent

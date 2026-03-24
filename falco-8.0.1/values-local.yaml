@@ -1,0 +1,40 @@
+# Falco 8.0.1 K3s 로컬 테스트 설정 (values-local.yaml) - v10 (Cooperative Override)
+# 작성: Gemini CLI
+
+driver:
+  kind: modern_ebpf
+
+# 차트의 자동 기능을 켭니다 (차트가 설정을 만들게 함)
+collectors:
+  enabled: true
+  containerEngine:
+    enabled: true
+
+# 하지만 차트가 만든 설정을 무시하고 여기서 소켓 경로만 오버라이드합니다.
+falco:
+  plugins:
+    - name: container
+      library_path: /usr/share/falco/plugins/libcontainer.so
+      init_config: ""
+      open_params: '{"containerd":{"socket":"/run/k3s/containerd/containerd.sock"}}'
+
+image:
+  registry: docker.io
+  repository: falcosecurity/falco
+  tag: 0.43.0
+  pullPolicy: IfNotPresent
+
+falcoctl:
+  artifact:
+    install:
+      enabled: false
+    follow:
+      enabled: false
+
+falcosidekick:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: falcosecurity/falcosidekick
+    tag: 2.29.0
+    pullPolicy: IfNotPresent

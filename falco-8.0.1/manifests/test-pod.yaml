@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: falco-test-pod
+  namespace: default
+  labels:
+    app: falco-test
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test
+      image: ubuntu
+      command: ["sleep", "infinity"]
+      imagePullPolicy: IfNotPresent
