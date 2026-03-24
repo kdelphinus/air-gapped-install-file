@@ -140,7 +140,8 @@ kubectl get tracingpolicy
 
 ## 5단계: 차단 정책 테스트
 
-> `manifests/block-sensitive-read.yaml`은 `/etc/shadow` 읽기를 차단하는 **테스트용 예시 정책**입니다.
+> `manifests/block-sensitive-read.yaml`은 `/etc/shadow` 읽기를 차단하는
+> **테스트용 예시 정책**입니다.
 > 실 운영 시에는 위의 TracingPolicy 이해 섹션을 참고하여 환경에 맞는 정책으로 교체하세요.
 
 TracingPolicy 적용 후 `/etc/shadow` 읽기를 시도합니다.
@@ -177,7 +178,8 @@ kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon -f
    grep -w security_file_open /proc/kallsyms | head -3
    ```
 
-   `fd_install` 심볼이 없으면 `manifests/block-sensitive-read.yaml`의 `call` 값을 `security_file_open`으로 변경 후 재적용합니다.
+   `fd_install` 심볼이 없으면 `manifests/block-sensitive-read.yaml`의
+   `call` 값을 `security_file_open`으로 변경 후 재적용합니다.
 
 2. `CONFIG_BPF_KPROBE_OVERRIDE` 확인
 

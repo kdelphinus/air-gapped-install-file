@@ -48,10 +48,12 @@ chmod +x scripts/install.sh
 ```
 
 스크립트 실행 중 다음 항목을 선택/입력합니다:
+
 1. **Ingress 방식**: `1` (NGINX Ingress) 또는 `2` (Envoy Gateway)
 2. **대상 노드**: GitLab을 배치할 특정 노드 이름 (선택)
 
 스크립트 자동 처리 항목:
+
 - 네임스페이스 및 PV/PVC 생성
 - Helm 배포 (Harbor 이미지 경로 자동 생성)
 - HTTPRoute 적용 (Envoy 선택 시)

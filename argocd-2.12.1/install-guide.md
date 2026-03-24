@@ -71,6 +71,7 @@ chmod +x scripts/install.sh
 ```
 
 스크립트 자동 처리 항목:
+
 - Namespace 생성 및 스토리지 설정 적용
 - Helm 설치 (Harbor 이미지 경로 기반)
 - NodePort 및 HTTPRoute 생성 (`DOMAIN` 설정 시)

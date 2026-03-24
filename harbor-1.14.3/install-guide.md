@@ -56,6 +56,7 @@ chmod +x scripts/install.sh
 ```
 
 스크립트 실행 중 아래 항목을 인터랙티브하게 입력합니다.
+
 - TLS 활성화 여부 (y/N)
 - TLS 사용 시 사전 생성된 Secret 이름
 - Harbor 관리자(`admin`) 비밀번호

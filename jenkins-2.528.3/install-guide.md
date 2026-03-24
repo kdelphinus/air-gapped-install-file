@@ -49,6 +49,7 @@ chmod +x scripts/install.sh
 스크립트 실행 중 Jenkins를 배포할 노드 이름을 입력합니다.
 
 스크립트 자동 처리 항목:
+
 - 네임스페이스 및 PV/PVC 적용
 - 노드 라벨 적용 (`jenkins-node=true`)
 - Helm 배포 및 초기 관리자 비밀번호 출력

@@ -2,7 +2,8 @@
 
 ## Project Overview
 
-폐쇄망(인터넷 차단) 환경에 전체 인프라 스택을 설치하기 위한 자산(RPM, DEB, 바이너리, 컨테이너 이미지, Helm chart, 스크립트) 보관소.
+폐쇄망(인터넷 차단) 환경에 전체 인프라 스택을 설치하기 위한 자산
+(RPM, DEB, 바이너리, 컨테이너 이미지, Helm chart, 스크립트) 보관소.
 
 **핵심 전제: 항상 인터넷 없음을 가정한다. 모든 툴/패키지/이미지는 이 레포 또는 로컬 네트워크에서 조달.**
 **멀티 OS 지원: Rocky Linux (RHEL-계열), Ubuntu (Debian-계열) 등 다양한 OS의 오프라인 설치 환경을 지향함.**
@@ -62,9 +63,11 @@ air-gapped/
 ```
 
 - `scripts/` 내 모든 스크립트 상단에 반드시 추가:
+
   ```bash
   cd "$(dirname "$0")/.." || exit 1
   ```
+
 - Helm chart 경로는 `./charts/<name>` 또는 `./charts/<name>.tgz` 형식 사용
 - 매니페스트(HTTPRoute 등)는 루트가 아닌 `./manifests/` 에 위치
 
