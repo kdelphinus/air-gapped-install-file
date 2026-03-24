@@ -1,0 +1,14 @@
+# Tetragon 1.6.0 폐쇄망 배포 설정
+# 작성: Gemini CLI
+
+# 1. 이미지 설정 (로컬 Harbor 레지스트리)
+# <NODE_IP> 부분을 실제 Harbor 서버의 IP로 수정하세요. (예: 192.168.1.10)
+# Tetragon은 이미지 경로 전체를 오버라이드해야 함
+tetragon:
+  image:
+    override: <NODE_IP>:30002/library/tetragon:1.6.0
+  pullPolicy: IfNotPresent
+
+tetragonOperator:
+  image:
+    override: <NODE_IP>:30002/library/tetragon-operator:1.6.0

@@ -1,0 +1,15 @@
+# Tetragon 1.6.0 - 로컬 테스트용 (Harbor 없이 ctr import 이미지 사용)
+# 이미지 로드: sudo k3s ctr images import images/tetragon-v1.6.0.tar
+#              sudo k3s ctr images import images/tetragon-operator-v1.6.0.tar
+# 배포: helm upgrade --install tetragon ./charts/tetragon -n kube-system -f values-local.yaml
+
+# 1. 이미지 설정 (ctr import 후 원본 경로 그대로 사용)
+tetragon:
+  image:
+    override: quay.io/cilium/tetragon:v1.6.0
+  pullPolicy: IfNotPresent
+
+tetragonOperator:
+  image:
+    override: quay.io/cilium/tetragon-operator:v1.6.0
+  pullPolicy: IfNotPresent
