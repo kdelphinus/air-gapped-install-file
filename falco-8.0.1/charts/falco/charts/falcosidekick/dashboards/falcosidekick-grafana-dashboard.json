@@ -120,7 +120,7 @@
                     },
                     "disableTextWrap": false,
                     "editorMode": "builder",
-                    "expr": "sum by(rule) (increase(falcosecurity_falcosidekick_falco_events_total{source=~\"$source\", priority=~\"$priority\", pod=~\"$pod\"}[$__rate_interval]))",
+                    "expr": "sum by(rule) (increase(falco_events{source=~\"$source\", priority=~\"$priority\", k8s_pod_name=~\"$pod\"}[$__rate_interval]))",
                     "fullMetaSearch": false,
                     "includeNullMetadata": true,
                     "instant": false,
@@ -193,7 +193,7 @@
                     },
                     "disableTextWrap": false,
                     "editorMode": "builder",
-                    "expr": "sum by(source) (increase(falcosecurity_falcosidekick_falco_events_total{source=~\"$source\", priority=~\"$priority\", pod=~\"$pod\"}[$__rate_interval]))",
+                    "expr": "sum by(source) (increase(falco_events{source=~\"$source\", priority=~\"$priority\", k8s_pod_name=~\"$pod\"}[$__rate_interval]))",
                     "fullMetaSearch": false,
                     "includeNullMetadata": false,
                     "instant": false,
@@ -328,7 +328,7 @@
                     },
                     "disableTextWrap": false,
                     "editorMode": "builder",
-                    "expr": "sum by(priority) (increase(falcosecurity_falcosidekick_falco_events_total{source=~\"$source\", priority=~\"$priority\", pod=~\"$pod\"}[$__rate_interval]))",
+                    "expr": "sum by(priority) (increase(falco_events{source=~\"$source\", priority=~\"$priority\", k8s_pod_name=~\"$pod\"}[$__rate_interval]))",
                     "fullMetaSearch": false,
                     "includeNullMetadata": true,
                     "instant": false,
@@ -502,7 +502,7 @@
                     },
                     "disableTextWrap": false,
                     "editorMode": "builder",
-                    "expr": "sum by(priority) (increase(falcosecurity_falcosidekick_falco_events_total{source=~\"$source\", priority=~\"$priority\", pod=~\"$pod\"}[$__rate_interval]))",
+                    "expr": "sum by(priority) (increase(falco_events{source=~\"$source\", priority=~\"$priority\", k8s_pod_name=~\"$pod\"}[$__rate_interval]))",
                     "fullMetaSearch": false,
                     "includeNullMetadata": true,
                     "instant": false,
@@ -676,7 +676,7 @@
                     },
                     "disableTextWrap": false,
                     "editorMode": "builder",
-                    "expr": "sum by(source) (increase(falcosecurity_falcosidekick_falco_events_total{source=~\"$source\", priority=~\"$priority\", pod=~\"$pod\"}[$__rate_interval]))",
+                    "expr": "sum by(source) (increase(falco_events{source=~\"$source\", priority=~\"$priority\", k8s_pod_name=~\"$pod\"}[$__rate_interval]))",
                     "fullMetaSearch": false,
                     "includeNullMetadata": true,
                     "instant": false,
@@ -851,7 +851,7 @@
                     },
                     "disableTextWrap": false,
                     "editorMode": "builder",
-                    "expr": "sum by(rule) (increase(falcosecurity_falcosidekick_falco_events_total{source=~\"$source\", priority=~\"$priority\", pod=~\"$pod\"}[$__rate_interval]))",
+                    "expr": "sum by(rule) (increase(falco_events{source=~\"$source\", priority=~\"$priority\", k8s_pod_name=~\"$pod\"}[$__rate_interval]))",
                     "fullMetaSearch": false,
                     "includeNullMetadata": true,
                     "instant": false,
@@ -1540,14 +1540,14 @@
                     "type": "prometheus",
                     "uid": "${datasource}"
                 },
-                "definition": "label_values(falcosecurity_falcosidekick_falco_events_total,namespace)",
+                "definition": "label_values(falco_events,k8s_ns_name)",
                 "includeAll": true,
                 "multi": true,
                 "name": "namespace",
                 "options": [],
                 "query": {
                     "qryType": 1,
-                    "query": "label_values(falcosecurity_falcosidekick_falco_events_total,namespace)",
+                    "query": "label_values(falco_events,k8s_ns_name)",
                     "refId": "PrometheusVariableQueryEditor-VariableQuery"
                 },
                 "refresh": 1,
@@ -1566,14 +1566,14 @@
                     "type": "prometheus",
                     "uid": "${datasource}"
                 },
-                "definition": "label_values(falcosecurity_falcosidekick_falco_events_total{namespace=~\"$namespace\"},pod)",
+                "definition": "label_values(falco_events{k8s_ns_name=~\"$namespace\"},k8s_pod_name)",
                 "includeAll": true,
                 "multi": true,
                 "name": "pod",
                 "options": [],
                 "query": {
                     "qryType": 1,
-                    "query": "label_values(falcosecurity_falcosidekick_falco_events_total{namespace=~\"$namespace\"},pod)",
+                    "query": "label_values(falco_events{k8s_ns_name=~\"$namespace\"},k8s_pod_name)",
                     "refId": "PrometheusVariableQueryEditor-VariableQuery"
                 },
                 "refresh": 1,
@@ -1592,7 +1592,7 @@
                     "type": "prometheus",
                     "uid": "${datasource}"
                 },
-                "definition": "label_values(falcosecurity_falcosidekick_falco_events_total{namespace=~\"$namespace\", pod=~\"$pod\"},source)",
+                "definition": "label_values(falco_events{k8s_ns_name=~\"$namespace\", k8s_pod_name=~\"$pod\"},source)",
                 "includeAll": true,
                 "label": "source",
                 "multi": true,
@@ -1600,7 +1600,7 @@
                 "options": [],
                 "query": {
                     "qryType": 1,
-                    "query": "label_values(falcosecurity_falcosidekick_falco_events_total{namespace=~\"$namespace\", pod=~\"$pod\"},source)",
+                    "query": "label_values(falco_events{k8s_ns_name=~\"$namespace\", k8s_pod_name=~\"$pod\"},source)",
                     "refId": "PrometheusVariableQueryEditor-VariableQuery"
                 },
                 "refresh": 2,
@@ -1620,7 +1620,7 @@
                     "type": "prometheus",
                     "uid": "${datasource}"
                 },
-                "definition": "label_values(falcosecurity_falcosidekick_falco_events_total{namespace=~\"$namespace\", source=~\"$source\"},priority)",
+                "definition": "label_values(falco_events{k8s_ns_name=~\"$namespace\", source=~\"$source\"},priority)",
                 "includeAll": true,
                 "label": "priority",
                 "multi": true,
@@ -1628,7 +1628,7 @@
                 "options": [],
                 "query": {
                     "qryType": 1,
-                    "query": "label_values(falcosecurity_falcosidekick_falco_events_total{namespace=~\"$namespace\", source=~\"$source\"},priority)",
+                    "query": "label_values(falco_events{k8s_ns_name=~\"$namespace\", source=~\"$source\"},priority)",
                     "refId": "PrometheusVariableQueryEditor-VariableQuery"
                 },
                 "refresh": 2,
