@@ -34,3 +34,9 @@ falcosidekick:
     repository: library/falcosidekick
     tag: 2.29.0
     pullPolicy: IfNotPresent
+  grafana:
+    dashboards:
+      enabled: true
+      configMaps:
+        falcosidekick:
+          namespace: monitoring   # 기존 대시보드 ConfigMap 패턴과 일치
