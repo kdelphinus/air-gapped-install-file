@@ -96,10 +96,10 @@ customRules:
 ### 현재 적용 여부 확인
 
 ```bash
-kubectl get cm -n falco falco-custom-rules -o yaml
+kubectl get cm -n falco falco-rules -o yaml
 ```
 
-ConfigMap이 존재하면 억제 룰이 적용된 상태입니다.
+ConfigMap이 존재하고 `suppress-noise.yaml` 키가 있으면 억제 룰이 적용된 상태입니다.
 
 ---
 
