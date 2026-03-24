@@ -5,7 +5,7 @@
 # 0. 설정
 COMPONENT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CHART_PATH="$COMPONENT_ROOT/charts/falco"
-VALUES_FILE="$COMPONENT_ROOT/values-local.yaml"
+VALUES_FILE="$COMPONENT_ROOT/values.yaml"
 NAMESPACE="falco"
 
 echo "[Phase 2] Falco 8.0.1 설치를 시작합니다..."
