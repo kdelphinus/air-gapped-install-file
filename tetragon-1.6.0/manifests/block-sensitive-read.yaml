@@ -20,5 +20,16 @@ spec:
         operator: "Equal"
         values:
         - "/etc/shadow"
+      matchBinaries:
+      - operator: "NotIn"
+        values:
+        # 시스템 인증 바이너리 제외 — /etc/shadow를 정상적으로 읽는 프로세스
+        - "/usr/bin/sudo"
+        - "/bin/sudo"
+        - "/usr/bin/su"
+        - "/bin/su"
+        - "/usr/bin/passwd"
+        - "/usr/sbin/login"
+        - "/usr/lib/systemd/systemd"   # systemd PAM 인증
       matchActions:
       - action: Sigkill   # 즉시 프로세스 종료

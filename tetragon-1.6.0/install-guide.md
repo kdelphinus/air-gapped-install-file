@@ -144,6 +144,28 @@ kubectl get tracingpolicy
 > **테스트용 예시 정책**입니다.
 > 실 운영 시에는 위의 TracingPolicy 이해 섹션을 참고하여 환경에 맞는 정책으로 교체하세요.
 
+### 시스템 바이너리 제외 (`matchBinaries`)
+
+`/etc/shadow`는 `sudo`, `su`, `passwd` 같은 시스템 인증 바이너리도 정상적으로 읽습니다.
+이 바이너리들을 제외하지 않으면 **`sudo` 실행 시 즉시 Sigkill**되어 시스템 운영에 지장이 생깁니다.
+
+`manifests/block-sensitive-read.yaml`은 아래 바이너리를 차단 대상에서 제외합니다.
+
+```yaml
+matchBinaries:
+- operator: "NotIn"
+  values:
+  - "/usr/bin/sudo"
+  - "/bin/sudo"
+  - "/usr/bin/su"
+  - "/bin/su"
+  - "/usr/bin/passwd"
+  - "/usr/sbin/login"
+  - "/usr/lib/systemd/systemd"
+```
+
+운영 환경에서 추가로 제외가 필요한 바이너리가 있으면 이 목록에 추가합니다.
+
 TracingPolicy 적용 후 `/etc/shadow` 읽기를 시도합니다.
 
 ```bash
