@@ -31,5 +31,7 @@ spec:
         - "/usr/bin/passwd"
         - "/usr/sbin/login"
         - "/usr/lib/systemd/systemd"   # systemd PAM 인증
+        - "/sbin/unix_chkpwd"          # PAM 패스워드 검증 헬퍼 (sudo 인증 시 별도 프로세스로 실행)
+        - "/usr/sbin/unix_chkpwd"
       matchActions:
       - action: Sigkill   # 즉시 프로세스 종료

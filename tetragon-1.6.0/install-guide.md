@@ -162,7 +162,13 @@ matchBinaries:
   - "/usr/bin/passwd"
   - "/usr/sbin/login"
   - "/usr/lib/systemd/systemd"
+  - "/sbin/unix_chkpwd"
+  - "/usr/sbin/unix_chkpwd"
 ```
+
+> **`unix_chkpwd` 주의:** sudo 인증 시 PAM이 `unix_chkpwd`를 별도 프로세스로 띄워
+> `/etc/shadow`를 읽습니다. 이 헬퍼를 제외하지 않으면 sudo 바이너리 자체는 살아도
+> 인증 단계에서 kill되어 sudo가 동작하지 않습니다.
 
 운영 환경에서 추가로 제외가 필요한 바이너리가 있으면 이 목록에 추가합니다.
 
