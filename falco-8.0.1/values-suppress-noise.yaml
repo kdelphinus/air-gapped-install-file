@@ -1,0 +1,18 @@
+# Falco 노이즈 억제 규칙 (선택 적용)
+# install.sh 실행 시 적용 여부를 선택하거나, 직접 helm upgrade에 추가할 수 있습니다.
+#
+#   helm upgrade falco ./charts/falco -n falco \
+#     -f values.yaml \
+#     -f values-suppress-noise.yaml
+#
+# 환경에 맞지 않는 항목은 해당 블록을 주석 처리하세요.
+
+customRules:
+  suppress-noise.yaml: |-
+    # GitLab Shell SSH 연결 노이즈 억제
+    # gitlab-shell은 SSH 세션 처리 시 STDIN/STDOUT을 네트워크 소켓에 연결합니다.
+    # 이는 SSH 프로토콜의 정상 동작이므로 탐지 대상에서 제외합니다.
+    - rule: Redirect STDOUT/STDIN to Network Connection in Container
+      condition: and not k8s.pod.name startswith "gitlab-gitlab-shell"
+      override:
+        condition: append

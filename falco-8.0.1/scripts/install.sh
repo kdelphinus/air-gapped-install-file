@@ -24,12 +24,32 @@ fi
 # 3. 네임스페이스 생성
 kubectl create namespace $NAMESPACE 2>/dev/null || echo "Namespace $NAMESPACE already exists."
 
-# 4. Helm 설치
-echo "4. Helm Upgrade/Install 실행..."
+# 4. 노이즈 억제 룰 적용 여부 선택
+SUPPRESS_VALUES=""
+SUPPRESS_FILE="$COMPONENT_ROOT/values-suppress-noise.yaml"
+if [ -f "$SUPPRESS_FILE" ]; then
+    echo ""
+    echo "=== 노이즈 억제 룰 ==="
+    echo "GitLab Shell 등 알려진 정상 동작이 Falco 룰에 걸려 대시보드에 노이즈가 발생할 수 있습니다."
+    echo "values-suppress-noise.yaml 에 정의된 억제 룰을 함께 적용하시겠습니까?"
+    read -r -p "[y/N]: " apply_suppress
+    if [[ "$apply_suppress" =~ ^[Yy]$ ]]; then
+        SUPPRESS_VALUES="--values $SUPPRESS_FILE"
+        echo "[INFO] 노이즈 억제 룰을 적용합니다."
+    else
+        echo "[INFO] 노이즈 억제 룰을 건너뜁니다."
+    fi
+    echo ""
+fi
+
+# 5. Helm 설치
+echo "5. Helm Upgrade/Install 실행..."
+# shellcheck disable=SC2086
 helm upgrade --install falco "$CHART_PATH" \
   --namespace "$NAMESPACE" \
   --values "$VALUES_FILE" \
   --set collectors.containerd.socket="$CONTAINERD_SOCKET" \
+  $SUPPRESS_VALUES \
   --wait --timeout 5m
 
 if [ $? -eq 0 ]; then
