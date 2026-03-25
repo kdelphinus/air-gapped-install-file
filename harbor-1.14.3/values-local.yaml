@@ -1,62 +1,21 @@
-# Harbor v1.14.3 Values — 로컬 테스트용
+# Harbor v1.14.3 Values — 로컬 ctr 이미지용
 # ctr로 이미지 로드 후 Harbor 없이 배포할 때 사용
 # 배포: helm upgrade --install harbor ./charts/harbor \
 #          -f values.yaml -f values-local.yaml -n harbor
+#
+# 사전 준비:
+#   for f in images/*.tar; do sudo ctr -n k8s.io images import "$f"; done
 
-# 이미지 캐시 사용 (ctr import 후)
 imagePullPolicy: IfNotPresent
-
-# NodePort — 로컬 접속용
-expose:
-  type: nodePort
-  tls:
-    enabled: false
-  nodePort:
-    ports:
-      http:
-        nodePort: 30002
-      https:
-        nodePort: 30003
-
-# 외부 접속 주소 — <NODE_IP> 를 실제 노드 IP로 변경
-externalURL: http://<NODE_IP>:30002
 
 # 내부 TLS 비활성화 (로컬 테스트 간소화)
 internalTLS:
   enabled: false
 
-# Trivy 비활성화 (로컬 테스트 시 불필요)
-trivy:
-  enabled: false
-  skipUpdate: true
-  offlineScan: true
-
-# 스토리지 — 로컬 HostPath (단일 PVC 공유)
-persistence:
-  enabled: true
-  resourcePolicy: "keep"
-  persistentVolumeClaim:
-    registry:
-      existingClaim: "harbor-pvc"
-      subPath: registry
-    database:
-      existingClaim: "harbor-pvc"
-      subPath: database
-    jobservice:
-      jobLog:
-        existingClaim: "harbor-pvc"
-        subPath: jobservice-logs
-    redis:
-      existingClaim: "harbor-pvc"
-      subPath: redis
-    trivy:
-      existingClaim: "harbor-pvc"
-      subPath: trivy
-  imageChartStorage:
-    type: filesystem
-
-# 리소스 제한 완화 (로컬 환경 자원 절약)
 nginx:
+  image:
+    repository: goharbor/nginx-photon
+    tag: v2.10.3
   resources:
     requests:
       cpu: 50m
@@ -65,16 +24,22 @@ nginx:
       cpu: 200m
       memory: 256Mi
 
-core:
+portal:
+  image:
+    repository: goharbor/harbor-portal
+    tag: v2.10.3
   resources:
     requests:
       cpu: 50m
-      memory: 128Mi
+      memory: 64Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 100m
+      memory: 128Mi
 
-registry:
+core:
+  image:
+    repository: goharbor/harbor-core
+    tag: v2.10.3
   resources:
     requests:
       cpu: 50m
@@ -84,6 +49,9 @@ registry:
       memory: 512Mi
 
 jobservice:
+  image:
+    repository: goharbor/harbor-jobservice
+    tag: v2.10.3
   resources:
     requests:
       cpu: 50m
@@ -92,17 +60,33 @@ jobservice:
       cpu: 200m
       memory: 256Mi
 
-portal:
+registry:
+  registry:
+    image:
+      repository: goharbor/registry-photon
+      tag: v2.10.3
+  controller:
+    image:
+      repository: goharbor/harbor-registryctl
+      tag: v2.10.3
   resources:
     requests:
       cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+trivy:
+  image:
+    repository: goharbor/trivy-adapter-photon
+    tag: v2.10.3
 
 database:
   internal:
+    image:
+      repository: goharbor/harbor-db
+      tag: v2.10.3
     resources:
       requests:
         cpu: 50m
@@ -113,6 +97,9 @@ database:
 
 redis:
   internal:
+    image:
+      repository: goharbor/redis-photon
+      tag: v2.10.3
     resources:
       requests:
         cpu: 50m
@@ -120,3 +107,8 @@ redis:
       limits:
         cpu: 100m
         memory: 128Mi
+
+exporter:
+  image:
+    repository: goharbor/harbor-exporter
+    tag: v2.10.3
