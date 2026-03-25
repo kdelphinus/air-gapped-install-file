@@ -21,11 +21,14 @@ HELM_CHART_PATH="./charts/harbor"
 # 3. 외부 접속 설정 (TLS 사용 시 인증서의 domain과 일치 해야함)
 EXTERNAL_HOSTNAME="" # 환경에 맞게 설정 (예: 172.31.63.195 또는 harbor.example.com)
 
-# 4. 영구 저장소 설정 (HostPath)
-SAVE_PATH="/harbor/data"
-NODE_NAME="" # 실제 노드 이름으로 변경 (빈 값이면 자동 감지)
-
+# 4. 영구 저장소 설정
 STORAGE_SIZE="50Gi"
+# HostPath 설정
+SAVE_PATH="/harbor/data"
+NODE_NAME="" # 빈 값이면 자동 감지
+# NFS 설정
+NFS_SERVER="" # 예: 192.168.1.100
+NFS_PATH=""   # 예: /nfs/harbor
 
 # 5. 고급 설정 (Ingress 선택 시 사용)
 INGRESS_CLASS="nginx"
@@ -58,15 +61,6 @@ if [ -z "$EXTERNAL_HOSTNAME" ]; then
     fi
 fi
 
-# NODE_NAME 미설정 시 자동 감지
-if [ -z "$NODE_NAME" ]; then
-    NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-    if [ -z "$NODE_NAME" ]; then
-        read -p "PV가 위치할 노드 이름을 입력하세요: " NODE_NAME
-        [ -z "$NODE_NAME" ] && { echo "오류: 노드 이름을 입력해야 합니다."; exit 1; }
-    fi
-    echo "자동 감지된 노드: $NODE_NAME"
-fi
 
 # ---------------------------
 # 2. 기존 Harbor 설치 확인 및 삭제 처리
@@ -182,27 +176,82 @@ kubectl create namespace "$HARBOR_NAMESPACE" --dry-run=client -o yaml | kubectl 
 
 echo "[INFO] Done."
 
-# 7. HostPath PV 및 PVC 생성
+# 6. 스토리지 타입 선택 및 PV/PVC 생성
 PV_NAME="harbor-pv"
 PVC_NAME="harbor-pvc"
 PV_PVC_FILE="harbor-hostpath-persistence.yaml"
 
-echo "HostPath 영구 저장소 설정을 진행합니다."
-read -p "데이터를 저장할 호스트 노드의 절대 경로를 입력하세요 [${SAVE_PATH}]: " USER_SAVE_PATH
-SAVE_PATH=${USER_SAVE_PATH:-$SAVE_PATH}
-read -p "위 경로가 있는 워커 노드의 이름을 입력하세요 [${NODE_NAME}]: " USER_NODE_NAME
-NODE_NAME=${USER_NODE_NAME:-$NODE_NAME}
-read -p "전체 저장 공간의 크기를 입력하세요 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
-STORAGE_SIZE=${USER_STORAGE_SIZE:-$STORAGE_SIZE}
+echo ""
+echo "스토리지 타입을 선택하세요:"
+echo "  1) HostPath (노드 고정, 단일 노드 환경 권장)"
+echo "  2) NFS"
+read -p "선택 [1/2, 기본값 1]: " STORAGE_CHOICE
+STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
 
-echo "HostPath를 사용하는 PV와 PVC를 생성하고 적용합니다..."
-cat > "$PV_PVC_FILE" <<EOF
+read -p "전체 저장 공간의 크기를 입력하세요 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
+STORAGE_SIZE="${USER_STORAGE_SIZE:-$STORAGE_SIZE}"
+
+if [[ "$STORAGE_CHOICE" == "2" ]]; then
+    # --- NFS ---
+    if [ -z "$NFS_SERVER" ]; then
+        read -p "NFS 서버 주소를 입력하세요 (예: 192.168.1.100): " NFS_SERVER
+        [ -z "$NFS_SERVER" ] && { echo "오류: NFS 서버 주소를 입력해야 합니다."; exit 1; }
+    fi
+    if [ -z "$NFS_PATH" ]; then
+        read -p "NFS 내보내기 경로를 입력하세요 (예: /nfs/harbor): " NFS_PATH
+        [ -z "$NFS_PATH" ] && { echo "오류: NFS 경로를 입력해야 합니다."; exit 1; }
+    fi
+    echo "NFS PV/PVC를 생성합니다... (서버: ${NFS_SERVER}, 경로: ${NFS_PATH})"
+    cat > "$PV_PVC_FILE" <<EOF
 apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: ${PV_NAME}
 spec:
-  capacity: { storage: ${STORAGE_SIZE} }
+  capacity:
+    storage: ${STORAGE_SIZE}
+  volumeMode: Filesystem
+  accessModes: ["ReadWriteMany"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: harbor-nfs-sc
+  nfs:
+    server: ${NFS_SERVER}
+    path: ${NFS_PATH}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${PVC_NAME}
+  namespace: ${HARBOR_NAMESPACE}
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: harbor-nfs-sc
+  resources:
+    requests:
+      storage: ${STORAGE_SIZE}
+EOF
+
+else
+    # --- HostPath ---
+    if [ -z "$NODE_NAME" ]; then
+        NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        [ -n "$NODE_NAME" ] && echo "자동 감지된 노드: $NODE_NAME"
+    fi
+    read -p "데이터를 저장할 호스트 노드의 절대 경로를 입력하세요 [${SAVE_PATH}]: " USER_SAVE_PATH
+    SAVE_PATH="${USER_SAVE_PATH:-$SAVE_PATH}"
+    read -p "PV를 고정할 노드 이름을 입력하세요 [${NODE_NAME}]: " USER_NODE_NAME
+    NODE_NAME="${USER_NODE_NAME:-$NODE_NAME}"
+    [ -z "$NODE_NAME" ] && { echo "오류: 노드 이름을 입력해야 합니다."; exit 1; }
+
+    echo "HostPath PV/PVC를 생성합니다... (노드: ${NODE_NAME}, 경로: ${SAVE_PATH})"
+    cat > "$PV_PVC_FILE" <<EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${PV_NAME}
+spec:
+  capacity:
+    storage: ${STORAGE_SIZE}
   volumeMode: Filesystem
   accessModes: ["ReadWriteOnce"]
   persistentVolumeReclaimPolicy: Retain
@@ -213,8 +262,11 @@ spec:
   nodeAffinity:
     required:
       nodeSelectorTerms:
-      - matchExpressions:
-        - {key: kubernetes.io/hostname, operator: In, values: ["${NODE_NAME}"]}
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - "${NODE_NAME}"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -224,8 +276,12 @@ metadata:
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: harbor-hostpath-sc
-  resources: { requests: { storage: ${STORAGE_SIZE} } }
+  resources:
+    requests:
+      storage: ${STORAGE_SIZE}
 EOF
+fi
+
 kubectl apply -f "$PV_PVC_FILE"
 
 # externalURL 계산
@@ -310,16 +366,22 @@ echo " Harbor 설치가 완료되었습니다!"
 echo "================================================================"
 
 if [[ "$EXPOSE_TYPE" == "nodePort" && "$EXPOSE_CHOICE" == "1" ]]; then
-    NODE_IP=$(kubectl get node "$NODE_NAME" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
     echo " Harbor UI 접속 주소 (Envoy): ${PROTOCOL}://${EXTERNAL_HOSTNAME}"
-    echo " Harbor NodePort 직접 접속:   http://${NODE_IP}:30002"
+    if [ -n "$NODE_NAME" ]; then
+        NODE_IP=$(kubectl get node "$NODE_NAME" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true)
+        [ -n "$NODE_IP" ] && echo " Harbor NodePort 직접 접속:   http://${NODE_IP}:30002"
+    fi
     echo ""
     echo " Envoy HTTPRoute 설정:"
     echo "   kubectl apply -f manifests/route-harbor.yaml"
     echo "   (route-harbor.yaml의 hostnames를 '${EXTERNAL_HOSTNAME}'으로 수정 후 적용)"
 elif [ "$EXPOSE_TYPE" = "nodePort" ]; then
-    NODE_IP=$(kubectl get node "$NODE_NAME" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
-    echo " Harbor UI 접속 주소 (HTTP):  http://${NODE_IP}:30002"
+    if [ -n "$NODE_NAME" ]; then
+        NODE_IP=$(kubectl get node "$NODE_NAME" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true)
+        [ -n "$NODE_IP" ] && echo " Harbor UI 접속 주소 (HTTP):  http://${NODE_IP}:30002"
+    else
+        echo " Harbor UI 접속 주소 (HTTP):  http://${EXTERNAL_HOSTNAME}:30002"
+    fi
 else
     echo " Harbor UI 접속 주소: ${PROTOCOL}://${EXTERNAL_HOSTNAME}"
 fi
