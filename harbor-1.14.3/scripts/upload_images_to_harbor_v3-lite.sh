@@ -70,7 +70,8 @@ for tar_file in "$IMAGE_DIR"/*.tar*; do
     repo_tags=$(tar -xOf "$tar_file" manifest.json | grep -o '"RepoTags":\[[^]]*\]' | sed -e 's/"RepoTags":\[//' -e 's/\]//' -e 's/"//g' | tr ',' '\n')
 
     # while read를 사용하여 공백이 포함된 이미지 이름 한 줄씩 처리
-    echo "$repo_tags" | while read -r source_image; do
+    # 파이프 대신 here-string으로 서브셸 변수 손실 방지
+    while read -r source_image; do
         [ -z "$source_image" ] && continue
 
         # 이름 보정 로직 (컨테이너디 내부 이름 확인)
@@ -115,5 +116,5 @@ for tar_file in "$IMAGE_DIR"/*.tar*; do
             echo "      [Error Log]"
             ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image"
         fi
-    done
+    done <<< "$repo_tags"
 done

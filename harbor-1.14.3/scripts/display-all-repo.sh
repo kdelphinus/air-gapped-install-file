@@ -1,4 +1,12 @@
 #!/bin/bash
+cd "$(dirname "$0")/.." || exit 1
+set -e
+
+# jq 존재 여부 확인
+if ! command -v jq &> /dev/null; then
+    echo "[ERROR] 'jq' 명령어를 찾을 수 없습니다. jq를 설치하세요."
+    exit 1
+fi
 
 PROJECT="strato-solution-install-goe"
 HARBOR_ADDR="harbor.example.com:8443"
