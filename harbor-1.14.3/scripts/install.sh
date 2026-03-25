@@ -23,6 +23,8 @@ EXTERNAL_HOSTNAME="" # 환경에 맞게 설정 (예: 172.31.63.195 또는 harbor
 
 # 4. 영구 저장소 설정
 STORAGE_SIZE="50Gi"
+# 스토리지 모드: "hostpath" 또는 "nfs" (빈 값이면 실행 시 선택)
+STORAGE_MODE=""
 # HostPath 설정
 SAVE_PATH="/harbor/data"
 NODE_NAME="" # 빈 값이면 자동 감지
@@ -182,11 +184,19 @@ PVC_NAME="harbor-pvc"
 PV_PVC_FILE="harbor-hostpath-persistence.yaml"
 
 echo ""
-echo "스토리지 타입을 선택하세요:"
-echo "  1) HostPath (노드 고정, 단일 노드 환경 권장)"
-echo "  2) NFS"
-read -p "선택 [1/2, 기본값 1]: " STORAGE_CHOICE
-STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
+if [[ "$STORAGE_MODE" == "hostpath" ]]; then
+    STORAGE_CHOICE="1"
+    echo "스토리지 모드: HostPath (STORAGE_MODE 사전 설정)"
+elif [[ "$STORAGE_MODE" == "nfs" ]]; then
+    STORAGE_CHOICE="2"
+    echo "스토리지 모드: NFS (STORAGE_MODE 사전 설정)"
+else
+    echo "스토리지 타입을 선택하세요:"
+    echo "  1) HostPath (노드 고정, 단일 노드 환경 권장)"
+    echo "  2) NFS"
+    read -p "선택 [1/2, 기본값 1]: " STORAGE_CHOICE
+    STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
+fi
 
 read -p "전체 저장 공간의 크기를 입력하세요 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
 STORAGE_SIZE="${USER_STORAGE_SIZE:-$STORAGE_SIZE}"
