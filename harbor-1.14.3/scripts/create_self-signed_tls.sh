@@ -1,4 +1,10 @@
 #!/bin/bash
+cd "$(dirname "$0")/.." || exit 1
+set -e
+
+# 인증서 파일 정리 (정상/비정상 종료 모두 대응)
+cleanup() { rm -f "$CRT_FILE" "$KEY_FILE" 2>/dev/null; }
+trap cleanup EXIT
 
 # 사용자 입력 받기
 read -p "Enter your domain (예: harbor.example.com): " DOMAIN
@@ -21,7 +27,9 @@ echo "[INFO] 자체 서명 TLS 인증서 생성 중..."
 openssl req -x509 -nodes -days 365 -newkey rsa:4096 \
   -keyout "$KEY_FILE" -out "$CRT_FILE" \
   -subj "/C=KR/ST=Seoul/L=Seoul/O=MyOrg/OU=IT/CN=$DOMAIN" \
-  -addext "subjectAltName=DNS:$DOMAIN"
+  -addext "subjectAltName=DNS:$DOMAIN" \
+  -addext "keyUsage=digitalSignature,keyEncipherment" \
+  -addext "extendedKeyUsage=serverAuth"
 
 if [ $? -ne 0 ]; then
   echo "[ERROR] 인증서 생성 실패!"
@@ -41,5 +49,5 @@ else
   exit 1
 fi
 
-echo "[INFO] 로컬 인증서 파일 정리 (선택 사항)"
-# rm -f "$CRT_FILE" "$KEY_FILE"
+echo "[INFO] 로컬 인증서 파일 정리"
+rm -f "$CRT_FILE" "$KEY_FILE"

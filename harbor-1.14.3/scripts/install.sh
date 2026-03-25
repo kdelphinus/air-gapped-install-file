@@ -3,6 +3,10 @@
 cd "$(dirname "$0")/.." || exit 1
 set -e # 오류 발생 시 즉시 스크립트 중단
 
+# 임시 파일 정리 (정상/비정상 종료 모두 대응)
+cleanup() { rm -f "$VALUES_FILE" "$PV_PVC_FILE" 2>/dev/null; }
+trap cleanup EXIT
+
 # =================================================================
 # --- 설정 변수 (사용자 환경에 맞게 이 부분을 수정하세요) ---
 # =================================================================
@@ -15,11 +19,11 @@ HARBOR_RELEASE_NAME="harbor"
 HELM_CHART_PATH="./charts/harbor"
 
 # 3. 외부 접속 설정 (TLS 사용 시 인증서의 domain과 일치 해야함)
-EXTERNAL_HOSTNAME="172.31.63.195"
+EXTERNAL_HOSTNAME="" # 환경에 맞게 설정 (예: 172.31.63.195 또는 harbor.example.com)
 
 # 4. 영구 저장소 설정 (HostPath)
 SAVE_PATH="/harbor/data"
-NODE_NAME="ip-172-31-63-195.ap-northeast-2.compute.internal" # 실제 노드 이름으로 변경
+NODE_NAME="" # 실제 노드 이름으로 변경 (빈 값이면 자동 감지)
 
 STORAGE_SIZE="1Gi"
 
@@ -32,17 +36,36 @@ INGRESS_CLASS="nginx"
 
 # --- 사전 요구사항 검사 함수 ---
 check_command() {
-    if ! command -v $1 &> /dev/null; then echo "오류: '$1' 명령어를 찾을 수 없습니다."; exit 1; fi
+    if ! command -v "$1" &> /dev/null; then echo "오류: '$1' 명령어를 찾을 수 없습니다."; exit 1; fi
 }
 
 echo "Harbor 폐쇄망 설치 스크립트를 시작합니다."
 
 # 1. 도구 및 파일 확인
-check_command kubectl 
+check_command kubectl
 check_command helm
-if [ ! -f "$HELM_CHART_PATH" ]; then
-    echo "오류: Helm 차트 파일 '$HELM_CHART_PATH'을 찾을 수 없습니다."
+if [ ! -e "$HELM_CHART_PATH" ]; then
+    echo "오류: Helm 차트 '$HELM_CHART_PATH'을 찾을 수 없습니다."
     exit 1
+fi
+
+# EXTERNAL_HOSTNAME 미설정 시 입력 프롬프트
+if [ -z "$EXTERNAL_HOSTNAME" ]; then
+    read -p "Harbor 외부 접속 IP 또는 도메인을 입력하세요: " EXTERNAL_HOSTNAME
+    if [ -z "$EXTERNAL_HOSTNAME" ]; then
+        echo "오류: 호스트명을 입력해야 합니다."
+        exit 1
+    fi
+fi
+
+# NODE_NAME 미설정 시 자동 감지
+if [ -z "$NODE_NAME" ]; then
+    NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    if [ -z "$NODE_NAME" ]; then
+        read -p "PV가 위치할 노드 이름을 입력하세요: " NODE_NAME
+        [ -z "$NODE_NAME" ] && { echo "오류: 노드 이름을 입력해야 합니다."; exit 1; }
+    fi
+    echo "자동 감지된 노드: $NODE_NAME"
 fi
 
 # ---------------------------
@@ -123,10 +146,14 @@ while true; do
     echo
     read -sp "비밀번호를 다시 한번 입력하세요: " ADMIN_PASSWORD_CONFIRM
     echo
-    if [ "$ADMIN_PASSWORD" = "$ADMIN_PASSWORD_CONFIRM" ] && [ -n "$ADMIN_PASSWORD" ]; then
-        break
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        echo "비밀번호가 비어있습니다. 다시 시도하세요."
+    elif [ ${#ADMIN_PASSWORD} -lt 8 ]; then
+        echo "비밀번호는 최소 8자 이상이어야 합니다. 다시 시도하세요."
+    elif [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+        echo "비밀번호가 일치하지 않습니다. 다시 시도하세요."
     else
-        echo "비밀번호가 비어있거나 일치하지 않습니다. 다시 시도하세요."
+        break
     fi
 done
 
@@ -275,6 +302,6 @@ else
 fi
 
 echo " 사용자명: admin"
-echo " 비밀번호: ${ADMIN_PASSWORD}"
+echo " 비밀번호: (설치 시 입력한 비밀번호)"
 echo "================================================================"
 echo ""

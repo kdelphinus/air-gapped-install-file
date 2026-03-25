@@ -1,20 +1,28 @@
 #!/bin/bash
+cd "$(dirname "$0")/.." || exit 1
+set -e
 
 ################################################################################
-# Tar 이미지 일괄 업로드 스크립트 (v6: Flatten Multi-Arch)
-# 
+# Tar 이미지 일괄 업로드 스크립트 (v2: Flatten Multi-Arch)
+#
 # [해결 전략]
 # 1. Import: 부분 데이터만이라도 일단 로드
 # 2. Convert: ctr convert 명령어로 'Manifest List'에서 'Single Manifest'로 변환
 #    -> 이 과정에서 없는 아키텍처 정보는 제거되고 amd64만 남음.
 # 3. Push: 깨끗해진 단일 이미지를 업로드
+#
+# [보안 참고] ctr push의 --user 플래그는 ps 목록에 노출될 수 있습니다.
+#   환경변수(HARBOR_USER, HARBOR_PASSWORD)로 사전 설정하거나
+#   실행 시 프롬프트로 입력하는 것을 권장합니다.
 ################################################################################
 
 # ==================== 설정 ====================
-HARBOR_REGISTRY="harbor.example.com:8443"
-HARBOR_PROJECT="goe"
-HARBOR_USER="name"
-HARBOR_PASSWORD="password"
+HARBOR_REGISTRY="${HARBOR_REGISTRY:-<NODE_IP>:30002}"
+HARBOR_PROJECT="${HARBOR_PROJECT:-library}"
+HARBOR_USER="${HARBOR_USER:-admin}"
+if [ -z "$HARBOR_PASSWORD" ]; then
+    read -sp "Harbor 비밀번호를 입력하세요: " HARBOR_PASSWORD; echo
+fi
 CTR_NAMESPACE="k8s.io"
 IMAGE_DIR="./saved_tars"
 USE_PLAIN_HTTP="false"

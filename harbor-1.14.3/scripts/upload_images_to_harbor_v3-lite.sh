@@ -1,4 +1,6 @@
 #!/bin/bash
+cd "$(dirname "$0")/.." || exit 1
+set -e
 
 ################################################################################
 # Tar 이미지 일괄 업로드 스크립트 (v3-Lite: 폐쇄망 최적화 버전)
@@ -8,13 +10,19 @@
 # 2. 공백 이름 대응: 이미지 이름에 공백이 있어도 while read 루프로 안전하게 처리
 # 3. 규격 자동 보정: Harbor 업로드 시 이름의 공백을 하이픈(-)으로 자동 치환
 # 4. 멀티 아키텍처 대응: ctr convert를 통해 amd64 단일 이미지로 Flattening 수행
+#
+# [보안 참고] ctr push의 --user 플래그는 ps 목록에 노출될 수 있습니다.
+#   환경변수(HARBOR_USER, HARBOR_PASSWORD)로 사전 설정하거나
+#   실행 시 프롬프트로 입력하는 것을 권장합니다.
 ################################################################################
 
 # ==================== 설정 ====================
-HARBOR_REGISTRY="<NODE_IP>:30002"
-HARBOR_PROJECT="<HARBOR_PROJECT>"
-HARBOR_USER="admin"
-HARBOR_PASSWORD="<HARBOR_PASSWORD>"
+HARBOR_REGISTRY="${HARBOR_REGISTRY:-<NODE_IP>:30002}"
+HARBOR_PROJECT="${HARBOR_PROJECT:-library}"
+HARBOR_USER="${HARBOR_USER:-admin}"
+if [ -z "$HARBOR_PASSWORD" ]; then
+    read -sp "Harbor 비밀번호를 입력하세요: " HARBOR_PASSWORD; echo
+fi
 CTR_NAMESPACE="k8s.io"
 IMAGE_DIR="./saved_tars"
 USE_PLAIN_HTTP="false"
