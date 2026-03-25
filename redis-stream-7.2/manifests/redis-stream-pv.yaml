@@ -14,6 +14,14 @@ spec:
     name: redis-data-redis-stream-master-0
   hostPath:
     path: /data/redis-stream/master
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - "__NODE_NAME__"
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -31,6 +39,14 @@ spec:
     name: redis-data-redis-stream-replicas-0
   hostPath:
     path: /data/redis-stream/replica-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - "__NODE_NAME__"
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -48,3 +64,11 @@ spec:
     name: redis-data-redis-stream-replicas-1
   hostPath:
     path: /data/redis-stream/replica-1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - "__NODE_NAME__"

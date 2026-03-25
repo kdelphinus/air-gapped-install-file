@@ -1,19 +1,33 @@
+# Local/Development Override Values
+image:
+  registry: docker.io
+  repository: bitnamilegacy/redis
+  tag: "7.2.4-debian-12-r9"
+  pullPolicy: IfNotPresent
+
 replica:
-  replicaCount: 1
+  # HA 테스트를 위해 최소 2개 이상의 Pod가 필요함 (Master 1 + Replica 2)
+  replicaCount: 2
   persistence:
     size: 2Gi
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits: { cpu: 500m, memory: 1Gi }
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 512Mi }
 
 master:
   persistence:
     size: 2Gi
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits: { cpu: 500m, memory: 1Gi }
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 200m, memory: 512Mi }
 
 sentinel:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/redis-sentinel
+    tag: "7.2.4-debian-12-r7"
+    pullPolicy: IfNotPresent
   resources:
-    requests: { cpu: 50m, memory: 64Mi }
-    limits: { cpu: 128m, memory: 128Mi }
+    requests: { cpu: 30m, memory: 64Mi }
+    limits: { cpu: 100m, memory: 128Mi }
