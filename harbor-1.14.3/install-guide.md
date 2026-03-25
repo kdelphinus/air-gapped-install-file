@@ -57,13 +57,24 @@ chmod +x scripts/install.sh
 
 스크립트 실행 중 아래 항목을 인터랙티브하게 입력합니다.
 
-- TLS 활성화 여부 (y/N)
-- TLS 사용 시 사전 생성된 Secret 이름
+- 노출 방식 선택: `1` NodePort + Envoy Gateway (기본) / `2` nginx Ingress
+- Envoy 선택 시: Envoy에서 TLS 종료 여부 (externalURL scheme 결정)
+- nginx Ingress 선택 시: TLS 활성화 여부 및 Secret 이름
 - Harbor 관리자(`admin`) 비밀번호
+
+## 4단계: Envoy HTTPRoute 적용 (NodePort + Envoy 선택 시)
+
+`manifests/route-harbor.yaml`의 `hostnames`와 `parentRefs.name`을
+실제 환경에 맞게 수정 후 적용합니다.
+
+```bash
+# hostnames: 를 실제 도메인으로 수정 후:
+kubectl apply -f manifests/route-harbor.yaml
+```
 
 ## 4단계: (TLS 미사용 시) Insecure Registry 등록
 
-TLS를 사용하지 않는 경우, 모든 노드에서 containerd에 insecure registry를 등록합니다.
+HTTP로 Harbor를 사용하는 경우, 모든 노드에서 containerd에 등록합니다.
 
 ```bash
 chmod +x scripts/insecurity_registry_add.sh
@@ -72,7 +83,7 @@ chmod +x scripts/insecurity_registry_add.sh
 
 ## 5단계: (선택) Self-Signed TLS 인증서 생성
 
-도메인 접속 시 자체 서명 인증서가 필요한 경우 생성합니다.
+nginx Ingress + TLS 사용 시 자체 서명 인증서가 필요한 경우 생성합니다.
 
 ```bash
 chmod +x scripts/create_self-signed_tls.sh

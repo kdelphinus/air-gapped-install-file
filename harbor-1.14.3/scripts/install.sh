@@ -25,9 +25,9 @@ EXTERNAL_HOSTNAME="" # 환경에 맞게 설정 (예: 172.31.63.195 또는 harbor
 SAVE_PATH="/harbor/data"
 NODE_NAME="" # 실제 노드 이름으로 변경 (빈 값이면 자동 감지)
 
-STORAGE_SIZE="1Gi"
+STORAGE_SIZE="50Gi"
 
-# 5. 고급 설정
+# 5. 고급 설정 (Ingress 선택 시 사용)
 INGRESS_CLASS="nginx"
 
 # =================================================================
@@ -125,19 +125,38 @@ if [[ -n "$RELEASE_EXISTS" || -n "$PVC_EXISTS" || -n "$PV_EXISTS" || -n "$SVC_EX
     fi
 fi
 
-# 3. TLS 및 서비스 타입 선택
-read -p "TLS(HTTPS)를 활성화하시겠습니까? (y/N): " ENABLE_TLS
+# 3. 노출 방식 선택
+echo ""
+echo "Harbor 노출 방식을 선택하세요:"
+echo "  1) NodePort + Envoy Gateway (기본, HTTPRoute로 도메인 라우팅)"
+echo "  2) nginx Ingress"
+read -p "선택 [1/2, 기본값 1]: " EXPOSE_CHOICE
+EXPOSE_CHOICE="${EXPOSE_CHOICE:-1}"
+
 PROTOCOL="http"
-TLS_SECRET_NAME="" # TLS 시크릿 이름 변수 초기화
-if [[ "$ENABLE_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
-    PROTOCOL="https"
+TLS_SECRET_NAME=""
+TLS_ENABLED="false"
+TLS_CERT_SOURCE="none"
+
+if [[ "$EXPOSE_CHOICE" == "2" ]]; then
     EXPOSE_TYPE="ingress"
-    echo "TLS를 활성화합니다. 서비스 노출 방식은 'ingress'로 고정됩니다."
-    read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
-    if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
+    echo "nginx Ingress 방식으로 설치합니다."
+    read -p "TLS(HTTPS)를 활성화하시겠습니까? (y/N): " ENABLE_TLS
+    if [[ "$ENABLE_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
+        PROTOCOL="https"
+        TLS_ENABLED="true"
+        TLS_CERT_SOURCE="secret"
+        read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
+        if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
+    fi
 else
     EXPOSE_TYPE="nodePort"
-    echo "TLS를 비활성화하고 ${EXPOSE_TYPE}으로 설치를 진행합니다."
+    echo "NodePort + Envoy Gateway 방식으로 설치합니다."
+    echo "  → Envoy HTTPRoute(manifests/route-harbor.yaml)로 도메인 라우팅을 설정하세요."
+    read -p "Envoy에서 TLS를 종료합니까? (externalURL scheme 결정, y/N): " ENVOY_TLS
+    if [[ "$ENVOY_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
+        PROTOCOL="https"
+    fi
 fi
 
 # 4. 관리자 비밀번호 직접 입력받기
@@ -210,19 +229,15 @@ EOF
 kubectl apply -f "$PV_PVC_FILE"
 
 # externalURL 계산
-if [[ "$ENABLE_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
+# - Envoy(nodePort): 도메인만 사용 (Envoy가 포트 처리)
+# - nodePort 직접: IP:포트 사용
+# - Ingress: 도메인만 사용
+if [[ "$EXPOSE_TYPE" == "nodePort" && "$EXPOSE_CHOICE" == "1" ]]; then
     EXTERNAL_URL="${PROTOCOL}://${EXTERNAL_HOSTNAME}"
-else
+elif [[ "$EXPOSE_TYPE" == "nodePort" ]]; then
     EXTERNAL_URL="${PROTOCOL}://${EXTERNAL_HOSTNAME}:30002"
-fi
-
-# cert_source 계산
-if [[ "$ENABLE_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
-    TLS_ENABLED="true"
-    TLS_CERT_SOURCE="secret"
 else
-    TLS_ENABLED="false"
-    TLS_CERT_SOURCE="none"
+    EXTERNAL_URL="${PROTOCOL}://${EXTERNAL_HOSTNAME}"
 fi
 
 # 7. Harbor 설치
@@ -256,7 +271,7 @@ expose:
       core: ${EXTERNAL_HOSTNAME}
     annotations:
       nginx.ingress.kubernetes.io/proxy-body-size: "0"
-      $([[ "$ENABLE_TLS" =~ ^[yY]([eE][sS])?$ ]] && echo 'nginx.ingress.kubernetes.io/ssl-redirect: "true"' || echo "")
+      $([[ "$TLS_ENABLED" == "true" ]] && echo 'nginx.ingress.kubernetes.io/ssl-redirect: "true"' || echo "")
 
 persistence:
   enabled: true
@@ -294,8 +309,16 @@ echo "================================================================"
 echo " Harbor 설치가 완료되었습니다!"
 echo "================================================================"
 
-if [ "$EXPOSE_TYPE" = "nodePort" ]; then
-    NODE_IP=$(kubectl get node ${NODE_NAME} -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+if [[ "$EXPOSE_TYPE" == "nodePort" && "$EXPOSE_CHOICE" == "1" ]]; then
+    NODE_IP=$(kubectl get node "$NODE_NAME" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+    echo " Harbor UI 접속 주소 (Envoy): ${PROTOCOL}://${EXTERNAL_HOSTNAME}"
+    echo " Harbor NodePort 직접 접속:   http://${NODE_IP}:30002"
+    echo ""
+    echo " Envoy HTTPRoute 설정:"
+    echo "   kubectl apply -f manifests/route-harbor.yaml"
+    echo "   (route-harbor.yaml의 hostnames를 '${EXTERNAL_HOSTNAME}'으로 수정 후 적용)"
+elif [ "$EXPOSE_TYPE" = "nodePort" ]; then
+    NODE_IP=$(kubectl get node "$NODE_NAME" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
     echo " Harbor UI 접속 주소 (HTTP):  http://${NODE_IP}:30002"
 else
     echo " Harbor UI 접속 주소: ${PROTOCOL}://${EXTERNAL_HOSTNAME}"
