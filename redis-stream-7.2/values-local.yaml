@@ -1,0 +1,19 @@
+replica:
+  replicaCount: 1
+  persistence:
+    size: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 1Gi }
+
+master:
+  persistence:
+    size: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 1Gi }
+
+sentinel:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 128m, memory: 128Mi }
