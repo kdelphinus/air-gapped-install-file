@@ -112,10 +112,15 @@ docker push <NODE_IP>:30002/library/my-image:v1
 ## 보안 고려사항
 
 - **비밀번호 정책**: 관리자 비밀번호는 최소 8자 이상 설정 (install.sh에서 검증)
-- **TLS 권장**: 운영 환경에서는 외부 TLS + 내부 TLS(`internalTLS.enabled: true`) 모두 활성화 권장
-- **자격 증명 관리**: 스크립트에 비밀번호를 직접 기재하지 않고, 환경변수 또는 실행 시 프롬프트 사용
-- **Insecure Registry**: TLS 미사용 시 `insecurity_registry_add.sh`로 등록하되, 네트워크가 신뢰할 수 있는 환경에서만 사용
-- **Trivy 스캔**: 폐쇄망에서는 Trivy DB를 OCI artifact로 반입 후 활성화 가능 (`values.yaml` 주석 참조)
+- **TLS 권장**: 운영 환경에서는 외부 TLS + 내부 TLS 모두 활성화 권장
+  (`internalTLS.enabled: true`)
+- **자격 증명 관리**: 스크립트에 비밀번호를 직접 기재하지 않고,
+  환경변수 또는 실행 시 프롬프트 사용
+- **Insecure Registry**: TLS 미사용 시
+  `insecurity_registry_add.sh`로 등록하되,
+  신뢰할 수 있는 네트워크에서만 사용
+- **Trivy 스캔**: 폐쇄망에서는 Trivy DB를 OCI artifact로
+  반입 후 활성화 가능 (`values.yaml` 주석 참조)
 
 ## 트러블슈팅
 
