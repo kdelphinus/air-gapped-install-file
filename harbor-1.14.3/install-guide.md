@@ -20,12 +20,12 @@
 모든 작업은 컴포넌트 루트 디렉토리에서 실행합니다.
 
 ```bash
-# upload_images_to_harbor_v3-lite.sh 상단 Config 수정
-# IMAGE_DIR      : ./images (현재 디렉터리의 이미지 폴더 지정)
-# HARBOR_REGISTRY: <NODE_IP>:30002
+# 환경변수로 설정하거나, 스크립트 실행 시 프롬프트로 입력
+export HARBOR_REGISTRY="<NODE_IP>:30002"
+export HARBOR_PROJECT="library"
 
-chmod +x images/upload_images_to_harbor_v3-lite.sh
-./images/upload_images_to_harbor_v3-lite.sh
+chmod +x scripts/upload_images_to_harbor_v3-lite.sh
+./scripts/upload_images_to_harbor_v3-lite.sh
 ```
 
 이미지 로드 확인:
@@ -42,7 +42,7 @@ sudo ctr -n k8s.io images list | grep harbor
 | :--- | :--- | :--- |
 | `HARBOR_NAMESPACE` | Harbor 설치 네임스페이스 | `harbor` |
 | `HARBOR_RELEASE_NAME` | Helm release 이름 | `harbor` |
-| `HELM_CHART_PATH` | Helm 차트 파일 경로 | `./charts/harbor-1.14.3.tgz` |
+| `HELM_CHART_PATH` | Helm 차트 경로 | `./charts/harbor` |
 | `EXTERNAL_HOSTNAME` | Harbor 접근 호스트명 또는 IP | `<NODE_IP>` 또는 도메인 |
 | `SAVE_PATH` | PV 데이터 저장 경로 (호스트) | `/harbor/data` |
 | `NODE_NAME` | PV가 위치할 노드 이름 | `worker-node-01` |
@@ -108,3 +108,18 @@ docker push <NODE_IP>:30002/library/my-image:v1
 ```bash
 ./scripts/uninstall.sh
 ```
+
+## 보안 고려사항
+
+- **비밀번호 정책**: 관리자 비밀번호는 최소 8자 이상 설정 (install.sh에서 검증)
+- **TLS 권장**: 운영 환경에서는 외부 TLS + 내부 TLS(`internalTLS.enabled: true`) 모두 활성화 권장
+- **자격 증명 관리**: 스크립트에 비밀번호를 직접 기재하지 않고, 환경변수 또는 실행 시 프롬프트 사용
+- **Insecure Registry**: TLS 미사용 시 `insecurity_registry_add.sh`로 등록하되, 네트워크가 신뢰할 수 있는 환경에서만 사용
+- **Trivy 스캔**: 폐쇄망에서는 Trivy DB를 OCI artifact로 반입 후 활성화 가능 (`values.yaml` 주석 참조)
+
+## 트러블슈팅
+
+- **Pod CrashLoopBackOff**: PV 마운트 경로 권한(`chmod 777`) 확인, 비밀번호 불일치 여부 점검
+- **이미지 Push 실패**: 모든 노드에서 insecure registry 등록 여부 확인 (`scripts/insecurity_registry_add.sh`)
+- **TLS 인증서 오류**: Secret 이름과 `EXTERNAL_HOSTNAME` 도메인 일치 여부, 인증서 만료일 확인
+- **PVC Pending**: `NODE_NAME`이 실제 노드 이름과 일치하는지, nodeAffinity 설정 확인

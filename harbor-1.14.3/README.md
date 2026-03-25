@@ -66,11 +66,11 @@ Harbor의 이미지가 저장되는 핵심 볼륨입니다.
 
 1. 외부망에서 필요한 이미지를 `docker pull` 합니다.
 2. `docker save`를 통해 `.tar` 파일로 생성 후 폐쇄망으로 반입합니다.
-3. 폐쇄망 서버에서 `utils/upload_images_to_harbor_v3-lite.sh` 내 변수를 수정 후 실행합니다.
+3. 폐쇄망 서버에서 `scripts/upload_images_to_harbor_v3-lite.sh` 내 변수를 수정 후 실행합니다.
 
    ```bash
    # IMAGE_DIR, HARBOR_REGISTRY, HARBOR_PROJECT, HARBOR_USER, HARBOR_PASSWORD 수정 후:
-   bash utils/upload_images_to_harbor_v3-lite.sh
+   bash scripts/upload_images_to_harbor_v3-lite.sh
    ```
 
 ### ✅ 가용성 및 유지보수
