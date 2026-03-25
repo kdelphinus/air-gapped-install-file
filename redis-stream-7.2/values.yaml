@@ -9,7 +9,6 @@ architecture: replication
 auth:
   enabled: true
   sentinel: true
-  # password는 install.sh에서 입력받아 --set auth.password=... 으로 전달
 
 commonConfiguration: |-
   appendonly yes
