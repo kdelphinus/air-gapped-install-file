@@ -116,9 +116,14 @@ sudo chmod -R 777 /nfs/redis-stream
 
 ## 5. Spring Boot 연동
 
-`examples/spring-boot` 프로젝트를 참조하세요.
+두 가지 빌드 방식을 모두 지원합니다.
 
-빌드 가능한 Maven 프로젝트이며, Sentinel 연결 설정은 `application.yml`에서 확인할 수 있습니다.
+| 빌드 도구 | 프로젝트 경로 | Spring Boot 버전 |
+| :--- | :--- | :--- |
+| Maven | `examples/spring-boot/` | 3.2.4 |
+| Gradle Wrapper | `examples/spring-boot-gradle/` | 3.5.0 |
+
+Sentinel 연결 설정은 `application.yml`에서 확인합니다.
 
 ```yaml
 spring:
@@ -130,8 +135,55 @@ spring:
       password: "${REDIS_PASSWORD}"
 ```
 
-> **폐쇄망 빌드**: Maven 의존성을 외부망에서 미리 캐싱하거나 내부 Nexus/Artifactory를
-> 구성한 후 빌드해야 합니다.
+### Maven 빌드
+
+```bash
+cd examples/spring-boot
+mvn clean package -DskipTests
+java -jar target/redisstream-0.0.1-SNAPSHOT.jar
+```
+
+폐쇄망 환경에서는 `~/.m2/` 로컬 캐시를 포함하거나 내부 Nexus/Artifactory를 구성한 후 빌드합니다.
+
+```bash
+# 오프라인 모드 빌드
+mvn clean package -DskipTests --offline
+```
+
+### Gradle 빌드
+
+`gradlew` 스크립트 포함으로 Gradle 설치 없이 빌드 가능합니다.
+
+```bash
+cd examples/spring-boot-gradle
+./gradlew bootJar
+java -jar build/libs/redisstream-gradle-0.0.1-SNAPSHOT.jar
+```
+
+폐쇄망 환경에서는 Gradle 배포판과 의존성을 사전에 캐싱해야 합니다.
+
+```bash
+# 캐시 위치 확인
+ls ~/.gradle/wrapper/dists/     # Gradle 배포판
+ls ~/.gradle/caches/            # 의존성 캐시
+
+# 오프라인 모드 빌드
+./gradlew bootJar --offline
+```
+
+> **Gradle Wrapper 배포판 반입**: `gradle/wrapper/gradle-wrapper.properties`에 지정된
+> 버전의 배포판(`gradle-X.Y.Z-bin.zip`)을 외부망에서 다운로드하여
+> `~/.gradle/wrapper/dists/` 디렉토리에 배치 후 오프라인 빌드합니다.
+
+### 실행 (공통)
+
+```bash
+# 운영 환경 (Kubernetes 내부 DNS 사용)
+REDIS_PASSWORD=<password> java -jar <jar파일>
+
+# 로컬 테스트 (application-local.yml 활성화)
+REDIS_PASSWORD=<password> SPRING_PROFILES_ACTIVE=local java -jar <jar파일>
+```
 
 ### 핵심 운영 주의사항
 
@@ -140,6 +192,8 @@ spring:
 - **리밸런싱 부재 (Zombie 회수)**: Kafka와 달리 Consumer 장애 시 자동 재할당 기능이 없습니다.
   `examples/spring-boot`의 `autoClaimZombieMessages()` 패턴을 참고하여
   앱 레벨에서 주기적으로 `XCLAIM`을 실행해야 합니다.
+- **At-Least-Once 중복 처리**: Producer의 WAIT 실패 시 메시지가 재전송되어 스트림에 중복
+  저장될 수 있습니다. Consumer는 멱등성(idempotent) 처리를 구현해야 합니다.
 
 ## 6. 삭제
 
