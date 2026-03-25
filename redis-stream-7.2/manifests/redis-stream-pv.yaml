@@ -13,7 +13,7 @@ spec:
     namespace: redis-stream
     name: redis-data-redis-stream-master-0
   hostPath:
-    path: /data/redis-stream/master
+    path: __BASE_PATH__/master
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -38,7 +38,7 @@ spec:
     namespace: redis-stream
     name: redis-data-redis-stream-replicas-0
   hostPath:
-    path: /data/redis-stream/replica-0
+    path: __BASE_PATH__/replica-0
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -63,7 +63,7 @@ spec:
     namespace: redis-stream
     name: redis-data-redis-stream-replicas-1
   hostPath:
-    path: /data/redis-stream/replica-1
+    path: __BASE_PATH__/replica-1
   nodeAffinity:
     required:
       nodeSelectorTerms:

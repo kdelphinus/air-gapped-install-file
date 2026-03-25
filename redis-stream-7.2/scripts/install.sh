@@ -1,5 +1,6 @@
 #!/bin/bash
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
+set -e
 
 NAMESPACE="redis-stream"
 RELEASE_NAME="redis-stream"
@@ -41,8 +42,89 @@ if [ "$STORAGE_TYPE" == "hostpath" ]; then
     else
         NODE_NAME=$(hostname)
     fi
-    ./scripts/setup-host-dirs.sh
-    sed "s/__NODE_NAME__/$NODE_NAME/g" manifests/redis-stream-pv.yaml | kubectl apply -f -
+    read -p "HostPath 기본 경로 [기본값: /data/redis-stream]: " HOST_BASE_PATH
+    HOST_BASE_PATH="${HOST_BASE_PATH:-/data/redis-stream}"
+    ./scripts/setup-host-dirs.sh "$NODE_NAME" "$HOST_BASE_PATH"
+    sed -e "s|__NODE_NAME__|${NODE_NAME}|g" \
+        -e "s|__BASE_PATH__|${HOST_BASE_PATH}|g" \
+        manifests/redis-stream-pv.yaml | kubectl apply -f -
+elif [ "$STORAGE_TYPE" == "nfs" ]; then
+    echo "📦 NFS 설정 진행 중..."
+    read -p "NFS 서버 IP (예: 192.168.1.100): " NFS_SERVER
+    if [ -z "$NFS_SERVER" ]; then
+        echo "❌ NFS 서버 IP가 필요합니다."
+        exit 1
+    fi
+    read -p "NFS 기본 경로 [기본값: /nfs/redis-stream]: " NFS_BASE_PATH
+    NFS_BASE_PATH="${NFS_BASE_PATH:-/nfs/redis-stream}"
+    read -p "PV 스토리지 크기 [기본값: 10Gi]: " STORAGE_SIZE
+    STORAGE_SIZE="${STORAGE_SIZE:-10Gi}"
+
+    echo ""
+    echo "⚠️  NFS 서버(${NFS_SERVER})에 아래 디렉토리가 사전에 생성되어 있어야 합니다."
+    echo "   NFS 서버에서 다음 명령을 실행하세요:"
+    echo ""
+    echo "   sudo mkdir -p ${NFS_BASE_PATH}/{master,replica-0,replica-1}"
+    echo "   sudo chmod -R 777 ${NFS_BASE_PATH}"
+    echo ""
+    read -p "디렉토리 생성을 완료했으면 Enter를 눌러 계속하세요..."
+
+    NFS_PV_FILE=$(mktemp /tmp/redis-stream-nfs-pv.XXXXXX.yaml)
+    trap 'rm -f "$NFS_PV_FILE"' EXIT
+    cat > "$NFS_PV_FILE" <<EOF
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-stream-master-pv
+spec:
+  capacity:
+    storage: ${STORAGE_SIZE}
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: ${NFS_SERVER}
+    path: ${NFS_BASE_PATH}/master
+  claimRef:
+    name: redis-data-redis-stream-master-0
+    namespace: ${NAMESPACE}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-stream-replica-0-pv
+spec:
+  capacity:
+    storage: ${STORAGE_SIZE}
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: ${NFS_SERVER}
+    path: ${NFS_BASE_PATH}/replica-0
+  claimRef:
+    name: redis-data-redis-stream-replicas-0
+    namespace: ${NAMESPACE}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-stream-replica-1-pv
+spec:
+  capacity:
+    storage: ${STORAGE_SIZE}
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: ${NFS_SERVER}
+    path: ${NFS_BASE_PATH}/replica-1
+  claimRef:
+    name: redis-data-redis-stream-replicas-1
+    namespace: ${NAMESPACE}
+EOF
+    kubectl apply -f "$NFS_PV_FILE"
 fi
 
 read -s -p "🔑 Redis 비밀번호 입력: " REDIS_PASSWORD

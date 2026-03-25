@@ -1,22 +1,29 @@
 #!/bin/bash
+cd "$(dirname "$0")/.." || exit 1
 
 ################################################################################
 # Tar 이미지 일괄 업로드 스크립트 (v3-Lite: 폐쇄망 최적화 버전)
-# 
+#
 # [주요 특징]
 # 1. 의존성 최소화: jq 없이 표준 도구(grep, sed, awk, tr)만 사용하여 폐쇄망 대응
 # 2. 공백 이름 대응: 이미지 이름에 공백이 있어도 while read 루프로 안전하게 처리
 # 3. 규격 자동 보정: Harbor 업로드 시 이름의 공백을 하이픈(-)으로 자동 치환
 # 4. 멀티 아키텍처 대응: ctr convert를 통해 amd64 단일 이미지로 Flattening 수행
+#
+# [보안 참고] ctr push의 --user 플래그는 ps 목록에 노출될 수 있습니다.
+#   환경변수(HARBOR_USER, HARBOR_PASSWORD)로 사전 설정하거나
+#   실행 시 프롬프트로 입력하는 것을 권장합니다.
 ################################################################################
 
 # ==================== 설정 ====================
-HARBOR_REGISTRY="harbor.local:30002"
-HARBOR_PROJECT="library"
-HARBOR_USER="admin"
-HARBOR_PASSWORD="Password"
+HARBOR_REGISTRY="${HARBOR_REGISTRY:-<NODE_IP>:30002}"
+HARBOR_PROJECT="${HARBOR_PROJECT:-library}"
+HARBOR_USER="${HARBOR_USER:-admin}"
+if [ -z "$HARBOR_PASSWORD" ]; then
+    read -sp "Harbor 비밀번호를 입력하세요: " HARBOR_PASSWORD; echo
+fi
 CTR_NAMESPACE="k8s.io"
-IMAGE_DIR="../images"
+IMAGE_DIR="./images"
 USE_PLAIN_HTTP="false"
 TARGET_PLATFORM="linux/amd64" # 고정
 # ==============================================
@@ -62,7 +69,7 @@ for tar_file in "$IMAGE_DIR"/*.tar; do
     repo_tags=$(tar -xOf "$tar_file" manifest.json | grep -o '"RepoTags":\[[^]]*\]' | sed -e 's/"RepoTags":\[//' -e 's/\]//' -e 's/"//g' | tr ',' '\n')
 
     # while read를 사용하여 공백이 포함된 이미지 이름 한 줄씩 처리
-    echo "$repo_tags" | while read -r source_image; do
+    while read -r source_image; do
         [ -z "$source_image" ] && continue
 
         # 이름 보정 로직 (컨테이너디 내부 이름 확인)
@@ -107,5 +114,5 @@ for tar_file in "$IMAGE_DIR"/*.tar; do
             echo "      [Error Log]"
             ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image"
         fi
-    done
+    done <<< "$repo_tags"
 done
