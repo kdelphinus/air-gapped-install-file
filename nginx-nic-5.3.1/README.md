@@ -28,7 +28,6 @@
 - **Deployment**: `nginx-ingress` (네임스페이스: `nginx-ingress`)
 - **ServiceAccount**: `nginx-ingress`
 - **IngressClass**: `nginx` — `ingressClassName: nginx`으로 Ingress 리소스에서 참조
-- **Admission Webhook**: `nginx-ingress-admission` ClusterIP 서비스로 리소스 유효성 검사
 - **CRD**: `VirtualServer`, `VirtualServerRoute`, `TransportServer`, `Policy`,
   `GlobalConfiguration`
 
@@ -46,7 +45,6 @@
 | 이미지 | 태그 | 용도 |
 | :--- | :--- | :--- |
 | `nginx/nginx-ingress` | `5.3.1` | 컨트롤러 메인 이미지 (OSS) |
-| `nginx/kube-webhook-certgen` | `v1.4.4` | Admission Webhook 인증서 자동 생성 |
 
 > 실제 사용 이미지 및 태그는 `git checkout v5.3.1` 후 `deployments/` 매니페스트와
 > Helm chart `values.yaml`에서 반드시 확인합니다.
@@ -59,10 +57,10 @@
 
 ### 🔐 보안 정보 (Secrets)
 
-- **nginx-ingress-admission**: Admission Webhook TLS 인증서.
-  `kube-webhook-certgen` Job이 배포 시 자동 생성합니다.
 - **default-server-secret**: 기본 TLS 인증서.
-  `deployments/common/default-server-secret.yaml`에서 자가 서명 인증서를 적용합니다.
+  `values.yaml`의 `controller.defaultTLS.cert` / `controller.defaultTLS.key`로 지정하거나
+  `controller.defaultTLS.secret`에 `<namespace>/<secret-name>` 형식으로 기존 시크릿을 참조합니다.
+  미설정 시 NGINX는 기본 서버로의 TLS 연결을 거부합니다.
 
 ### ⚙️ 컨트롤러 주요 기동 옵션 (args)
 

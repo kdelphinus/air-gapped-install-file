@@ -29,3 +29,14 @@ controller:
 
   # CRD (VirtualServer, Policy 등) 활성화
   enableCustomResources: true
+
+  # ---------------------------------------------------------------
+  # 기본 TLS 인증서 (HTTPS 접속 시 필요)
+  # ---------------------------------------------------------------
+  # cert/key 를 직접 기입하거나(base64 인코딩 권장) 
+  # 이미 생성된 시크릿을 <namespace>/<secret-name> 형식으로 참조하세요.
+  defaultTLS:
+    cert: ""
+    key: ""
+    # 예시: "nginx-ingress/default-server-secret"
+    secret: ""

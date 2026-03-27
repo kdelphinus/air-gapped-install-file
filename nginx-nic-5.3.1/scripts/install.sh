@@ -10,7 +10,8 @@ set -e
 NAMESPACE="nginx-ingress"
 RELEASE_NAME="nginx-ingress"
 HELM_CHART_PATH="./charts/nginx-ingress-5.3.1"
-HELM_CHART_VERSION="5.3.1"
+# 로컬 차트 경로 사용 시 --version 플래그는 Helm이 무시함 (참고용)
+# Chart version: 2.4.1 / App version: 5.3.1
 
 # =================================================================
 # --- 메인 스크립트 로직 ---
@@ -65,7 +66,6 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 # 5. Helm 설치
 echo "Helm으로 F5 NIC를 배포합니다..."
 helm upgrade --install "$RELEASE_NAME" "$HELM_CHART_PATH" \
-    --version "$HELM_CHART_VERSION" \
     --namespace "$NAMESPACE" \
     --atomic \
     --wait \
