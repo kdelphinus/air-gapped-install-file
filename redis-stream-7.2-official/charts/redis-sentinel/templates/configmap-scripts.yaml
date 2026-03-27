@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "redis-sentinel.scriptsName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "redis-sentinel.labels" . | nindent 4 }}
+data:
+  redis-init.sh: |
+    #!/bin/bash
+    set -e
+
+    NAMESPACE="${MY_NAMESPACE}"
+    SENTINEL_SVC="{{ include "redis-sentinel.sentinelHeadlessName" . }}"
+    SENTINEL_NODE="{{ include "redis-sentinel.sentinelName" . }}"
+    REDIS_HEADLESS_SVC="{{ include "redis-sentinel.redisHeadlessName" . }}"
+    REDIS_NODE="{{ include "redis-sentinel.nodeName" . }}"
+    SENTINEL_PREFIX="${SENTINEL_SVC}.${NAMESPACE}.svc.cluster.local"
+    MASTER_SET="{{ .Values.sentinel.masterSet }}"
+    REDIS_PORT="6379"
+    SENTINEL_PORT="26379"
+    OUT="/config-out/redis.conf"
+
+    echo "[redis-init] Pod: ${MY_POD_NAME}, Namespace: ${NAMESPACE}"
+
+    cp /config-base/base-redis.conf "${OUT}"
+
+    if [ -n "${REDIS_PASSWORD}" ]; then
+        echo "requirepass ${REDIS_PASSWORD}" >> "${OUT}"
+        echo "masterauth ${REDIS_PASSWORD}" >> "${OUT}"
+    fi
+
+    get_master_ip() {
+        for i in 0 1 2; do
+            local host="${SENTINEL_NODE}-${i}.${SENTINEL_PREFIX}"
+            local result
+            result=$(redis-cli -h "${host}" -p "${SENTINEL_PORT}" --no-auth-warning \
+                     -a "${REDIS_PASSWORD}" \
+                     SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -1)
+            if [ -n "${result}" ] && echo "${result}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+                echo "${result}"
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    MASTER_IP=$(get_master_ip || true)
+    MY_IP=$(hostname -i | awk '{print $1}')
+
+    echo "[redis-init] MY_IP=${MY_IP}, MASTER_IP=${MASTER_IP:-없음}"
+
+    if [ -z "${MASTER_IP}" ]; then
+        if [ "${MY_POD_NAME}" != "${REDIS_NODE}-0" ]; then
+            MASTER_FQDN="${REDIS_NODE}-0.${REDIS_HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+            echo "[redis-init] Sentinel 없음 → replica 모드 (master: ${MASTER_FQDN})"
+            echo "replicaof ${MASTER_FQDN} ${REDIS_PORT}" >> "${OUT}"
+        else
+            echo "[redis-init] Sentinel 없음 → master 모드 (${REDIS_NODE}-0)"
+        fi
+    else
+        if [ "${MASTER_IP}" = "${MY_IP}" ]; then
+            echo "[redis-init] Sentinel 확인 → master 모드 (내 IP가 master)"
+        else
+            echo "[redis-init] Sentinel 확인 → replica 모드 (master IP: ${MASTER_IP})"
+            echo "replicaof ${MASTER_IP} ${REDIS_PORT}" >> "${OUT}"
+        fi
+    fi
+
+    echo "[redis-init] 생성된 redis.conf:"
+    cat "${OUT}"
+
+  sentinel-init.sh: |
+    #!/bin/bash
+    set -e
+
+    NAMESPACE="${MY_NAMESPACE}"
+    REDIS_HEADLESS_SVC="{{ include "redis-sentinel.redisHeadlessName" . }}"
+    SENTINEL_SVC="{{ include "redis-sentinel.sentinelHeadlessName" . }}"
+    SENTINEL_NODE="{{ include "redis-sentinel.sentinelName" . }}"
+    REDIS_NODE="{{ include "redis-sentinel.nodeName" . }}"
+    REDIS_HEADLESS="${REDIS_HEADLESS_SVC}.${NAMESPACE}.svc.cluster.local"
+    SENTINEL_PREFIX="${SENTINEL_SVC}.${NAMESPACE}.svc.cluster.local"
+    MASTER_SET="{{ .Values.sentinel.masterSet }}"
+    REDIS_PORT="6379"
+    SENTINEL_PORT="26379"
+    OUT="/sentinel-conf/sentinel.conf"
+
+    echo "[sentinel-init] Pod: ${MY_POD_NAME}"
+
+    cp /config-base/base-sentinel.conf "${OUT}"
+
+    get_master_ip_from_sentinel() {
+        for i in 0 1 2; do
+            local host="${SENTINEL_NODE}-${i}.${SENTINEL_PREFIX}"
+            local result
+            result=$(redis-cli -h "${host}" -p "${SENTINEL_PORT}" --no-auth-warning \
+                     -a "${REDIS_PASSWORD}" \
+                     SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -1)
+            if [ -n "${result}" ] && echo "${result}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+                echo "${result}"
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    MASTER_IP=$(get_master_ip_from_sentinel || true)
+
+    if [ -z "${MASTER_IP}" ]; then
+        MASTER_FQDN="${REDIS_NODE}-0.${REDIS_HEADLESS}"
+        echo "[sentinel-init] Sentinel 없음 → ${REDIS_NODE}-0 을 master로 설정"
+        MASTER_IP=$(getent hosts "${MASTER_FQDN}" | awk '{print $1}' | head -1 || true)
+        if [ -z "${MASTER_IP}" ]; then
+            MASTER_IP="${MASTER_FQDN}"
+        fi
+    fi
+
+    echo "[sentinel-init] Master: ${MASTER_IP}:${REDIS_PORT}"
+
+    {
+        echo "sentinel monitor ${MASTER_SET} ${MASTER_IP} ${REDIS_PORT} {{ .Values.sentinel.quorum }}"
+        if [ -n "${REDIS_PASSWORD}" ]; then
+            echo "sentinel auth-pass ${MASTER_SET} ${REDIS_PASSWORD}"
+        fi
+    } >> "${OUT}"
+
+    echo "[sentinel-init] 생성된 sentinel.conf:"
+    cat "${OUT}"

@@ -1,0 +1,81 @@
+# =============================================================
+# Redis Sentinel HA — air-gapped 환경 기본값
+# 운영 배포 시 루트의 values.yaml 또는 --set 으로 오버라이드
+# =============================================================
+
+global:
+  # Harbor 레지스트리 주소 (예: 192.168.1.10:30002)
+  imageRegistry: "<NODE_IP>:30002"
+
+image:
+  repository: library/redis
+  tag: "7.2"
+  pullPolicy: IfNotPresent
+
+# 네임스페이스 자동 생성 여부 (helm install --create-namespace 와 병행)
+createNamespace: false
+
+# Helm 리소스 이름 오버라이드 (선택)
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------
+redis:
+  replicas: 3
+
+  # 비밀번호 — 반드시 설치 시 지정
+  password: ""
+
+  config:
+    maxmemoryPolicy: noeviction
+    streamNodeMaxBytes: 4096
+    streamNodeMaxEntries: 100
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ---------------------------------------------------------------
+# Sentinel
+# ---------------------------------------------------------------
+sentinel:
+  replicas: 3
+  masterSet: mymaster
+  quorum: 2
+
+  config:
+    downAfterMilliseconds: 5000
+    failoverTimeout: 60000
+    parallelSyncs: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ---------------------------------------------------------------
+# 스토리지
+# ---------------------------------------------------------------
+storage:
+  # hostpath 또는 nfs
+  type: hostpath
+  size: 10Gi
+
+  hostpath:
+    # HostPath PV를 배치할 K8s 노드 이름 (필수)
+    nodeName: ""
+    basePath: /data/redis-official
+
+  nfs:
+    # NFS 서버 IP (필수)
+    server: ""
+    basePath: /nfs/redis-official

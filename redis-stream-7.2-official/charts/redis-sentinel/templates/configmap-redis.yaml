@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "redis-sentinel.redisConfigName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "redis-sentinel.labels" . | nindent 4 }}
+data:
+  base-redis.conf: |
+    # 공통 Redis 설정 (master/replica 공통)
+    # requirepass / masterauth / replicaof 는 init container에서 동적 주입
+
+    bind 0.0.0.0
+    protected-mode no
+    port 6379
+
+    # AOF 활성화
+    appendonly yes
+    appendfsync everysec
+    appendfilename "appendonly.aof"
+    aof-use-rdb-preamble yes
+
+    # RDB 비활성화
+    save ""
+
+    # 메모리 설정
+    {{- if .Values.redis.config.maxmemory }}
+    maxmemory {{ .Values.redis.config.maxmemory }}
+    {{- end }}
+    maxmemory-policy {{ .Values.redis.config.maxmemoryPolicy }}
+
+    # Redis Stream 설정
+    stream-node-max-bytes {{ .Values.redis.config.streamNodeMaxBytes }}
+    stream-node-max-entries {{ .Values.redis.config.streamNodeMaxEntries }}
+
+    # 데이터 디렉토리
+    dir /data
+
+    loglevel notice

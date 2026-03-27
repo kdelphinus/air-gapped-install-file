@@ -1,0 +1,94 @@
+# =============================================================
+# Redis Sentinel HA — air-gapped 환경 기본값
+# 운영 배포 시 루트의 values.yaml 또는 --set 으로 오버라이드
+# =============================================================
+
+global:
+  # Harbor 레지스트리 주소 (예: 192.168.1.10:30002)
+  imageRegistry: "<NODE_IP>:30002"
+
+image:
+  repository: library/redis
+  tag: "7.2"
+  pullPolicy: IfNotPresent
+
+# 네임스페이스 자동 생성 여부 (helm install --create-namespace 와 병행)
+createNamespace: false
+
+# Helm 리소스 이름 오버라이드 (선택)
+nameOverride: ""
+fullnameOverride: "redis"
+
+# ---------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------
+redis:
+  replicas: 3
+
+  # 비밀번호 — 반드시 설치 시 지정
+  password: ""
+
+  config:
+    # maxmemory: Redis가 사용할 최대 메모리.
+    # 반드시 컨테이너 limits.memory 보다 낮게 설정 (기본: limits의 약 75%).
+    # 예) limits.memory=2Gi → maxmemory=1536mb
+    # "" 이면 redis.conf에 maxmemory 지시어를 추가하지 않음 (무제한 — 권장하지 않음).
+    maxmemory: "1536mb"
+    # noeviction: 메모리 초과 시 쓰기 오류 반환 — Stream 데이터를 자동으로 삭제하지 않아 안전.
+    # OOM 방지는 애플리케이션 레벨의 XADD MAXLEN (Producer의 MAXLEN 상수) 로 제어.
+    maxmemoryPolicy: noeviction
+    # stream-node-max-bytes/entries: Stream 내부 radix-tree 노드 크기 튜닝값.
+    # Stream 전체 크기 제한이 아님. 쓰기 성능/메모리 효율 조정용.
+    streamNodeMaxBytes: 4096
+    streamNodeMaxEntries: 100
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# ---------------------------------------------------------------
+# Sentinel
+# ---------------------------------------------------------------
+sentinel:
+  replicas: 3
+  masterSet: mymaster
+  quorum: 2
+
+  config:
+    downAfterMilliseconds: 5000
+    failoverTimeout: 60000
+    parallelSyncs: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ---------------------------------------------------------------
+# 스토리지
+# ---------------------------------------------------------------
+storage:
+  # hostpath 또는 nfs
+  type: hostpath
+  size: 10Gi
+
+  hostpath:
+    # [참고용 — Helm 템플릿 미사용]
+    # 실제 PV는 install.sh 가 manifests/10-pv-hostpath.yaml 에 sed 치환 후 직접 apply.
+    # 아래 값은 Helm 렌더링에 반영되지 않으며, install.sh 실행 시 대화형 입력으로 처리됨.
+    nodeName: ""
+    basePath: /data/redis-official
+
+  nfs:
+    # [참고용 — Helm 템플릿 미사용]
+    # 실제 PV는 install.sh 가 manifests/10-pv-nfs.yaml 에 sed 치환 후 직접 apply.
+    # 아래 값은 Helm 렌더링에 반영되지 않으며, install.sh 실행 시 대화형 입력으로 처리됨.
+    server: ""
+    basePath: /nfs/redis-official

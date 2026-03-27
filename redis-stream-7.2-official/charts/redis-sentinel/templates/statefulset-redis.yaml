@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "redis-sentinel.nodeName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "redis-sentinel.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "redis-sentinel.redisHeadlessName" . }}
+  replicas: {{ .Values.redis.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "redis-sentinel.nodeName" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "redis-sentinel.nodeName" . }}
+        {{- include "redis-sentinel.labels" . | nindent 8 }}
+    spec:
+      initContainers:
+      - name: config-init
+        image: {{ include "redis-sentinel.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/bash", "/scripts/redis-init.sh"]
+        env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MY_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "redis-sentinel.secretName" . }}
+              key: redis-password
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: config-out
+          mountPath: /config-out
+        - name: redis-common-config
+          mountPath: /config-base
+
+      containers:
+      - name: redis
+        image: {{ include "redis-sentinel.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["redis-server", "/config-out/redis.conf"]
+        ports:
+        - name: redis
+          containerPort: 6379
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "redis-sentinel.secretName" . }}
+              key: redis-password
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          {{- toYaml .Values.redis.resources | nindent 10 }}
+        volumeMounts:
+        - name: config-out
+          mountPath: /config-out
+        - name: redis-data
+          mountPath: /data
+
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ include "redis-sentinel.scriptsName" . }}
+          defaultMode: 0755
+      - name: config-out
+        emptyDir: {}
+      - name: redis-common-config
+        configMap:
+          name: {{ include "redis-sentinel.redisConfigName" . }}
+
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: ""
+      resources:
+        requests:
+          storage: {{ .Values.storage.size }}

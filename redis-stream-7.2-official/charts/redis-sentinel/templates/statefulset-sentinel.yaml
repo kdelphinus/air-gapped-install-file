@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "redis-sentinel.sentinelName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "redis-sentinel.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "redis-sentinel.sentinelHeadlessName" . }}
+  replicas: {{ .Values.sentinel.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "redis-sentinel.sentinelName" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "redis-sentinel.sentinelName" . }}
+        {{- include "redis-sentinel.labels" . | nindent 8 }}
+    spec:
+      initContainers:
+      - name: sentinel-config-init
+        image: {{ include "redis-sentinel.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/bin/bash", "/scripts/sentinel-init.sh"]
+        env:
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MY_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "redis-sentinel.secretName" . }}
+              key: redis-password
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: sentinel-conf
+          mountPath: /sentinel-conf
+        - name: sentinel-base-config
+          mountPath: /config-base
+
+      containers:
+      - name: sentinel
+        image: {{ include "redis-sentinel.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["redis-sentinel", "/sentinel-conf/sentinel.conf"]
+        ports:
+        - name: sentinel
+          containerPort: 26379
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "redis-sentinel.secretName" . }}
+              key: redis-password
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -p 26379 --no-auth-warning ping | grep -q PONG
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -p 26379 --no-auth-warning ping | grep -q PONG
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          {{- toYaml .Values.sentinel.resources | nindent 10 }}
+        volumeMounts:
+        - name: sentinel-conf
+          mountPath: /sentinel-conf
+        - name: sentinel-data
+          mountPath: /sentinel-data
+
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ include "redis-sentinel.scriptsName" . }}
+          defaultMode: 0755
+      - name: sentinel-conf
+        emptyDir: {}
+      - name: sentinel-data
+        emptyDir: {}
+      - name: sentinel-base-config
+        configMap:
+          name: {{ include "redis-sentinel.sentinelConfigName" . }}
