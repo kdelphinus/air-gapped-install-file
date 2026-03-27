@@ -1,0 +1,31 @@
+# F5 NGINX Ingress Controller v5.3.1 — Harbor 레지스트리 대상 values
+# 배포 전 <NODE_IP>를 실제 노드 IP로 변경하세요.
+
+controller:
+  image:
+    repository: "<NODE_IP>:30002/library/nginx-ingress"
+    tag: "5.3.1"
+    pullPolicy: IfNotPresent
+
+  # OSS 이미지 사용 (NGINX Plus 라이선스 불필요)
+  nginxplus: false
+
+  ingressClass:
+    name: nginx
+    setAsDefaultIngress: false
+
+  # NodePort 고정 (에어갭 환경, 외부 LB 없음)
+  service:
+    type: NodePort
+    httpPort:
+      port: 80
+      nodePort: 30080
+    httpsPort:
+      port: 443
+      nodePort: 30443
+
+  # location-snippets, server-snippets Annotation 허용
+  enableSnippets: true
+
+  # CRD (VirtualServer, Policy 등) 활성화
+  enableCustomResources: true
