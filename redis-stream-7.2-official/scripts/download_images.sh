@@ -71,7 +71,7 @@ for img in "${IMAGES[@]}"; do
     case $SELECTED_ENGINE in
         "ctr")
             echo "   └─ [ctr] pull & export..."
-            if ctr -n k8s.io images pull "$img" && ctr -n k8s.io images export "$IMAGE_DIR/$filename" "$img"; then
+            if sudo ctr -n k8s.io images pull "$img" && sudo ctr -n k8s.io images export "$IMAGE_DIR/$filename" "$img"; then
                 echo "   [완료] $filename"
             else
                 echo "   [실패] ctr 오류 (sudo 권한이 필요할 수 있습니다)"
