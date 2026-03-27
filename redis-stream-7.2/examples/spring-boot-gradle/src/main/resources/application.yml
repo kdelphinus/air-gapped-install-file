@@ -1,8 +1,0 @@
-spring:
-  data:
-    redis:
-      sentinel:
-        master: mymaster
-        nodes: redis-stream.redis-stream.svc:26379
-      password: "${REDIS_PASSWORD}"
-      timeout: 5000ms
