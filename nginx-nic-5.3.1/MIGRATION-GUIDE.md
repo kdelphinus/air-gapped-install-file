@@ -35,32 +35,69 @@
 
 프로젝트 내 주요 5개 서비스에 대해 `Ingress`(어노테이션 방식)와 `VirtualServer`(CRD 방식) 두 가지 버전의 변환 예시를 제공합니다.
 
+### 3.0 Mergeable Ingress 패턴 (동일 Host 다중 서비스)
+
+프로젝트의 모든 서비스가 동일한 host(`{{ ENV_DOMAIN }}`)를 공유하므로 NIC의 **Mergeable Ingress(Master/Minion)** 패턴을 사용합니다. 단일 Ingress에 여러 서비스를 정의하는 대신, Master 1개와 서비스별 Minion으로 분리합니다.
+
+| 구분 | 역할 | annotation |
+| :--- | :--- | :--- |
+| **Master** | host, TLS, 전역 설정 정의 | `nginx.org/mergeable-ingress-type: master` |
+| **Minion** | 서비스별 path 및 backend 정의 | `nginx.org/mergeable-ingress-type: minion` |
+
+**구성 규칙:**
+
+- Master와 Minion은 `ingressClassName`, `host`가 동일해야 합니다.
+- Master는 `spec.rules[].http.paths`를 정의하지 않습니다 (host 선언만).
+- TLS 설정은 Master에만 정의합니다.
+- Minion은 Master와 **다른 네임스페이스에 있어도 동작**합니다 (NIC 5.3.1 검증). 예: Master(`strato-product`) ← Minion(`monitoring`).
+- 아래 3.1~3.4의 Option A 예시는 모두 이 패턴을 전제로 합니다. **3.1의 Master Ingress를 먼저 생성**하고, 나머지 서비스는 Minion으로 추가합니다.
+
 ### 3.1 Portal Frontend (`strato-solution-install/strato-portal-front`)
 
 #### [Option A] Ingress (Annotation 방식)
 
 ```yaml
+# Master Ingress — host, TLS, 전역 설정
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: strato-portal-frontend-ingress
+  namespace: "{{ ENV_NAMESPACE }}"
   annotations:
+    nginx.org/mergeable-ingress-type: master
     nginx.org/redirect-to-https: "true"
     nginx.org/client-max-body-size: "10M"
 spec:
   ingressClassName: nginx
   rules:
     - host: "{{ ENV_DOMAIN }}"
+  tls:
+    - hosts:
+        - "{{ ENV_DOMAIN }}"
+      secretName: "{{ TLS_SECRET_NAME }}"
+---
+# Minion Ingress — Portal Frontend 및 OAuth2 경로
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: strato-portal-frontend-minion
+  namespace: "{{ ENV_NAMESPACE }}"
+  annotations:
+    nginx.org/mergeable-ingress-type: minion
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "{{ ENV_DOMAIN }}"
       http:
         paths:
-          - path: "/"
-            pathType: Prefix
-            backend:
-              service: { name: strato-portal-frontend-svc, port: { number: 80 } }
-          - path: "/oauth2"
+          - path: /oauth2
             pathType: Prefix
             backend:
               service: { name: strato-auth-svc, port: { number: 5555 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: strato-portal-frontend-svc, port: { number: 80 } }
 ```
 
 #### [Option B] VirtualServer (CRD 방식)
@@ -101,12 +138,17 @@ kind: Ingress
 metadata:
   name: api-gateway-ingress
   annotations:
+    nginx.org/mergeable-ingress-type: minion
+    nginx.org/client-max-body-size: "20M"
     nginx.org/location-snippets: |
-      client_max_body_size 20M;
+      rewrite /gw(/|$)(.*) /$2 break;
       add_header 'Access-Control-Allow-Origin' '*' always;
       add_header 'Access-Control-Allow-Methods' 'PUT, GET, POST, DELETE, OPTIONS, PATCH' always;
       add_header 'Access-Control-Allow-Headers' '*' always;
       add_header 'Access-Control-Allow-Credentials' 'true' always;
+      if ($request_method = 'OPTIONS') {
+        return 204;
+      }
 spec:
   ingressClassName: nginx
   rules:
@@ -118,6 +160,10 @@ spec:
             backend:
               service: { name: api-gateway-svc, port: { number: 20987 } }
 ```
+
+> **주의 — path 형식:** path는 반드시 `/gw`처럼 단순 prefix 형태로 작성해야 합니다. `/gw(/|$)(.*)`와 같은 regex 패턴을 path에 넣으면 NIC가 `location /gw(/|$)(.*) {`(prefix 매칭)으로 생성하여 실제 URL이 절대 매칭되지 않습니다. Prefix 제거(rewrite)는 `location-snippets`의 `rewrite` 지시어에서 처리합니다.
+
+> **주의 — `nginx.org/rewrites` 혼용 금지:** `nginx.org/rewrites: serviceName=... rewrite=/` 어노테이션과 `location-snippets`의 `rewrite` 지시어를 동시에 사용하면 안 됩니다. `nginx.org/rewrites: rewrite=/`는 경로 prefix만 제거하는 것이 아니라 **전체 경로를 `/`로 치환**하므로 `/gw/strato-b-svc/...` 같은 모든 요청이 백엔드에 `/`로 전달됩니다. `location-snippets`의 `rewrite`만 사용하십시오.
 
 #### [Option B] VirtualServer (CRD 방식)
 
@@ -157,7 +203,9 @@ kind: Ingress
 metadata:
   name: grafana-ingress
   annotations:
+    nginx.org/mergeable-ingress-type: minion
     nginx.org/location-snippets: |
+      rewrite /grafana(/|$)(.*) /$2 break;
       sub_filter '</body>' '<style>...</style></body>';
       sub_filter_once on;
 spec:
@@ -210,6 +258,7 @@ metadata:
   name: prometheus-ingress
   namespace: monitoring
   annotations:
+    nginx.org/mergeable-ingress-type: minion
     nginx.org/basic-auth-secret: "basic-auth"
     nginx.org/basic-auth-realm: "Prometheus Access"
 spec:
@@ -364,6 +413,40 @@ F5 NIC는 **VirtualServer와 동일한 네임스페이스에 위치한 Secret만
     defaultTLS:
       secret: strato-product/nhis-tls
   ```
+
+### 4.5 Path 매칭 및 Rewrite 주의사항
+
+NIC Mergeable Ingress(master/minion)에서 경로 재작성을 구성할 때 아래 사항을 반드시 준수하십시오.
+
+#### path에 regex 패턴 사용 금지
+
+NIC는 `pathType: Prefix` 및 `pathType: ImplementationSpecific` 모두에서 path 값을 **NGINX prefix 매칭(`location /path {`)** 으로 생성합니다. path에 regex 특수문자(`(`, `)`, `$`, `.*` 등)가 포함되면 리터럴 문자열로 처리되어 실제 URL이 매칭되지 않습니다.
+
+| 설정 | 생성된 location | 매칭 여부 |
+| :--- | :--- | :--- |
+| `path: /gw(/|$)(.*)` | `location /gw(/|$)(.*) {` | `/gw/...` 매칭 안 됨 ✗ |
+| `path: /gw` | `location /gw {` | `/gw/...` 정상 매칭 ✓ |
+
+`nginx.org/use-regex: "true"` 어노테이션은 minion Ingress에서 동작하지 않으므로 사용하지 마십시오.
+
+#### Prefix 제거(rewrite)는 location-snippets에서만 처리
+
+백엔드로 전달 시 path prefix를 제거해야 하는 서비스(`/gw` → `/`, `/grafana` → `/`)는 `location-snippets`의 `rewrite` 지시어만 사용합니다.
+
+```yaml
+nginx.org/location-snippets: |
+  rewrite /gw(/|$)(.*) /$2 break;
+```
+
+`nginx.org/rewrites: serviceName=... rewrite=/` 어노테이션은 **경로 전체를 `/`로 치환**하므로, `location-snippets`의 `rewrite`와 동시에 사용하면 안 됩니다. 두 방식 중 `location-snippets` 방식만 사용하십시오.
+
+#### 301 리다이렉트 브라우저 캐시 주의
+
+NIC 설정 변경 과정에서 잘못된 301 응답이 발생한 경우, **브라우저가 301을 영구적으로 캐싱**하기 때문에 서버 설정을 수정한 후에도 브라우저에서 계속 이전 리다이렉트를 따릅니다. 설정 변경 후 동작이 이상할 경우 아래 방법으로 확인하십시오.
+
+- `curl -Lv https://{{ ENV_DOMAIN }}/path/` 로 서버 응답을 직접 확인
+- 브라우저 시크릿 창에서 테스트 (캐시 미사용)
+- Chrome DevTools → Network 탭 → **Disable cache** 체크 후 새로고침
 
 ---
 
