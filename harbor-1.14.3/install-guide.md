@@ -89,21 +89,21 @@ chmod +x scripts/create_self-signed_tls.sh
 ./scripts/create_self-signed_tls.sh
 ```
 
-## 6단계: 설치 확인 및 접속
+## 7단계: (선택) Trivy 취약점 DB 수동 반입
 
-```bash
-kubectl get pods -n harbor
-kubectl get svc -n harbor
-```
+에어갭 환경에서는 Trivy가 인터넷을 통해 취약점 DB를 업데이트할 수 없습니다. 보안 스캔 기능을 사용하려면 수동으로 DB를 반입해야 합니다.
 
-### 접속 정보
+1.  **외부망**에서 아래 두 파일을 다운로드합니다.
+    *   [Vulnerability DB](https://github.com/aquasecurity/trivy-db/releases/latest/download/trivy-offline-db.tgz) (파일명: `trivy-db.tar.gz`로 저장)
+    *   [Java DB](https://github.com/aquasecurity/trivy-java-db/releases/latest/download/javadb.tar.gz) (파일명: `trivy-java-db.tar.gz`로 저장)
+2.  다운로드한 두 파일을 Harbor 컴포넌트 루트(`harbor-1.14.3/`) 폴더에 넣습니다.
+3.  반입 스크립트를 실행합니다.
+    ```bash
+    chmod +x scripts/import_trivy_db.sh
+    ./scripts/import_trivy_db.sh
+    ```
 
-| 방법 | 주소 |
-| :--- | :--- |
-| **NodePort (HTTP)** | `http://<NODE_IP>:30002` |
-| **Ingress (TLS)** | `https://<EXTERNAL_HOSTNAME>` |
-
-- 기본 계정: `admin` / 설치 시 입력한 비밀번호
+반입이 완료되면 Harbor UI에서 이미지를 선택하고 **[Scan]** 버튼을 눌러 보안 검사를 수행할 수 있습니다.
 
 ## 이미지 Push 예시
 

@@ -30,8 +30,8 @@ expose:
 # 3. enabled: true 전환 후 Harbor 재배포
 trivy:
   enabled: true
-  skipUpdate: true
-  offlineScan: true
+  skipUpdate: false
+  offlineScan: false
 
 # 내부 컴포넌트 간 TLS (auto-generated certificates)
 internalTLS:
