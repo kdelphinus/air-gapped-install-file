@@ -7,7 +7,7 @@ metadata:
     {{- include "redis-sentinel.labels" . | nindent 4 }}
 data:
   redis-init.sh: |
-    #!/bin/bash
+    #!/bin/sh
     set -e
 
     NAMESPACE="${MY_NAMESPACE}"
@@ -31,21 +31,22 @@ data:
     fi
 
     get_master_ip() {
-        for i in 0 1 2; do
-            local host="${SENTINEL_NODE}-${i}.${SENTINEL_PREFIX}"
-            local result
+        i=0
+        while [ $i -lt 3 ]; do
+            host="${SENTINEL_NODE}-${i}.${SENTINEL_PREFIX}"
             result=$(redis-cli -h "${host}" -p "${SENTINEL_PORT}" --no-auth-warning \
                      -a "${REDIS_PASSWORD}" \
-                     SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -1)
+                     SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -n 1)
             if [ -n "${result}" ] && echo "${result}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
                 echo "${result}"
                 return 0
             fi
+            i=$((i + 1))
         done
         return 1
     }
 
-    MASTER_IP=$(get_master_ip || true)
+    MASTER_IP=$(get_master_ip || echo "")
     MY_IP=$(hostname -i | awk '{print $1}')
 
     echo "[redis-init] MY_IP=${MY_IP}, MASTER_IP=${MASTER_IP:-없음}"
@@ -71,7 +72,7 @@ data:
     cat "${OUT}"
 
   sentinel-init.sh: |
-    #!/bin/bash
+    #!/bin/sh
     set -e
 
     NAMESPACE="${MY_NAMESPACE}"
@@ -91,26 +92,27 @@ data:
     cp /config-base/base-sentinel.conf "${OUT}"
 
     get_master_ip_from_sentinel() {
-        for i in 0 1 2; do
-            local host="${SENTINEL_NODE}-${i}.${SENTINEL_PREFIX}"
-            local result
+        i=0
+        while [ $i -lt 3 ]; do
+            host="${SENTINEL_NODE}-${i}.${SENTINEL_PREFIX}"
             result=$(redis-cli -h "${host}" -p "${SENTINEL_PORT}" --no-auth-warning \
                      -a "${REDIS_PASSWORD}" \
-                     SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -1)
+                     SENTINEL get-master-addr-by-name "${MASTER_SET}" 2>/dev/null | head -n 1)
             if [ -n "${result}" ] && echo "${result}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
                 echo "${result}"
                 return 0
             fi
+            i=$((i + 1))
         done
         return 1
     }
 
-    MASTER_IP=$(get_master_ip_from_sentinel || true)
+    MASTER_IP=$(get_master_ip_from_sentinel || echo "")
 
     if [ -z "${MASTER_IP}" ]; then
         MASTER_FQDN="${REDIS_NODE}-0.${REDIS_HEADLESS}"
         echo "[sentinel-init] Sentinel 없음 → ${REDIS_NODE}-0 을 master로 설정"
-        MASTER_IP=$(getent hosts "${MASTER_FQDN}" | awk '{print $1}' | head -1 || true)
+        MASTER_IP=$(getent hosts "${MASTER_FQDN}" | awk '{print $1}' | head -n 1 || echo "")
         if [ -z "${MASTER_IP}" ]; then
             MASTER_IP="${MASTER_FQDN}"
         fi

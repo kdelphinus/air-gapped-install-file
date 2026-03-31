@@ -3,4 +3,4 @@ name: redis-sentinel
 description: Redis 7.2 HA (Sentinel) — air-gapped Kubernetes 전용
 type: application
 version: 1.0.0
-appVersion: "7.2"
+appVersion: "7.2-alpine3.21"

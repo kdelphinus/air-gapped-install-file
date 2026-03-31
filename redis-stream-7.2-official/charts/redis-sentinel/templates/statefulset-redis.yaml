@@ -21,7 +21,7 @@ spec:
       - name: config-init
         image: {{ include "redis-sentinel.image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        command: ["/bin/bash", "/scripts/redis-init.sh"]
+        command: ["/bin/sh", "/scripts/redis-init.sh"]
         env:
         - name: MY_POD_NAME
           valueFrom:

@@ -16,7 +16,7 @@ mkdir -p "$IMAGE_DIR"
 
 # ==================== 대상 이미지 ====================
 IMAGES=(
-    "docker.io/library/redis:7.2"
+    "docker.io/library/redis:7.2-alpine3.21"
 )
 # =====================================================
 

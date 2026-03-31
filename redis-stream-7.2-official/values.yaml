@@ -9,7 +9,7 @@ global:
 
 image:
   repository: library/redis
-  tag: "7.2"
+  tag: "7.2-alpine3.21"
   pullPolicy: IfNotPresent
 
 # 네임스페이스 자동 생성 여부 (helm install --create-namespace 와 병행)
