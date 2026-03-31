@@ -81,8 +81,8 @@ echo "Harbor 폐쇄망 설치 스크립트를 시작합니다."
 # 0. 이미지 로드 단계 추가
 echo ""
 echo "0. 이미지 로드 방식 선택:"
-echo "  1) 로컬 tar 직접 import (권장: 하버가 아직 없는 경우)"
-echo "  2) Harbor 레지스트리 사용 (이미 하버가 있고 재설치하는 경우)"
+echo "  1) 로컬 tar 직접 import (images/load_images_locally.sh 실행과 동일)"
+echo "  2) Harbor 레지스트리 사용 (이미 이미지가 로드된 경우)"
 read -p "선택 [1/2, 기본값 1]: " IMAGE_LOAD_CHOICE
 IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE:-1}"
 

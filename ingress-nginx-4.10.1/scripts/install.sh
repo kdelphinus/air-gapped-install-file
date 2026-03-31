@@ -21,8 +21,8 @@ HELM_CHART_VERSION="4.10.1"
 # ── 이미지 소스 선택 ──────────────────────────────────────────
 echo ""
 echo "이미지 소스를 선택하세요:"
-echo "  1) Harbor 레지스트리 사용 (사전에 upload_images_to_harbor_v3-lite.sh 실행 필요)"
-echo "  2) 로컬 tar 직접 import (Harbor 없음)"
+echo "  1) Harbor 레지스트리 사용 (사전에 images/upload_images_to_harbor_v3-lite.sh 실행 필요)"
+echo "  2) 로컬 tar 직접 import (이미 이미지가 로드된 경우 건너뜀)"
 read -p "선택 [1/2, 기본값: 1]: " IMAGE_SOURCE
 IMAGE_SOURCE="${IMAGE_SOURCE:-1}"
 
