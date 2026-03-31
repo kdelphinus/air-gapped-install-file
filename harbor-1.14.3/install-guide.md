@@ -15,17 +15,15 @@
 - **TLS 도메인 접속 시**: 사전에 인증서로 Kubernetes Secret 생성 필요, `EXTERNAL_HOSTNAME` 을 도메인명으로 설정
 - **저장 경로**: `SAVE_PATH` (데이터 저장 경로)는 `NODE_NAME` 노드에서 디렉토리가 생성되어 있어야 함 (권한: `chmod 777`)
 
-## 1단계: 이미지 Harbor 업로드
+## 1단계: 구성 이미지 로드 (ctr import)
+
+하버가 설치되기 전이므로, 하버 구성 이미지들을 **모든 Kubernetes 노드(Master, Worker)**에서 직접 로컬 `containerd`에 로드해야 합니다.
 
 모든 작업은 컴포넌트 루트 디렉토리에서 실행합니다.
 
 ```bash
-# 환경변수로 설정하거나, 스크립트 실행 시 프롬프트로 입력
-export HARBOR_REGISTRY="<NODE_IP>:30002"
-export HARBOR_PROJECT="library"
-
-chmod +x scripts/upload_images_to_harbor_v3-lite.sh
-./scripts/upload_images_to_harbor_v3-lite.sh
+chmod +x scripts/load_images.sh
+./scripts/load_images.sh
 ```
 
 이미지 로드 확인:
@@ -55,12 +53,13 @@ chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-스크립트 실행 중 아래 항목을 인터랙티브하게 입력합니다.
+스크립트 실행 중 아래 항목을 인터랙티브하게 선택/입력합니다.
 
-- 노출 방식 선택: `1` NodePort + Envoy Gateway (기본) / `2` nginx Ingress
-- Envoy 선택 시: Envoy에서 TLS 종료 여부 (externalURL scheme 결정)
-- nginx Ingress 선택 시: TLS 활성화 여부 및 Secret 이름
-- Harbor 관리자(`admin`) 비밀번호
+1. **이미지 로드 방식 선택**:
+   - **`1` 로컬 tar 직접 import (권장)**: 하버가 아직 설치되지 않은 경우 선택합니다. (1단계에서 `load_images.sh`를 이미 실행했다면 이미 로드되어 있으므로 금방 넘어갑니다.)
+   - **`2` Harbor 레지스트리 사용**: 하버가 이미 설치되어 있고 재설치하거나 이미지가 이미 로드된 경우 선택합니다.
+2. **노출 방식 선택**: `1` NodePort + Envoy Gateway (기본) / `2` nginx Ingress
+3. **Harbor 관리자(`admin`) 비밀번호**: 최소 8자 이상의 비밀번호를 입력합니다.
 
 ## 4단계: Envoy HTTPRoute 적용 (NodePort + Envoy 선택 시)
 

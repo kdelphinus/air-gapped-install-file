@@ -29,7 +29,7 @@ expose:
 # 2. 폐쇄망 Harbor에 OCI artifact로 push
 # 3. enabled: true 전환 후 Harbor 재배포
 trivy:
-  enabled: false
+  enabled: true
   skipUpdate: true
   offlineScan: true
 

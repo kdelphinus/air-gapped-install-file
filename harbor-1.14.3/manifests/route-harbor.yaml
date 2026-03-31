@@ -8,7 +8,7 @@ spec:
     - name: cmp-gateway       # 클러스터에 생성된 Gateway 리소스 이름으로 변경
       namespace: envoy-gateway-system
   hostnames:
-    - "harbor.example.com"    # 실제 접속 도메인으로 변경 (install.sh EXTERNAL_HOSTNAME과 일치)
+    - "harbor.devops.internal"    # 실제 접속 도메인으로 변경 (install.sh EXTERNAL_HOSTNAME과 일치)
   rules:
     - matches:
         - path:

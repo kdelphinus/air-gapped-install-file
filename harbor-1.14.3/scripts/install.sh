@@ -14,6 +14,8 @@ trap cleanup EXIT
 # 1. 기본 정보
 HARBOR_NAMESPACE="harbor"
 HARBOR_RELEASE_NAME="harbor"
+PV_NAME="harbor-pv"
+PVC_NAME="harbor-pvc"
 
 # 2. 폐쇄망 환경 설정
 HELM_CHART_PATH="./charts/harbor"
@@ -26,7 +28,7 @@ STORAGE_SIZE="50Gi"
 # 스토리지 모드: "hostpath" 또는 "nfs" (빈 값이면 실행 시 선택)
 STORAGE_MODE=""
 # HostPath 설정
-SAVE_PATH="/harbor/data"
+SAVE_PATH="/data/harbor"
 NODE_NAME="" # 빈 값이면 자동 감지
 # NFS 설정
 NFS_SERVER="" # 예: 192.168.1.100
@@ -46,6 +48,30 @@ check_command() {
 
 echo "Harbor 폐쇄망 설치 스크립트를 시작합니다."
 
+# 0. 이미지 로드 단계 추가
+echo ""
+echo "0. 이미지 로드 방식 선택:"
+echo "  1) 로컬 tar 직접 import (권장: 하버가 아직 없는 경우)"
+echo "  2) Harbor 레지스트리 사용 (이미 하버가 있고 재설치하는 경우)"
+read -p "선택 [1/2, 기본값 1]: " IMAGE_LOAD_CHOICE
+IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE:-1}"
+
+if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
+    echo "➡️ 로컬 이미지 로드 중 (ctr import)..."
+    if [ -f "./scripts/load_images.sh" ]; then
+        bash ./scripts/load_images.sh
+    else
+        for tar_file in ./images/*.tar; do
+            [ -e "$tar_file" ] || continue
+            echo "  → $(basename "$tar_file") 로드 중..."
+            sudo ctr -n k8s.io images import "$tar_file"
+        done
+    fi
+    echo "✅ 이미지 로드 완료."
+else
+    echo "➡️ 이미 이미지가 로드되어 있거나 레지스트리를 사용한다고 가정합니다."
+fi
+
 # 1. 도구 및 파일 확인
 check_command kubectl
 check_command helm
@@ -54,12 +80,30 @@ if [ ! -e "$HELM_CHART_PATH" ]; then
     exit 1
 fi
 
-# EXTERNAL_HOSTNAME 미설정 시 입력 프롬프트
+# EXTERNAL_HOSTNAME 미설정 시 자동 감지 또는 입력 프롬프트
 if [ -z "$EXTERNAL_HOSTNAME" ]; then
-    read -p "Harbor 외부 접속 IP 또는 도메인을 입력하세요: " EXTERNAL_HOSTNAME
+    # 1번(로컬 로드) 선택 시 현재 노드 IP 자동 감지 및 자동 할당
+    if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
+        # 첫 번째 노드의 InternalIP 감지
+        DETECTED_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')
+        if [ -z "$DETECTED_IP" ]; then
+            DETECTED_IP=$(hostname -I | awk '{print $1}')
+        fi
+        
+        if [ -n "$DETECTED_IP" ]; then
+            EXTERNAL_HOSTNAME="$DETECTED_IP"
+            echo "➡️ 로컬 설치 모드: 접속 주소를 자동 감지된 IP(${EXTERNAL_HOSTNAME})로 설정합니다."
+        fi
+    fi
+
+    # 여전히 비어있으면 (2번 선택 시 또는 감지 실패 시) 입력 프롬프트 표시
     if [ -z "$EXTERNAL_HOSTNAME" ]; then
-        echo "오류: 호스트명을 입력해야 합니다."
-        exit 1
+        read -p "Harbor 외부 접속 IP 또는 도메인을 입력하세요: " EXTERNAL_HOSTNAME_INPUT
+        EXTERNAL_HOSTNAME="$EXTERNAL_HOSTNAME_INPUT"
+        if [ -z "$EXTERNAL_HOSTNAME" ]; then
+            echo "오류: 호스트명을 입력해야 합니다."
+            exit 1
+        fi
     fi
 fi
 
@@ -149,7 +193,7 @@ else
     EXPOSE_TYPE="nodePort"
     echo "NodePort + Envoy Gateway 방식으로 설치합니다."
     echo "  → Envoy HTTPRoute(manifests/route-harbor.yaml)로 도메인 라우팅을 설정하세요."
-    read -p "Envoy에서 TLS를 종료합니까? (externalURL scheme 결정, y/N): " ENVOY_TLS
+    read -p "Envoy Gateway에서 HTTPS(보안 접속)를 사용하시겠습니까? (y/N): " ENVOY_TLS
     if [[ "$ENVOY_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
         PROTOCOL="https"
     fi
@@ -179,8 +223,6 @@ kubectl create namespace "$HARBOR_NAMESPACE" --dry-run=client -o yaml | kubectl 
 echo "[INFO] Done."
 
 # 6. 스토리지 타입 선택 및 PV/PVC 생성
-PV_NAME="harbor-pv"
-PVC_NAME="harbor-pvc"
 PV_PVC_FILE="harbor-hostpath-persistence.yaml"
 
 echo ""
