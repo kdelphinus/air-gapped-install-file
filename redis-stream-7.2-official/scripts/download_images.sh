@@ -16,7 +16,7 @@ mkdir -p "$IMAGE_DIR"
 
 # ==================== 대상 이미지 ====================
 IMAGES=(
-    "docker.io/library/redis:7.2-alpine3.21"
+    "docker.io/library/redis:8.6.2-alpine3.23"
 )
 # =====================================================
 
@@ -67,7 +67,7 @@ if [ -z "$SELECTED_ENGINE" ]; then
 fi
 
 echo "========================================================================"
-echo " Redis Stream v7.2-official — 이미지 다운로드"
+echo " Redis Stream v8.6.2-official — 이미지 다운로드"
 echo " 사용 엔진: $SELECTED_ENGINE"
 echo "========================================================================"
 

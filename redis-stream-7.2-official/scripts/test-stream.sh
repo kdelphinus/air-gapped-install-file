@@ -30,7 +30,7 @@ if [ -z "${REGISTRY_IP}" ]; then
     echo -e "${RED}[오류] 레지스트리 IP가 필요합니다.${NC}"
     exit 1
 fi
-TEST_IMAGE="${REGISTRY_IP}:30002/library/redis:7.2-alpine3.21"
+TEST_IMAGE="${REGISTRY_IP}:30002/library/redis:8.6.2-alpine3.23"
 
 # 테스트용 Pod 생성 (--rm/-i 제거, 마지막에 명시적 삭제)
 echo "테스트 Pod 생성 중..."
