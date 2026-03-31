@@ -78,7 +78,8 @@ cd nginx-nic-5.3.1
 ./scripts/install.sh
 ```
 
-### 설치 스크립트 주요 동작:
+### 설치 스크립트 주요 동작
+
 1. `manifests/` 내의 CRD들을 `kubectl apply -k`로 설치합니다.
 2. `nginx-ingress` 네임스페이스를 생성합니다.
 3. `values.yaml` 설정을 기반으로 Helm 차트를 설치합니다.
@@ -110,8 +111,10 @@ kubectl get crd | grep nginx
 ## 🛠️ 트러블슈팅
 
 ### 1. CRD 관련 오류
+
 CRD가 먼저 설치되지 않으면 Ingress 리소스 생성 시 `no matches for kind "VirtualServer"` 등의 오류가 발생할 수 있습니다. `scripts/install.sh`를 통해 CRD가 정상적으로 설치되었는지 확인하세요.
 
 ### 2. 이미지 Pull 오류
+
 Harbor에 이미지가 정상적으로 업로드되었는지, `values.yaml`의 레지스트리 주소가 올바른지 확인하세요.
 `kubectl describe pod <pod_name> -n nginx-ingress` 명령으로 상세 사유를 확인할 수 있습니다.

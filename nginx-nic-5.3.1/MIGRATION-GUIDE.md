@@ -125,7 +125,6 @@ spec:
 ```
 
 > **주의:** VirtualServer `routes`는 구체적인 경로(`/oauth2`)를 루트 경로(`/`)보다 먼저 정의해야 합니다.
-
 > **Option A vs Option B 선택 권장:** Portal Frontend는 현재 Native Ingress(Option A) 형식으로 구성되어 있습니다. Native Ingress는 `path` 매칭 순서를 내부적으로 처리하므로 `/oauth2` 경로가 `/` 보다 먼저 처리된다는 보장이 없습니다. **`/oauth2` 경로 우선순위를 명시적으로 보장하려면 Option B(VirtualServer)로 전환하는 것을 권장합니다.**
 
 ### 3.2 API Gateway (`strato-solution-install/gateway`)
@@ -162,7 +161,6 @@ spec:
 ```
 
 > **주의 — path 형식:** path는 반드시 `/gw`처럼 단순 prefix 형태로 작성해야 합니다. `/gw(/|$)(.*)`와 같은 regex 패턴을 path에 넣으면 NIC가 `location /gw(/|$)(.*) {`(prefix 매칭)으로 생성하여 실제 URL이 절대 매칭되지 않습니다. Prefix 제거(rewrite)는 `location-snippets`의 `rewrite` 지시어에서 처리합니다.
-
 > **주의 — `nginx.org/rewrites` 혼용 금지:** `nginx.org/rewrites: serviceName=... rewrite=/` 어노테이션과 `location-snippets`의 `rewrite` 지시어를 동시에 사용하면 안 됩니다. `nginx.org/rewrites: rewrite=/`는 경로 prefix만 제거하는 것이 아니라 **전체 경로를 `/`로 치환**하므로 `/gw/strato-b-svc/...` 같은 모든 요청이 백엔드에 `/`로 전달됩니다. `location-snippets`의 `rewrite`만 사용하십시오.
 
 #### [Option B] VirtualServer (CRD 방식)
@@ -400,6 +398,7 @@ F5 NIC는 **VirtualServer와 동일한 네임스페이스에 위치한 Secret만
 각 네임스페이스에 Secret이 존재하지 않으면 NIC가 TLS 설정을 적용할 수 없습니다. 인증서 배포 방식은 아래 두 가지 중 하나를 선택합니다.
 
 - **방식 A — 네임스페이스별 Secret 복제**: 동일한 인증서를 각 네임스페이스에 별도로 생성
+
   ```bash
   kubectl get secret nhis-tls -n source-ns -o yaml \
     | sed 's/namespace: source-ns/namespace: strato-product/' \
@@ -407,6 +406,7 @@ F5 NIC는 **VirtualServer와 동일한 네임스페이스에 위치한 Secret만
   ```
 
 - **방식 B — NIC 전역 기본 TLS 설정**: NIC `values.yaml`에 `controller.defaultTLS.secret`을 지정하면 모든 VirtualServer에 공통 인증서를 적용할 수 있습니다.
+
   ```yaml
   # NIC values.yaml
   controller:
@@ -424,7 +424,7 @@ NIC는 `pathType: Prefix` 및 `pathType: ImplementationSpecific` 모두에서 pa
 
 | 설정 | 생성된 location | 매칭 여부 |
 | :--- | :--- | :--- |
-| `path: /gw(/|$)(.*)` | `location /gw(/|$)(.*) {` | `/gw/...` 매칭 안 됨 ✗ |
+| `path: /gw(/\|$)(.*)` | `location /gw(/\|$)(.*) {` | `/gw/...` 매칭 안 됨 ✗ |
 | `path: /gw` | `location /gw {` | `/gw/...` 정상 매칭 ✓ |
 
 `nginx.org/use-regex: "true"` 어노테이션은 minion Ingress에서 동작하지 않으므로 사용하지 마십시오.
