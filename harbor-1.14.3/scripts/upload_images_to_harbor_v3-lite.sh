@@ -20,9 +20,14 @@ EXEC_MODE="${EXEC_MODE:-1}"
 if [ "$EXEC_MODE" == "2" ]; then
     # Harbor 정보 입력 (모드 2인 경우에만)
     if [ -z "$HARBOR_REGISTRY" ]; then
-        echo -e "\033[1;33m[안내] 포트 번호를 반드시 포함해주세요 (예: 172.30.235.20:30002)\033[0m"
+        echo -e "${YELLOW}[안내] 포트 번호를 포함하지 않으면 기본값(30002)이 사용됩니다.${NC}"
         read -p "Harbor 레지스트리 주소 입력: " HARBOR_REGISTRY
+        if [[ ! "$HARBOR_REGISTRY" =~ : ]]; then
+            echo -e "${YELLOW}[알림] 포트가 없어서 기본 포트 :30002를 추가합니다.${NC}"
+            HARBOR_REGISTRY="${HARBOR_REGISTRY}:30002"
+        fi
     fi
+
     if [ -z "$HARBOR_PROJECT" ]; then
         read -p "Harbor 프로젝트 입력 (예: library): " HARBOR_PROJECT
     fi

@@ -1,54 +1,81 @@
 #!/bin/bash
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동
 cd "$(dirname "$0")/.." || exit 1
-set -e
 
-# containerd config.toml 에 Harbor 레지스트리 설정 추가 스크립트
+# Root 권한 체크
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
+    exit 1
+fi
+
+# ==================== 설정 ====================
 CONFIG_FILE="/etc/containerd/config.toml"
+CERTS_D_BASE="/etc/containerd/certs.d"
+# ==============================================
 
-# containerd 실행 상태 확인
-if ! systemctl is-active containerd > /dev/null 2>&1; then
-  echo "[ERROR] containerd 서비스가 실행 중이 아닙니다."
-  exit 1
-fi
+# 색상 코드
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-# Harbor 주소 입력받기 (예: 172.31.63.195:30002)
-read -p "Harbor 레지스트리 주소 (예: 172.31.63.195:30002): " HARBOR_REGISTRY
+echo "========================================================================"
+echo " 🏗️  Containerd Insecure Registry 설정 (certs.d 방식)"
+echo "========================================================================"
+
+# 1. Harbor 주소 입력
+echo -e "${YELLOW}[안내] 포트 번호가 있다면 반드시 포함해주세요 (예: 172.30.235.20:30002 또는 harbor.devops.internal)${NC}"
+read -p "Harbor 레지스트리 주소 입력: " HARBOR_REGISTRY
 if [ -z "$HARBOR_REGISTRY" ]; then
-  echo "[ERROR] 레지스트리 주소를 입력하세요!"
-  exit 1
+    echo -e "${RED}[오류] 레지스트리 주소를 입력해야 합니다.${NC}"
+    exit 1
 fi
 
-# 주소 형식 검증
-if ! [[ "$HARBOR_REGISTRY" =~ ^[a-zA-Z0-9._-]+:[0-9]+$ ]]; then
-  echo "[ERROR] 올바른 형식이 아닙니다 (예: 172.31.63.195:30002)"
-  exit 1
+# 2. config.toml 정리 (config_path 설정 최적화)
+echo "1. $CONFIG_FILE 내 config_path 설정 확인 및 정리 중..."
+
+# 백업 생성
+sudo cp "$CONFIG_FILE" "${CONFIG_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+
+# 빈 값이거나 잘못된 형식의 config_path 제거 및 표준 경로 설정
+# - 빈 값 제거 (config_path = '')
+# - 콜론(:)이 포함된 다중 경로 제거
+# - 최종적으로 표준 경로(/etc/containerd/certs.d) 하나만 남기도록 유도
+sudo sed -i "s/config_path = ''//g" "$CONFIG_FILE"
+sudo sed -i "s/config_path = \".*:.*/config_path = \"\/etc\/containerd\/certs.d\"/g" "$CONFIG_FILE"
+sudo sed -i "s/config_path = '.*:.*/config_path = '\/etc\/containerd\/certs.d'/g" "$CONFIG_FILE"
+
+# 만약 config_path 설정 자체가 없다면 (또는 위에서 지워져서 없다면) 명시적으로 추가 필요
+if ! grep -q "config_path = " "$CONFIG_FILE"; then
+    echo "   [알림] config_path 설정이 없어서 추가합니다."
+    # [plugins."io.containerd.grpc.v1.cri".registry] 섹션을 찾아서 그 아래에 추가
+    sudo sed -i '/\[plugins."io.containerd.grpc.v1.cri".registry\]/a \      config_path = "/etc/containerd/certs.d"' "$CONFIG_FILE"
 fi
 
-# 이미 설정이 있는지 확인
-if grep -q "$HARBOR_REGISTRY" "$CONFIG_FILE"; then
-  echo "[INFO] 이미 $HARBOR_REGISTRY 설정이 존재합니다. 변경하지 않음."
-else
-  # 변경이 필요한 경우에만 백업 생성
-  BACKUP_FILE="/etc/containerd/config.toml.bak.$(date +%Y%m%d%H%M%S)"
-  sudo cp "$CONFIG_FILE" "$BACKUP_FILE"
-  echo "[INFO] 기존 설정 백업: $BACKUP_FILE"
+# 3. hosts.toml 생성
+REGISTRY_DIR="${CERTS_D_BASE}/${HARBOR_REGISTRY}"
+echo "2. $REGISTRY_DIR/hosts.toml 설정 생성 중..."
 
-  # registry.mirrors 섹션 추가
-  sudo tee -a "$CONFIG_FILE" > /dev/null <<EOF
+sudo mkdir -p "$REGISTRY_DIR"
+cat <<EOF | sudo tee "${REGISTRY_DIR}/hosts.toml" > /dev/null
+server = "http://${HARBOR_REGISTRY}"
 
-[plugins."io.containerd.grpc.v1.cri".registry.mirrors."$HARBOR_REGISTRY"]
-  endpoint = ["http://$HARBOR_REGISTRY"]
-
-[plugins."io.containerd.grpc.v1.cri".registry.configs."$HARBOR_REGISTRY".tls]
-  insecure_skip_verify = true
+[host."http://${HARBOR_REGISTRY}"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true
 EOF
-  echo "[INFO] Harbor 레지스트리 설정 추가 완료: $HARBOR_REGISTRY"
-fi
 
-# containerd 재시작
-echo "[INFO] containerd 서비스 재시작..."
+echo -e "   └─ ${GREEN}[성공]${NC} ${REGISTRY_DIR}/hosts.toml 생성 완료"
+
+# 4. Containerd 재시작
+echo "3. containerd 서비스 재시작 중..."
 sudo systemctl restart containerd
 
-# 확인
-echo "[INFO] Harbor 레지스트리 설정 확인:"
-grep -A3 "$HARBOR_REGISTRY" "$CONFIG_FILE"
+echo ""
+echo "========================================================================"
+echo -e " ${GREEN}✅ 설정 완료!${NC}"
+echo "========================================================================"
+echo " [확인 명령]"
+echo " grep \"config_path\" $CONFIG_FILE"
+echo " cat ${REGISTRY_DIR}/hosts.toml"
+echo "========================================================================"

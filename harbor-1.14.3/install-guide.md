@@ -50,7 +50,7 @@ sudo ctr -n k8s.io images list | grep harbor
 
 ```bash
 chmod +x scripts/install.sh
-sudo ./scripts/install.sh
+./scripts/install.sh
 ```
 
 스크립트 실행 중 아래 항목을 인터랙티브하게 선택/입력합니다.

@@ -2,11 +2,8 @@
 # 스크립트 위치 기준으로 컴포넌트 루트로 이동 (scripts/ 하위에서 실행해도 경로 안전)
 cd "$(dirname "$0")/.." || exit 1
 
-# Root 권한 체크
-if [ "$EUID" -ne 0 ]; then
-    echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
-    exit 1
-fi
+# [수정] 스크립트 전체 Root 체크 제거 (MJKO 사용자 권한으로 kubectl 실행을 위해)
+# 이미지 로드 등 sudo가 필요한 부분은 내부적으로 sudo를 사용합니다.
 
 set -e # 오류 발생 시 즉시 스크립트 중단
 
@@ -50,8 +47,34 @@ INGRESS_CLASS="nginx"
 
 # --- 사전 요구사항 검사 함수 ---
 check_command() {
-    if ! command -v "$1" &> /dev/null; then echo "오류: '$1' 명령어를 찾을 수 없습니다."; exit 1; fi
+    if ! command -v "$1" &> /dev/null; then 
+        # 일반 PATH에서 못 찾으면 사용자 홈 디렉토리 .local/bin 에서도 시도
+        local USER_HOME=$(eval echo "~$SUDO_USER")
+        if [ -x "${USER_HOME}/.local/bin/$1" ]; then
+            alias "$1"="${USER_HOME}/.local/bin/$1"
+        else
+            echo "오류: '$1' 명령어를 찾을 수 없습니다."
+            exit 1
+        fi
+    fi
 }
+
+# 쉘 명령어 캐시 초기화
+hash -r
+
+# 명령어 경로 결정 (I/O error 방지를 위해 실제 바이너리 위치를 직접 찾아 할당)
+KUBECTL_CMD=$(command -v kubectl || which kubectl 2>/dev/null || echo "kubectl")
+HELM_CMD=$(command -v helm || which helm 2>/dev/null || echo "helm")
+
+# 만약 sudo로 실행 중이라면, 사용자의 KUBECONFIG를 상속받도록 시도
+if [ -n "$SUDO_USER" ] && [ -z "$KUBECONFIG" ]; then
+    USER_HOME=$(eval echo "~$SUDO_USER")
+    if [ -f "${USER_HOME}/.kube/config" ]; then
+        export KUBECONFIG="${USER_HOME}/.kube/config"
+    elif [ -f "/etc/rancher/k3s/k3s.yaml" ]; then
+        export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+    fi
+fi
 
 echo "Harbor 폐쇄망 설치 스크립트를 시작합니다."
 
@@ -64,9 +87,9 @@ read -p "선택 [1/2, 기본값 1]: " IMAGE_LOAD_CHOICE
 IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE:-1}"
 
 if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
-    echo "➡️ 로컬 이미지 로드 중 (ctr import)..."
+    echo "➡️ 로컬 이미지 로드 중 (sudo ctr import)..."
     if [ -f "./scripts/load_images.sh" ]; then
-        bash ./scripts/load_images.sh
+        sudo bash ./scripts/load_images.sh
     else
         for tar_file in ./images/*.tar; do
             [ -e "$tar_file" ] || continue
@@ -89,21 +112,20 @@ fi
 
 # EXTERNAL_HOSTNAME 미설정 시 자동 감지 또는 입력 프롬프트
 if [ -z "$EXTERNAL_HOSTNAME" ]; then
-    # 1번(로컬 로드) 선택 시 현재 노드 IP 자동 감지 및 자동 할당
+    # 1번(로컬 로드) 선택 시 현재 노드 IP 자동 감지 시도
     if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
-        # 첫 번째 노드의 InternalIP 감지
         DETECTED_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')
         if [ -z "$DETECTED_IP" ]; then
             DETECTED_IP=$(hostname -I | awk '{print $1}')
         fi
         
-        if [ -n "$DETECTED_IP" ]; then
-            EXTERNAL_HOSTNAME="$DETECTED_IP"
-            echo "➡️ 로컬 설치 모드: 접속 주소를 자동 감지된 IP(${EXTERNAL_HOSTNAME})로 설정합니다."
-        fi
+        echo -e "${YELLOW}➡️ Harbor 접속 주소(Domain 또는 VIP)를 입력해주세요.${NC}"
+        echo -e "${YELLOW}   (예: harbor.devops.internal 또는 직접 NodePort 사용 시 172.30.235.20:30002)${NC}"
+        read -p "Harbor 접속 주소 [기본값: ${DETECTED_IP}]: " INPUT_HOSTNAME
+        EXTERNAL_HOSTNAME="${INPUT_HOSTNAME:-$DETECTED_IP}"
     fi
 
-    # 여전히 비어있으면 (2번 선택 시 또는 감지 실패 시) 입력 프롬프트 표시
+    # 여전히 비어있으면 입력 프롬프트 표시
     if [ -z "$EXTERNAL_HOSTNAME" ]; then
         read -p "Harbor 외부 접속 IP 또는 도메인을 입력하세요: " EXTERNAL_HOSTNAME_INPUT
         EXTERNAL_HOSTNAME="$EXTERNAL_HOSTNAME_INPUT"
