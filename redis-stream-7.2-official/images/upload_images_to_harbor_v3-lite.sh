@@ -16,15 +16,31 @@ cd "$(dirname "$0")/.." || exit 1
 ################################################################################
 
 # ==================== 설정 ====================
-HARBOR_REGISTRY="${HARBOR_REGISTRY:-<NODE_IP>:30002}"
-HARBOR_PROJECT="${HARBOR_PROJECT:-library}"
-HARBOR_USER="${HARBOR_USER:-admin}"
-if [ -z "$HARBOR_PASSWORD" ]; then
-    read -sp "Harbor 비밀번호를 입력하세요: " HARBOR_PASSWORD; echo
+# 0. 실행 모드 선택
+echo ""
+echo "실행 모드를 선택하세요:"
+echo "  1) 로컬 이미지 로드 전용 (ctr import)"
+echo "  2) 하버 레지스트리로 업로드 (Import + Tag + Push)"
+read -p "선택 [1/2, 기본값 1]: " EXEC_MODE
+EXEC_MODE="${EXEC_MODE:-1}"
+
+if [ "$EXEC_MODE" == "2" ]; then
+    # Harbor 정보 입력 (모드 2인 경우에만)
+    if [ -z "$HARBOR_REGISTRY" ]; then
+        read -p "Harbor 레지스트리 주소 입력 (예: 192.168.1.10:30002): " HARBOR_REGISTRY
+    fi
+    if [ -z "$HARBOR_PROJECT" ]; then
+        read -p "Harbor 프로젝트 입력 (예: library): " HARBOR_PROJECT
+    fi
+    HARBOR_USER="${HARBOR_USER:-admin}"
+    if [ -z "$HARBOR_PASSWORD" ]; then
+        read -sp "Harbor 비밀번호를 입력하세요: " HARBOR_PASSWORD; echo
+    fi
 fi
+
 CTR_NAMESPACE="k8s.io"
 IMAGE_DIR="./images"
-USE_PLAIN_HTTP="false"
+USE_PLAIN_HTTP="true"
 TARGET_PLATFORM="linux/amd64" # 고정
 # ==============================================
 
@@ -62,6 +78,11 @@ for tar_file in "$IMAGE_DIR"/*.tar; do
             echo -e "${RED}[실패]${NC}"
             continue
         fi
+    fi
+
+    # 2. 태그 추출 및 업로드 (모드 2인 경우에만 수행)
+    if [ "$EXEC_MODE" == "1" ]; then
+        continue
     fi
 
     # 2. 태그 추출 (jq 없이 표준 도구만 사용)

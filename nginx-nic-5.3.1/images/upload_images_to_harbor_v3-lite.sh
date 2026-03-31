@@ -17,8 +17,23 @@ set -e
 ################################################################################
 
 # ==================== 설정 ====================
-HARBOR_REGISTRY="${HARBOR_REGISTRY:-<NODE_IP>:30002}"
-HARBOR_PROJECT="${HARBOR_PROJECT:-library}"
+# 환경변수로 사전 설정하거나, 미설정 시 아래 대화형 입력으로 처리됩니다.
+# 예) HARBOR_REGISTRY=192.168.1.10:30002 ./upload_images_to_harbor_v3-lite.sh
+# 예) HARBOR_REGISTRY=harbor.example.com ./upload_images_to_harbor_v3-lite.sh
+if [ -z "$HARBOR_REGISTRY" ]; then
+    read -p "Harbor 레지스트리 주소 입력 (예: 192.168.1.10:30002 또는 harbor.example.com): " HARBOR_REGISTRY
+    if [ -z "$HARBOR_REGISTRY" ]; then
+        echo "[오류] Harbor 레지스트리 주소가 필요합니다."
+        exit 1
+    fi
+fi
+if [ -z "$HARBOR_PROJECT" ]; then
+    read -p "Harbor 프로젝트 입력 (예: library, oss): " HARBOR_PROJECT
+    if [ -z "$HARBOR_PROJECT" ]; then
+        echo "[오류] Harbor 프로젝트가 필요합니다."
+        exit 1
+    fi
+fi
 HARBOR_USER="${HARBOR_USER:-admin}"
 if [ -z "$HARBOR_PASSWORD" ]; then
     read -sp "Harbor 비밀번호를 입력하세요: " HARBOR_PASSWORD; echo
