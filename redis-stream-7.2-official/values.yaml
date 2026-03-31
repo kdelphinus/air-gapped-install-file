@@ -41,6 +41,21 @@ redis:
     # Stream 전체 크기 제한이 아님. 쓰기 성능/메모리 효율 조정용.
     streamNodeMaxBytes: 4096
     streamNodeMaxEntries: 100
+    # ---------------------------------------------------------------
+    # 영속성 설정 (Hybrid 모드 — AOF + RDB preamble)
+    # ---------------------------------------------------------------
+    # [참고] appendonly / appendfsync / aof-use-rdb-preamble / save 는
+    # charts/redis-sentinel/templates/configmap-redis.yaml 에 하드코딩됨.
+    # 아래 항목만 values.yaml 에서 오버라이드 가능.
+    # ---------------------------------------------------------------
+    # no-appendfsync-on-rewrite: AOF Rewrite 중 fsync 유예 — Rewrite 병목 방지.
+    noAppendfsyncOnRewrite: "yes"
+    # auto-aof-rewrite-percentage: 직전 Rewrite 이후 파일 크기가 이 비율만큼 증가하면 자동 Rewrite.
+    # 미설정 시 AOF 파일이 무한 증가하므로 반드시 설정.
+    autoAofRewritePercentage: "100"
+    # auto-aof-rewrite-min-size: Rewrite를 허용하는 최소 AOF 파일 크기.
+    # 너무 작은 파일에서 빈번한 Rewrite를 방지.
+    autoAofRewriteMinSize: "64mb"
 
   resources:
     requests:

@@ -14,13 +14,16 @@ data:
     protected-mode no
     port 6379
 
-    # AOF 활성화
+    # 영속성 설정 (Hybrid 모드: AOF + RDB preamble)
     appendonly yes
     appendfsync everysec
     appendfilename "appendonly.aof"
     aof-use-rdb-preamble yes
+    no-appendfsync-on-rewrite {{ .Values.redis.config.noAppendfsyncOnRewrite }}
+    auto-aof-rewrite-percentage {{ .Values.redis.config.autoAofRewritePercentage }}
+    auto-aof-rewrite-min-size {{ .Values.redis.config.autoAofRewriteMinSize }}
 
-    # RDB 비활성화
+    # RDB 비활성화 (Hybrid 모드에서 AOF가 RDB 스냅샷을 포함하므로 별도 RDB 불필요)
     save ""
 
     # 메모리 설정

@@ -32,6 +32,10 @@ redis:
     maxmemoryPolicy: noeviction
     streamNodeMaxBytes: 4096
     streamNodeMaxEntries: 100
+    # AOF Rewrite 자동화 (미설정 시 AOF 파일 무한 증가)
+    noAppendfsyncOnRewrite: "yes"
+    autoAofRewritePercentage: "100"
+    autoAofRewriteMinSize: "64mb"
 
   resources:
     requests:
