@@ -1,12 +1,12 @@
 #!/bin/bash
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동
+cd "$(dirname "$0")/.." || exit 1
 
 # Root 권한 체크
 if [ "$EUID" -ne 0 ]; then
     echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
     exit 1
 fi
-# 스크립트 위치 기준으로 컴포넌트 루트로 이동
-cd "$(dirname "$0")/.." || exit 1
 
 # ==================== 설정 ====================
 # 0. 실행 모드 선택
@@ -20,14 +20,13 @@ EXEC_MODE="${EXEC_MODE:-1}"
 if [ "$EXEC_MODE" == "2" ]; then
     # Harbor 정보 입력 (모드 2인 경우에만)
     if [ -z "$HARBOR_REGISTRY" ]; then
-        echo -e "${YELLOW}[안내] 포트 번호를 포함하지 않으면 기본값(30002)이 사용됩니다.${NC}"
+        echo -e "\033[1;33m[안내] 포트 번호를 생략하면 기본값(:30002)이 사용됩니다.\033[0m"
         read -p "Harbor 레지스트리 주소 입력: " HARBOR_REGISTRY
-        if [[ ! "$HARBOR_REGISTRY" =~ : ]]; then
-            echo -e "${YELLOW}[알림] 포트가 없어서 기본 포트 :30002를 추가합니다.${NC}"
+        if [ -n "$HARBOR_REGISTRY" ] && [[ ! "$HARBOR_REGISTRY" =~ : ]]; then
+            echo -e "\033[1;33m[알림] 포트가 없어서 기본 포트 :30002를 추가합니다.\033[0m"
             HARBOR_REGISTRY="${HARBOR_REGISTRY}:30002"
         fi
     fi
-
     if [ -z "$HARBOR_PROJECT" ]; then
         read -p "Harbor 프로젝트 입력 (예: library): " HARBOR_PROJECT
     fi
@@ -63,7 +62,7 @@ if [ "$USE_PLAIN_HTTP" = "true" ]; then
 fi
 
 echo "========================================================================"
-echo " 🏗️  이미지 마이그레이션 v3.1-Lite (Air-Gapped & Space Handling)"
+echo " 🏗️  이미지 마이그레이션 v3.2-Lite (Port Auto-Fix & Root Check)"
 echo "========================================================================"
 
 for tar_file in "$IMAGE_DIR"/*.tar*; do
