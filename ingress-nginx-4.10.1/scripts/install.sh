@@ -17,6 +17,39 @@ HELM_CHART_PATH="./charts/ingress-nginx"
 # 3. 고급 설정
 HELM_CHART_VERSION="4.10.1"
 
+# ── 이미지 소스 선택 ──────────────────────────────────────────
+echo ""
+echo "이미지 소스를 선택하세요:"
+echo "  1) Harbor 레지스트리 사용 (사전에 upload_images_to_harbor_v3-lite.sh 실행 필요)"
+echo "  2) 로컬 tar 직접 import (Harbor 없음)"
+read -p "선택 [1/2, 기본값: 1]: " IMAGE_SOURCE
+IMAGE_SOURCE="${IMAGE_SOURCE:-1}"
+
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    read -p "Harbor 레지스트리 주소 (예: 192.168.1.10:30002 또는 harbor.example.com): " IMAGE_REGISTRY
+    if [ -z "${IMAGE_REGISTRY}" ]; then
+        echo "[오류] Harbor 레지스트리 주소가 필요합니다."; exit 1
+    fi
+    read -p "Harbor 프로젝트 (예: library, oss): " HARBOR_PROJECT
+    if [ -z "${HARBOR_PROJECT}" ]; then
+        echo "[오류] Harbor 프로젝트가 필요합니다."; exit 1
+    fi
+elif [ "${IMAGE_SOURCE}" = "2" ]; then
+    echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
+    IMPORT_COUNT=0
+    for tar_file in ./images/*.tar; do
+        [ -e "${tar_file}" ] || continue
+        echo "  → $(basename "${tar_file}")"
+        ctr -n k8s.io images import "${tar_file}"
+        IMPORT_COUNT=$((IMPORT_COUNT + 1))
+    done
+    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
+    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    IMAGE_REGISTRY=""
+    HARBOR_PROJECT=""
+else
+    echo "[오류] 1 또는 2를 선택하세요."; exit 1
+fi
 
 # =================================================================
 # --- 메인 스크립트 로직 ---
@@ -77,12 +110,26 @@ HOST_PORT_HTTP=${HOST_PORT_HTTP:-80}
 read -p "사용할 HTTPS hostPort를 입력하세요 [기본값: 443]: " HOST_PORT_HTTPS
 HOST_PORT_HTTPS=${HOST_PORT_HTTPS:-443}
 
+# Harbor 사용 시에만 이미지 레지스트리/프로젝트 오버라이드
+HELM_IMAGE_ARGS=()
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    HELM_IMAGE_ARGS=(
+        "--set" "controller.image.registry=${IMAGE_REGISTRY}"
+        "--set" "controller.image.image=${HARBOR_PROJECT}/controller"
+        "--set" "controller.admissionWebhooks.patch.image.registry=${IMAGE_REGISTRY}"
+        "--set" "controller.admissionWebhooks.patch.image.image=${HARBOR_PROJECT}/kube-webhook-certgen"
+        "--set" "defaultBackend.image.registry=${IMAGE_REGISTRY}"
+        "--set" "defaultBackend.image.image=${HARBOR_PROJECT}/defaultbackend-amd64"
+    )
+fi
+
 helm upgrade --install "$RELEASE_NAME" "$HELM_CHART_PATH" \
 --version "$HELM_CHART_VERSION" \
 --namespace "$NAMESPACE" \
 --atomic \
 --wait \
 -f ./values.yaml \
+"${HELM_IMAGE_ARGS[@]}" \
 --set controller.image.pullPolicy=IfNotPresent \
 --set controller.admissionWebhooks.patch.image.pullPolicy=IfNotPresent \
 --set defaultBackend.image.pullPolicy=IfNotPresent \
@@ -95,7 +142,7 @@ helm upgrade --install "$RELEASE_NAME" "$HELM_CHART_PATH" \
 --set controller.hostPort.ports.https=$HOST_PORT_HTTPS \
 `# ----------------- 노드명 직접 고정 설정 ----------------- #` \
 --set controller.nodeSelector."kubernetes\.io/hostname"="$TARGET_NODE_NAME" \
---set controller.config.ssl-redirect="false" 
+--set controller.config.ssl-redirect="false"
 
 # 6. 설치 완료 및 확인
 echo ""

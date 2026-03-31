@@ -3,9 +3,39 @@
 cd "$(dirname "$0")/.." || exit 1
 
 # ==================== Config ====================
-# Harbor Registry
-HARBOR_REGISTRY="harbor.example.com:8443"
-HARBOR_PROJECT="example-project"
+# ── 이미지 소스 선택 ──────────────────────────────────────────
+echo ""
+echo "이미지 소스를 선택하세요:"
+echo "  1) Harbor 레지스트리 사용 (사전에 upload_images_to_harbor_v3-lite.sh 실행 필요)"
+echo "  2) 로컬 tar 직접 import (Harbor 없음)"
+read -p "선택 [1/2, 기본값: 1]: " IMAGE_SOURCE
+IMAGE_SOURCE="${IMAGE_SOURCE:-1}"
+
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    read -p "Harbor 레지스트리 주소 (예: 192.168.1.10:30002 또는 harbor.example.com): " HARBOR_REGISTRY
+    if [ -z "${HARBOR_REGISTRY}" ]; then
+        echo "[오류] Harbor 레지스트리 주소가 필요합니다."; exit 1
+    fi
+    read -p "Harbor 프로젝트 (예: library, oss): " HARBOR_PROJECT
+    if [ -z "${HARBOR_PROJECT}" ]; then
+        echo "[오류] Harbor 프로젝트가 필요합니다."; exit 1
+    fi
+elif [ "${IMAGE_SOURCE}" = "2" ]; then
+    echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
+    IMPORT_COUNT=0
+    for tar_file in ./images/*.tar; do
+        [ -e "${tar_file}" ] || continue
+        echo "  → $(basename "${tar_file}")"
+        ctr -n k8s.io images import "${tar_file}"
+        IMPORT_COUNT=$((IMPORT_COUNT + 1))
+    done
+    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
+    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    HARBOR_REGISTRY=""
+    HARBOR_PROJECT=""
+else
+    echo "[오류] 1 또는 2를 선택하세요."; exit 1
+fi
 
 # Storage: "none" | "nas" | "hostpath"
 STORAGE_TYPE="hostpath"
@@ -54,7 +84,7 @@ NAS_PV_FILE="./manifests/nas-pv.yaml"
 echo "==========================================="
 echo " Installing ArgoCD 2.12.1 (Offline)"
 echo "==========================================="
-echo " Harbor : ${HARBOR_REGISTRY}/${HARBOR_PROJECT}"
+echo " Image Source: ${IMAGE_SOURCE} (Harbor: ${HARBOR_REGISTRY}/${HARBOR_PROJECT})"
 echo " Storage: ${STORAGE_TYPE}"
 echo "==========================================="
 
@@ -73,23 +103,30 @@ if [ "$STORAGE_TYPE" = "nas" ]; then
 fi
 
 # ---- Build helm --set args for Harbor image paths ----
-ARGOCD_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/argocd"
-REDIS_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/redis"
-HAPROXY_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/haproxy"
-
 PROTOCOL="http"
 [ "$TLS_ENABLED" = "true" ] && PROTOCOL="https"
 
+# Harbor 사용 시에만 이미지 레지스트리/프로젝트 오버라이드
+HELM_IMAGE_ARGS=()
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    ARGOCD_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/argocd"
+    REDIS_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/redis"
+    HAPROXY_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/haproxy"
+    HELM_IMAGE_ARGS=(
+        --set "global.image.repository=${ARGOCD_IMAGE}"
+        --set "server.image.repository=${ARGOCD_IMAGE}"
+        --set "repoServer.image.repository=${ARGOCD_IMAGE}"
+        --set "controller.image.repository=${ARGOCD_IMAGE}"
+        --set "applicationSet.image.repository=${ARGOCD_IMAGE}"
+        --set "notifications.image.repository=${ARGOCD_IMAGE}"
+        --set "redis.image.repository=${REDIS_IMAGE}"
+        --set "haproxy.image.repository=${HAPROXY_IMAGE}"
+    )
+fi
+
 HELM_SET_ARGS=(
     --set "configs.cm.url=${PROTOCOL}://${DOMAIN}"
-    --set "global.image.repository=${ARGOCD_IMAGE}"
-    --set "server.image.repository=${ARGOCD_IMAGE}"
-    --set "repoServer.image.repository=${ARGOCD_IMAGE}"
-    --set "controller.image.repository=${ARGOCD_IMAGE}"
-    --set "applicationSet.image.repository=${ARGOCD_IMAGE}"
-    --set "notifications.image.repository=${ARGOCD_IMAGE}"
-    --set "redis.image.repository=${REDIS_IMAGE}"
-    --set "haproxy.image.repository=${HAPROXY_IMAGE}"
+    "${HELM_IMAGE_ARGS[@]}"
 )
 
 # ---- Build helm --set args for Storage ----

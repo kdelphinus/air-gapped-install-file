@@ -13,8 +13,41 @@ HTTPROUTE_FILE="./manifests/gitlab-httproutes.yaml"
 VALUES_FILE="./values.yaml"
 NODE_LABEL_KEY="gitlab-node"
 NODE_LABEL_VALUE="true"
-HARBOR_REGISTRY="harbor.test.com:30002"  # Harbor 주소
-HARBOR_PROJECT="cmp"           # Harbor 프로젝트 명
+
+# ── 이미지 소스 선택 ──────────────────────────────────────────
+echo ""
+echo "이미지 소스를 선택하세요:"
+echo "  1) Harbor 레지스트리 사용 (사전에 upload_images_to_harbor_v3-lite.sh 실행 필요)"
+echo "  2) 로컬 tar 직접 import (Harbor 없음)"
+read -p "선택 [1/2, 기본값: 1]: " IMAGE_SOURCE
+IMAGE_SOURCE="${IMAGE_SOURCE:-1}"
+
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    read -p "Harbor 레지스트리 주소 (예: 192.168.1.10:30002 또는 harbor.example.com): " HARBOR_REGISTRY
+    if [ -z "${HARBOR_REGISTRY}" ]; then
+        echo "[오류] Harbor 레지스트리 주소가 필요합니다."; exit 1
+    fi
+    read -p "Harbor 프로젝트 (예: library, oss): " HARBOR_PROJECT
+    if [ -z "${HARBOR_PROJECT}" ]; then
+        echo "[오류] Harbor 프로젝트가 필요합니다."; exit 1
+    fi
+elif [ "${IMAGE_SOURCE}" = "2" ]; then
+    echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
+    IMPORT_COUNT=0
+    for tar_file in ./images/*.tar; do
+        [ -e "${tar_file}" ] || continue
+        echo "  → $(basename "${tar_file}")"
+        ctr -n k8s.io images import "${tar_file}"
+        IMPORT_COUNT=$((IMPORT_COUNT + 1))
+    done
+    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
+    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    HARBOR_REGISTRY=""
+    HARBOR_PROJECT=""
+else
+    echo "[오류] 1 또는 2를 선택하세요."; exit 1
+fi
+
 DOMAIN="gitlab.devops.internal" # CoreDNS 등록 도메인, "" 이면 건너뜀
 
 echo "========================================================"
@@ -134,15 +167,16 @@ fi
 # ==========================================
 IMAGE_VALUES_FILE="gitlab-images-override.yaml"
 
-echo ""
-echo "⚙️  [자동화] Harbor 이미지 설정을 위한 '$IMAGE_VALUES_FILE' 생성 중..."
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    echo ""
+    echo "⚙️  [자동화] Harbor 이미지 설정을 위한 '$IMAGE_VALUES_FILE' 생성 중..."
 
-cat <<EOF > $IMAGE_VALUES_FILE
+    cat <<EOF > $IMAGE_VALUES_FILE
 global:
   image:
     registry: ${HARBOR_REGISTRY}
     pullPolicy: IfNotPresent
-  
+
   # 공통 Helper 이미지
   kubectl:
     image:
@@ -162,7 +196,7 @@ gitlab:
     # [수정] Workhorse 이미지 추가
     workhorse:
       image: "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/gitlab-workhorse-ce"
-      
+
   sidekiq:
     image:
       repository: ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/gitlab-sidekiq-ce
@@ -250,7 +284,12 @@ upgradeCheck:
     repository: ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/gitlab-base
 EOF
 
-echo "✅ 이미지 설정 파일 생성 완료."
+    echo "✅ 이미지 설정 파일 생성 완료."
+else
+    echo ""
+    echo "ℹ️  로컬 import 모드 — '$IMAGE_VALUES_FILE' 생성을 건너뜁니다."
+    IMAGE_VALUES_FILE=""
+fi
 
 # ==========================================
 # 4. Helm 배포
@@ -263,14 +302,21 @@ if [ ! -f "$VALUES_FILE" ]; then
     exit 1
 fi
 
-echo "   Applying Images from: $IMAGE_VALUES_FILE"
+# 이미지 values 파일 인자 조건부 구성
+IMAGE_VALUES_ARG=""
+if [ -n "$IMAGE_VALUES_FILE" ]; then
+    echo "   Applying Images from: $IMAGE_VALUES_FILE"
+    IMAGE_VALUES_ARG="-f $IMAGE_VALUES_FILE"
+else
+    echo "   Image Values: 로컬 import 모드 (이미지 오버라이드 없음)"
+fi
 
 # 노드 선택 여부에 따른 로그 출력
 if [ -n "$NODE_SELECTOR_ARGS" ]; then
     echo "   Target Node Label: $NODE_LABEL_KEY=$NODE_LABEL_VALUE"
     helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f $VALUES_FILE \
-    -f $IMAGE_VALUES_FILE \
+    $IMAGE_VALUES_ARG \
     --namespace $NAMESPACE \
     --timeout 600s \
     $NODE_SELECTOR_ARGS
@@ -278,7 +324,7 @@ else
     echo "   Node Selector: None (Automatic Scheduling)"
     helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f $VALUES_FILE \
-    -f $IMAGE_VALUES_FILE \
+    $IMAGE_VALUES_ARG \
     --namespace $NAMESPACE \
     --timeout 600s
 fi

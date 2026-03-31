@@ -15,14 +15,40 @@ echo "======================================================"
 echo "1. Namespace 생성 및 확인 중..."
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-# 2. Harbor 레지스트리 IP 입력
+# 2. 이미지 소스 선택
+# ── 이미지 소스 선택 ──────────────────────────────────────────
 echo ""
-read -p "Harbor 레지스트리 노드 IP 입력 (예: 192.168.1.10): " REGISTRY_IP
-if [ -z "${REGISTRY_IP}" ]; then
-    echo "[오류] Harbor 노드 IP가 필요합니다."
-    exit 1
+echo "이미지 소스를 선택하세요:"
+echo "  1) Harbor 레지스트리 사용 (사전에 upload_images_to_harbor_v3-lite.sh 실행 필요)"
+echo "  2) 로컬 tar 직접 import (Harbor 없음)"
+read -p "선택 [1/2, 기본값: 1]: " IMAGE_SOURCE
+IMAGE_SOURCE="${IMAGE_SOURCE:-1}"
+
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    read -p "Harbor 레지스트리 주소 (예: 192.168.1.10:30002 또는 harbor.example.com): " IMAGE_REGISTRY
+    if [ -z "${IMAGE_REGISTRY}" ]; then
+        echo "[오류] Harbor 레지스트리 주소가 필요합니다."; exit 1
+    fi
+    read -p "Harbor 프로젝트 (예: library, oss): " HARBOR_PROJECT
+    if [ -z "${HARBOR_PROJECT}" ]; then
+        echo "[오류] Harbor 프로젝트가 필요합니다."; exit 1
+    fi
+elif [ "${IMAGE_SOURCE}" = "2" ]; then
+    echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
+    IMPORT_COUNT=0
+    for tar_file in ./images/*.tar; do
+        [ -e "${tar_file}" ] || continue
+        echo "  → $(basename "${tar_file}")"
+        ctr -n k8s.io images import "${tar_file}"
+        IMPORT_COUNT=$((IMPORT_COUNT + 1))
+    done
+    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
+    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    IMAGE_REGISTRY=""
+    HARBOR_PROJECT=""
+else
+    echo "[오류] 1 또는 2를 선택하세요."; exit 1
 fi
-IMAGE_REGISTRY="${REGISTRY_IP}:30002"
 
 # 3. Redis 비밀번호 입력
 echo ""
@@ -57,6 +83,36 @@ if [ "${STORAGE_TYPE}" = "hostpath" ]; then
 
     echo "   노드: ${NODE_NAME}, 경로: ${HOST_BASE_PATH}"
     echo ""
+
+    # 기존 PV 존재 여부 및 경로 체크 (Immutable 필드 대응)
+    for i in 0 1 2; do
+        PV_NAME="redis-official-node-${i}-pv"
+        EXISTING_PATH=$(kubectl get pv "${PV_NAME}" -o jsonpath='{.spec.hostPath.path}' 2>/dev/null || echo "")
+        if [ -n "${EXISTING_PATH}" ]; then
+            if [ "${EXISTING_PATH}" = "${HOST_BASE_PATH}/node-${i}" ]; then
+                echo "   [확인] 기존 PV(${PV_NAME})가 동일한 경로(${EXISTING_PATH})로 존재합니다."
+                read -p "   기존 PV를 재사용하시겠습니까? 재생성하려면 N [Y/n]: " REUSE_PV_CONFIRM
+                if [ "${REUSE_PV_CONFIRM}" = "n" ] || [ "${REUSE_PV_CONFIRM}" = "N" ]; then
+                    echo "   기존 PV(${PV_NAME}) 삭제 중..."
+                    kubectl delete pv "${PV_NAME}" --wait=false
+                else
+                    echo "   기존 PV(${PV_NAME}) 재사용합니다."
+                fi
+            else
+                echo "   [경고] 기존 PV(${PV_NAME})의 경로(${EXISTING_PATH})가 입력한 경로(${HOST_BASE_PATH}/node-${i})와 다릅니다."
+                echo "          PV 경로는 생성 후 수정할 수 없습니다 (Immutable)."
+                read -p "   기존 PV를 삭제하고 새로 생성하시겠습니까? (기존 데이터는 호스트에 보존됨) [y/N]: " DELETE_PV_CONFIRM
+                if [ "${DELETE_PV_CONFIRM}" = "y" ] || [ "${DELETE_PV_CONFIRM}" = "Y" ]; then
+                    echo "   기존 PV(${PV_NAME}) 삭제 중..."
+                    kubectl delete pv "${PV_NAME}" --wait=false
+                else
+                    echo "[오류] 경로를 변경하려면 기존 PV를 수동으로 삭제하거나 동일한 경로를 사용해야 합니다."
+                    exit 1
+                fi
+            fi
+        fi
+    done
+
     echo "   [주의] 노드(${NODE_NAME})에서 다음 명령을 미리 실행하세요:"
     echo "     mkdir -p ${HOST_BASE_PATH}/{node-0,node-1,node-2}"
     echo "     chmod 777 ${HOST_BASE_PATH}/{node-0,node-1,node-2}"
@@ -100,10 +156,19 @@ fi
 echo ""
 echo "3. Helm Chart 배포 중..."
 
+# Harbor 사용 시에만 이미지 레지스트리/프로젝트 오버라이드
+HELM_IMAGE_ARGS=()
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    HELM_IMAGE_ARGS=(
+        "--set" "global.imageRegistry=${IMAGE_REGISTRY}"
+        "--set" "image.repository=${HARBOR_PROJECT}/redis"
+    )
+fi
+
 helm upgrade --install ${RELEASE_NAME} charts/redis-sentinel \
     --namespace ${NAMESPACE} \
     -f values.yaml \
-    --set global.imageRegistry="${IMAGE_REGISTRY}" \
+    "${HELM_IMAGE_ARGS[@]}" \
     --set redis.password="${REDIS_PASSWORD}" \
     --set storage.type="${STORAGE_TYPE}" \
     --set storage.size="${STORAGE_SIZE}" \

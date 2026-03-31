@@ -1,27 +1,54 @@
 #!/bin/bash
 cd "$(dirname "$0")/.." || exit 1
 
-# ==========================================================
-# [사용자 설정] 설치 전 Harbor(NODE) IP와 Project명을 입력하세요.
-# ==========================================================
-HARBOR_IP="<실제_HARBOR_IP>" 
-HARBOR_PROJECT="library"
-# ==========================================================
-
 NAMESPACE="velero"
 RELEASE_NAME="velero"
 CHART_PATH="./charts/velero"
 VALUES_FILE="./values.yaml"
 
-# IP 설정 확인
-if [[ "$HARBOR_IP" == "<실제_HARBOR_IP>" ]]; then
-    echo "❌ 에러: scripts/install.sh 파일 상단의 HARBOR_IP 변수를 실제 서버 IP로 수정해주세요."
-    exit 1
+# ── 이미지 소스 선택 ──────────────────────────────────────────
+echo ""
+echo "이미지 소스를 선택하세요:"
+echo "  1) Harbor 레지스트리 사용 (사전에 upload_images_to_harbor_v3-lite.sh 실행 필요)"
+echo "  2) 로컬 tar 직접 import (Harbor 없음)"
+read -p "선택 [1/2, 기본값: 1]: " IMAGE_SOURCE
+IMAGE_SOURCE="${IMAGE_SOURCE:-1}"
+
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    read -p "Harbor 레지스트리 주소 (예: 192.168.1.10:30002 또는 harbor.example.com): " HARBOR_IP
+    if [ -z "${HARBOR_IP}" ]; then
+        echo "[오류] Harbor 레지스트리 주소가 필요합니다."; exit 1
+    fi
+    read -p "Harbor 프로젝트 (예: library, oss): " HARBOR_PROJECT
+    if [ -z "${HARBOR_PROJECT}" ]; then
+        echo "[오류] Harbor 프로젝트가 필요합니다."; exit 1
+    fi
+elif [ "${IMAGE_SOURCE}" = "2" ]; then
+    echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
+    IMPORT_COUNT=0
+    for tar_file in ./images/*.tar; do
+        [ -e "${tar_file}" ] || continue
+        echo "  → $(basename "${tar_file}")"
+        ctr -n k8s.io images import "${tar_file}"
+        IMPORT_COUNT=$((IMPORT_COUNT + 1))
+    done
+    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
+    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    HARBOR_IP=""
+    HARBOR_PROJECT=""
+else
+    echo "[오류] 1 또는 2를 선택하세요."; exit 1
 fi
 
-echo "🔧 Preparing manifests and values with Harbor IP: $HARBOR_IP, Project: $HARBOR_PROJECT..."
-sed -e "s/<NODE_IP>/$HARBOR_IP/g" -e "s/<PROJECT>/$HARBOR_PROJECT/g" manifests/minio.yaml > manifests/minio-temp.yaml
-sed -e "s/<NODE_IP>/$HARBOR_IP/g" -e "s/<PROJECT>/$HARBOR_PROJECT/g" "$VALUES_FILE" > ./values-temp.yaml
+if [ "${IMAGE_SOURCE}" = "1" ]; then
+    echo "🔧 Preparing manifests and values with Harbor IP: $HARBOR_IP, Project: $HARBOR_PROJECT..."
+    sed -e "s/<NODE_IP>/$HARBOR_IP/g" -e "s/<PROJECT>/$HARBOR_PROJECT/g" manifests/minio.yaml > manifests/minio-temp.yaml
+    sed -e "s/<NODE_IP>/$HARBOR_IP/g" -e "s/<PROJECT>/$HARBOR_PROJECT/g" "$VALUES_FILE" > ./values-temp.yaml
+else
+    echo "🔧 로컬 import 모드 — values 파일을 그대로 사용합니다."
+    cp manifests/minio.yaml manifests/minio-temp.yaml
+    cp "$VALUES_FILE" ./values-temp.yaml
+fi
 
 echo "🚀 Creating Velero S3 credentials secret (with Helm ownership)..."
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
