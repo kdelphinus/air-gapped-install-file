@@ -1,4 +1,11 @@
 #!/bin/bash
+
+# Root 권한 체크
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
+    exit 1
+fi
+
 # 스크립트 위치 기준으로 컴포넌트 루트로 이동 (scripts/ 하위에서 실행해도 경로 안전)
 cd "$(dirname "$0")/.." || exit 1
 

@@ -1,4 +1,11 @@
 #!/bin/bash
+
+# Root 권한 체크
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
+    exit 1
+fi
+
 # [폐쇄망] 컨테이너 이미지 로드 스크립트
 # Docker 또는 Containerd(ctr) 환경을 감지하여 이미지를 로드합니다.
 

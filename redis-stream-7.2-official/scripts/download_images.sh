@@ -1,4 +1,11 @@
 #!/bin/bash
+
+# Root 권한 체크
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
+    exit 1
+fi
+
 # 인터넷 연결 환경에서 실행하는 이미지 다운로드 스크립트
 # 기본 엔진: ctr (containerd)
 # 지원 인자: --engine [ctr|docker|skopeo], --help

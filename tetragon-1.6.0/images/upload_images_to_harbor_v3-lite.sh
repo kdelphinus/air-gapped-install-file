@@ -1,38 +1,47 @@
 #!/bin/bash
 
-################################################################################
-# Tar 이미지 일괄 업로드 스크립트 (v3-Lite: 폐쇄망 최적화 버전)
-# 
-# [주요 특징]
-# 1. 의존성 최소화: jq 없이 표준 도구(grep, sed, awk, tr)만 사용하여 폐쇄망 대응
-# 2. 공백 이름 대응: 이미지 이름에 공백이 있어도 while read 루프로 안전하게 처리
-# 3. 규격 자동 보정: Harbor 업로드 시 이름의 공백을 하이픈(-)으로 자동 치환
-# 4. 멀티 아키텍처 대응: ctr convert를 통해 amd64 단일 이미지로 Flattening 수행
-################################################################################
+# Root 권한 체크
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
+    exit 1
+fi
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동
+cd "$(dirname "$0")/.." || exit 1
 
 # ==================== 설정 ====================
-# 환경변수로 사전 설정하거나, 미설정 시 아래 대화형 입력으로 처리됩니다.
-# 예) HARBOR_REGISTRY=192.168.1.10:30002 ./upload_images_to_harbor_v3-lite.sh
-# 예) HARBOR_REGISTRY=harbor.example.com ./upload_images_to_harbor_v3-lite.sh
-if [ -z "$HARBOR_REGISTRY" ]; then
-    read -p "Harbor 레지스트리 주소 입력 (예: 192.168.1.10:30002 또는 harbor.example.com): " HARBOR_REGISTRY
+# 0. 실행 모드 선택
+echo ""
+echo "실행 모드를 선택하세요:"
+echo "  1) 로컬 이미지 로드 전용 (ctr import)"
+echo "  2) 하버 레지스트리로 업로드 (Import + Tag + Push)"
+read -p "선택 [1/2, 기본값 1]: " EXEC_MODE
+EXEC_MODE="${EXEC_MODE:-1}"
+
+if [ "$EXEC_MODE" == "2" ]; then
+    # Harbor 정보 입력 (모드 2인 경우에만)
     if [ -z "$HARBOR_REGISTRY" ]; then
-        echo "[오류] Harbor 레지스트리 주소가 필요합니다."
-        exit 1
+        echo -e "\033[1;33m[안내] 포트 번호를 반드시 포함해주세요 (예: 172.30.235.20:30002)\033[0m"
+        read -p "Harbor 레지스트리 주소 입력: " HARBOR_REGISTRY
     fi
-fi
-if [ -z "$HARBOR_PROJECT" ]; then
-    read -p "Harbor 프로젝트 입력 (예: library, oss): " HARBOR_PROJECT
     if [ -z "$HARBOR_PROJECT" ]; then
-        echo "[오류] Harbor 프로젝트가 필요합니다."
-        exit 1
+        read -p "Harbor 프로젝트 입력 (예: library): " HARBOR_PROJECT
+    fi
+    HARBOR_USER="${HARBOR_USER:-admin}"
+    if [ -z "$HARBOR_PASSWORD" ]; then
+        read -sp "Harbor 비밀번호를 입력하세요: " HARBOR_PASSWORD; echo
+    fi
+
+    # HTTPS 사용 여부 선택
+    read -p "Harbor에서 HTTPS(보안 접속)를 사용합니까? (y/N, 기본 n): " IS_HTTPS
+    if [[ "$IS_HTTPS" =~ ^[yY]([eE][sS])?$ ]]; then
+        USE_PLAIN_HTTP="false"
+    else
+        USE_PLAIN_HTTP="true"
     fi
 fi
-HARBOR_USER="${HARBOR_USER:-admin}"
-HARBOR_PASSWORD="Password"
+
 CTR_NAMESPACE="k8s.io"
 IMAGE_DIR="./images"
-USE_PLAIN_HTTP="false"
 TARGET_PLATFORM="linux/amd64" # 고정
 # ==============================================
 
@@ -49,10 +58,10 @@ if [ "$USE_PLAIN_HTTP" = "true" ]; then
 fi
 
 echo "========================================================================"
-echo " 🏗️  이미지 마이그레이션 v3-Lite (Air-Gapped & Space Handling)"
+echo " 🏗️  이미지 마이그레이션 v3.1-Lite (Air-Gapped & Space Handling)"
 echo "========================================================================"
 
-for tar_file in "$IMAGE_DIR"/*.tar; do
+for tar_file in "$IMAGE_DIR"/*.tar*; do
     [ -e "$tar_file" ] || break
     
     echo ""
@@ -72,15 +81,17 @@ for tar_file in "$IMAGE_DIR"/*.tar; do
         fi
     fi
 
-    # 2. 태그 추출 (jq 없이 표준 도구만 사용)
-    # RepoTags 배열을 추출하여 쉼표(,)를 줄바꿈(\n)으로 변환해 각 태그를 분리
+    # 2. 태그 추출 및 업로드 (모드 2인 경우에만 수행)
+    if [ "$EXEC_MODE" == "1" ]; then
+        continue
+    fi
+
+    # 태그 추출 (jq 없이 표준 도구만 사용)
     repo_tags=$(tar -xOf "$tar_file" manifest.json | grep -o '"RepoTags":\[[^]]*\]' | sed -e 's/"RepoTags":\[//' -e 's/\]//' -e 's/"//g' | tr ',' '\n')
 
-    # while read를 사용하여 공백이 포함된 이미지 이름 한 줄씩 처리
-    echo "$repo_tags" | while read -r source_image; do
+    while read -r source_image; do
         [ -z "$source_image" ] && continue
 
-        # 이름 보정 로직 (컨테이너디 내부 이름 확인)
         check_image=$(ctr -n "$CTR_NAMESPACE" images list -q name=="$source_image")
         if [ -z "$check_image" ]; then
             fixed_source="docker.io/$source_image"
@@ -94,16 +105,12 @@ for tar_file in "$IMAGE_DIR"/*.tar; do
             fi
         fi
 
-        # 타겟 이름 생성: 공백을 하이픈(-)으로 치환
         image_name_tag=$(echo "$source_image" | awk -F/ '{print $NF}' | sed 's/ /-/g')
         target_image="$HARBOR_REGISTRY/$HARBOR_PROJECT/$image_name_tag"
 
         echo -e "   └─ 2. Convert/Tag: $target_image"
         
-        # 이미지가 이미 있으면 삭제
         ctr -n "$CTR_NAMESPACE" images rm "$target_image" > /dev/null 2>&1
-
-        # 변환 실행 (멀티 아키텍처 인덱스를 깨고 amd64 단일 이미지로 변환)
         ctr -n "$CTR_NAMESPACE" images convert \
             --platform "$TARGET_PLATFORM" \
             "$source_image" "$target_image" > /dev/null 2>&1
@@ -122,5 +129,5 @@ for tar_file in "$IMAGE_DIR"/*.tar; do
             echo "      [Error Log]"
             ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image"
         fi
-    done
+    done <<< "$repo_tags"
 done
