@@ -459,6 +459,75 @@ sudo systemctl restart containerd
 
 운영 중 VIP 대역이 변경되거나 새로운 IP를 할당받아야 하는 경우의 절차입니다.
 
+### 케이스 0: 운영 중인 클러스터를 IP → FQDN으로 전환
+
+이미 VIP IP로 초기 구성한 클러스터에 FQDN을 사후 적용하는 절차입니다.
+이후 VIP가 변경되면 케이스 A 절차만으로 처리할 수 있게 됩니다.
+
+**1단계: 모든 노드에 FQDN 등록 (마스터 + 워커)**
+
+```bash
+echo "10.10.10.200  k8s-api.internal" | sudo tee -a /etc/hosts
+```
+
+**2단계: API 서버 인증서에 FQDN SAN 추가 (전체 마스터 노드)**
+
+```bash
+# 기존 인증서 백업
+sudo cp /etc/kubernetes/pki/apiserver.crt ~/apiserver.crt.bak
+sudo cp /etc/kubernetes/pki/apiserver.key ~/apiserver.key.bak
+
+# 삭제 후 FQDN 포함하여 재발급
+sudo rm /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.key
+sudo kubeadm init phase certs apiserver \
+  --control-plane-endpoint "k8s-api.internal:6443" \
+  --apiserver-cert-extra-sans="k8s-api.internal,10.10.10.200,10.10.10.70,10.10.10.71,10.10.10.72,127.0.0.1"
+
+# FQDN이 SAN에 포함되었는지 확인
+openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -text | grep -A1 "Subject Alternative"
+```
+
+**3단계: kube-apiserver 재시작 (전체 마스터 노드)**
+
+```bash
+sudo mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/
+sleep 10
+sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
+
+watch sudo crictl pods --namespace kube-system
+```
+
+**4단계: kubeconfig server 주소를 FQDN으로 변경 (전체 마스터 노드)**
+
+```bash
+for conf in /etc/kubernetes/admin.conf \
+            /etc/kubernetes/controller-manager.conf \
+            /etc/kubernetes/scheduler.conf; do
+    sudo sed -i "s|https://10.10.10.200:6443|https://k8s-api.internal:6443|g" "$conf"
+done
+
+# 현재 사용자 kubeconfig 갱신
+cp /etc/kubernetes/admin.conf ~/.kube/config
+```
+
+**5단계: 워커 노드 kubelet.conf 업데이트 (전체 워커 노드)**
+
+```bash
+sudo sed -i 's|https://10.10.10.200:6443|https://k8s-api.internal:6443|g' /etc/kubernetes/kubelet.conf
+sudo systemctl restart kubelet
+```
+
+**6단계: 확인**
+
+```bash
+kubectl get nodes
+kubectl cluster-info
+```
+
+`Kubernetes control plane` 주소가 `https://k8s-api.internal:6443`으로 표시되면 완료입니다.
+
+---
+
 ### 케이스 A: FQDN 방식으로 초기 구성한 경우 (권장 구성)
 
 FQDN(`k8s-api.internal`)이 인증서 SAN에 포함되어 있으므로, **인증서 재발급 없이** 아래 순서만 따르면 됩니다.
