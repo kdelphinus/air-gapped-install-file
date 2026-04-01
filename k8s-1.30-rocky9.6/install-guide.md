@@ -237,6 +237,34 @@ sudo systemctl enable --now keepalived
 ip addr show eth0 | grep 10.10.10.200
 ```
 
+#### 5-A-5. (권장) FQDN으로 VIP 추상화
+
+VIP IP를 직접 사용하는 대신 내부 FQDN(예: `k8s-api.internal`)으로 추상화하면,
+나중에 VIP가 변경되어도 **인증서 재발급 없이** `/etc/hosts`만 수정하면 됩니다.
+
+**전체 노드(마스터 + 워커)에서 실행합니다.**
+
+```bash
+# /etc/hosts에 FQDN 등록
+echo "10.10.10.200  k8s-api.internal" | sudo tee -a /etc/hosts
+```
+
+이후 Phase 6의 `kubeadm init` 시 `--control-plane-endpoint`와 `--apiserver-cert-extra-sans`에
+IP 대신 FQDN을 사용합니다.
+
+```bash
+sudo kubeadm init \
+  --control-plane-endpoint "k8s-api.internal:6443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="k8s-api.internal,10.10.10.200,10.10.10.70,10.10.10.71,10.10.10.72,127.0.0.1" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.30.0
+```
+
+> HAProxy의 `bind`는 안정성을 위해 VIP IP(`10.10.10.200:6443`)를 그대로 사용합니다.
+> FQDN은 kubeconfig의 server 주소와 인증서 SAN에만 적용됩니다.
+
 ---
 
 ### 옵션 B: Localhost LB 방식 (VIP 사용 불가 환경)
@@ -279,11 +307,23 @@ sudo systemctl enable --now haproxy
 
 `--apiserver-cert-extra-sans`에 VIP와 전체 마스터 IP를 포함해야 RHEL/Rocky 9계열의 엄격한 SAN 검증을 통과할 수 있습니다.
 
+FQDN을 사용하는 경우(`5-A-5` 적용 시) `10.10.10.200` 대신 `k8s-api.internal`로 대체합니다.
+
 ```bash
+# VIP IP 직접 사용 시
 sudo kubeadm init \
   --control-plane-endpoint "10.10.10.200:6443" \
   --upload-certs \
   --apiserver-cert-extra-sans="10.10.10.200,10.10.10.70,10.10.10.71,10.10.10.72,127.0.0.1" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.30.0
+
+# FQDN 사용 시 (권장)
+sudo kubeadm init \
+  --control-plane-endpoint "k8s-api.internal:6443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="k8s-api.internal,10.10.10.200,10.10.10.70,10.10.10.71,10.10.10.72,127.0.0.1" \
   --pod-network-cidr=192.168.0.0/16 \
   --service-cidr=10.96.0.0/12 \
   --kubernetes-version v1.30.0
@@ -412,3 +452,123 @@ sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sud
 # 5. containerd 재시작
 sudo systemctl restart containerd
 ```
+
+---
+
+## VIP 변경 시 조치
+
+운영 중 VIP 대역이 변경되거나 새로운 IP를 할당받아야 하는 경우의 절차입니다.
+
+### 케이스 A: FQDN 방식으로 초기 구성한 경우 (권장 구성)
+
+FQDN(`k8s-api.internal`)이 인증서 SAN에 포함되어 있으므로, **인증서 재발급 없이** 아래 순서만 따르면 됩니다.
+
+**1단계: 모든 노드의 `/etc/hosts` 업데이트 (마스터 + 워커)**
+
+```bash
+# OLD_VIP → NEW_VIP 로 변경
+sudo sed -i 's/OLD_VIP  k8s-api.internal/NEW_VIP  k8s-api.internal/' /etc/hosts
+
+# 확인
+grep k8s-api.internal /etc/hosts
+```
+
+**2단계: Keepalived VIP 변경 (전체 마스터 노드)**
+
+```bash
+sudo sed -i 's/OLD_VIP/NEW_VIP/' /etc/keepalived/keepalived.conf
+sudo systemctl restart keepalived
+
+# 새 VIP 활성화 확인 (Master-1)
+ip addr show eth0 | grep NEW_VIP
+```
+
+**3단계: HAProxy bind IP 변경 (전체 마스터 노드)**
+
+```bash
+sudo sed -i 's/OLD_VIP:6443/NEW_VIP:6443/' /etc/haproxy/haproxy.cfg
+sudo systemctl restart haproxy
+```
+
+> `backend k8s-masters`의 `server` 항목(마스터 노드 IP)은 변경하지 않습니다.
+
+**4단계: API 서버 재시작 확인**
+
+```bash
+# kubeconfig의 server 주소는 FQDN이므로 변경 불필요
+kubectl get nodes
+```
+
+---
+
+### 케이스 B: VIP IP를 직접 사용하여 초기 구성한 경우
+
+인증서 SAN에 기존 VIP IP가 고정되어 있으므로, **인증서 재발급이 필수**입니다.
+전체 마스터 노드에서 순서대로 진행합니다.
+
+**1단계: Keepalived / HAProxy VIP 변경 (전체 마스터 노드)**
+
+```bash
+sudo sed -i 's/OLD_VIP/NEW_VIP/' /etc/keepalived/keepalived.conf
+sudo systemctl restart keepalived
+
+sudo sed -i 's/OLD_VIP:6443/NEW_VIP:6443/' /etc/haproxy/haproxy.cfg
+sudo systemctl restart haproxy
+```
+
+**2단계: API 서버 인증서 재발급 (전체 마스터 노드)**
+
+```bash
+# 기존 인증서 백업
+sudo cp /etc/kubernetes/pki/apiserver.crt ~/apiserver.crt.bak
+sudo cp /etc/kubernetes/pki/apiserver.key ~/apiserver.key.bak
+
+# 삭제 후 재발급 (새 VIP 포함)
+sudo rm /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.key
+sudo kubeadm init phase certs apiserver \
+  --control-plane-endpoint "NEW_VIP:6443" \
+  --apiserver-cert-extra-sans="NEW_VIP,10.10.10.70,10.10.10.71,10.10.10.72,127.0.0.1"
+```
+
+**3단계: kube-apiserver 재시작 (전체 마스터 노드)**
+
+static pod는 manifest를 잠시 제거했다가 복원하면 자동 재시작됩니다.
+
+```bash
+sudo mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/
+sleep 10
+sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
+
+# Pod가 다시 Running 상태가 될 때까지 대기
+watch sudo crictl pods --namespace kube-system
+```
+
+**4단계: kubeconfig server 주소 변경 (전체 마스터 노드)**
+
+```bash
+# 마스터 노드 kubeconfig 업데이트
+for conf in /etc/kubernetes/admin.conf \
+            /etc/kubernetes/controller-manager.conf \
+            /etc/kubernetes/scheduler.conf; do
+    sudo sed -i "s|https://OLD_VIP:6443|https://NEW_VIP:6443|g" "$conf"
+done
+
+# 현재 사용자 kubeconfig 갱신
+cp /etc/kubernetes/admin.conf ~/.kube/config
+```
+
+**5단계: 워커 노드 kubelet.conf 업데이트 (전체 워커 노드)**
+
+```bash
+sudo sed -i 's|https://OLD_VIP:6443|https://NEW_VIP:6443|g' /etc/kubernetes/kubelet.conf
+sudo systemctl restart kubelet
+```
+
+**6단계: 정상 동작 확인**
+
+```bash
+kubectl get nodes
+kubectl get pods -n kube-system
+```
+
+모든 노드가 `Ready` 상태이고 kube-system Pod가 `Running`이면 완료입니다.
