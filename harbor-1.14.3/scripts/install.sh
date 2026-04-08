@@ -460,4 +460,19 @@ fi
 echo " 사용자명: admin"
 echo " 비밀번호: (설치 시 입력한 비밀번호)"
 echo "================================================================"
+
+if [[ "$TLS_ENABLED" != "true" ]]; then
+    echo ""
+    echo "⚠️  [필수] Insecure Registry 등록 (TLS 미사용 시)"
+    echo "  HTTP로 Harbor를 사용하려면 모든 K8s 노드에서 containerd에"
+    echo "  insecure registry를 등록해야 이미지 push/pull이 가능합니다."
+    echo ""
+    echo "  sudo ./scripts/insecurity_registry_add.sh"
+    echo ""
+    echo "  이 스크립트는 아래 작업을 자동 수행합니다:"
+    echo "    1) /etc/containerd/config.toml에 config_path 설정 추가"
+    echo "    2) /etc/containerd/certs.d/<주소>/hosts.toml 생성"
+    echo "    3) containerd 재시작"
+    echo "================================================================"
+fi
 echo ""

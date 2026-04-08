@@ -73,11 +73,80 @@ kubectl apply -f manifests/route-harbor.yaml
 
 ## 4단계: (TLS 미사용 시) Insecure Registry 등록
 
-HTTP로 Harbor를 사용하는 경우, 모든 노드에서 containerd에 등록합니다.
+HTTP로 Harbor를 사용하는 경우, **모든 K8s 노드(Master + Worker)**에서 containerd가 해당 레지스트리를 신뢰하도록 등록해야 합니다. 이 설정이 없으면 이미지 push/pull 시 `http: server gave HTTP response to HTTPS client` 오류가 발생합니다.
+
+자동화 스크립트를 사용하거나, 아래 수동 절차를 참고하세요.
+
+### 방법 1: 스크립트 사용 (권장)
+
+각 노드에서 실행합니다.
 
 ```bash
 chmod +x scripts/insecurity_registry_add.sh
-./scripts/insecurity_registry_add.sh
+sudo ./scripts/insecurity_registry_add.sh
+```
+
+### 방법 2: 수동 설정
+
+#### 1. containerd 버전 확인
+
+containerd v2.x에서 CRI 플러그인 경로가 변경되었습니다. 버전에 따라 `config.toml`에 작성해야 할 섹션 키가 다르므로 반드시 먼저 확인하세요.
+
+```bash
+containerd --version
+```
+
+#### 2. containerd config.toml에 config_path 추가
+
+`/etc/containerd/config.toml`을 열어 **containerd 버전에 맞는 섹션**에 `config_path`를 추가합니다.
+
+```toml
+# containerd v1.x
+[plugins."io.containerd.grpc.v1.cri".registry]
+  config_path = "/etc/containerd/certs.d"
+
+# containerd v2.x (플러그인 키 변경됨)
+[plugins."io.containerd.cri.v1.images".registry]
+  config_path = "/etc/containerd/certs.d"
+```
+
+어떤 키가 사용되고 있는지 모르겠다면 아래 명령으로 확인합니다.
+
+```bash
+grep -n 'io.containerd' /etc/containerd/config.toml | grep -i 'cri\|registry'
+```
+
+- v1.x 키(`grpc.v1.cri`)에 설정했는데 실제 containerd가 v2.x라면 `config_path`가 **무시**되어 insecure registry가 동작하지 않습니다.
+- 이미 해당 섹션이 있다면 `config_path` 줄만 추가하거나 값을 수정합니다. 빈 값(`config_path = ''`)이 설정되어 있다면 위 경로로 교체하세요.
+
+#### 2. hosts.toml 생성
+
+레지스트리 주소에 맞는 디렉토리를 만들고 `hosts.toml`을 작성합니다.
+
+```bash
+# 예시: Harbor가 172.30.235.20:30002 인 경우
+sudo mkdir -p /etc/containerd/certs.d/172.30.235.20:30002
+
+sudo tee /etc/containerd/certs.d/172.30.235.20:30002/hosts.toml <<'EOF'
+server = "http://172.30.235.20:30002"
+
+[host."http://172.30.235.20:30002"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true
+EOF
+```
+
+#### 3. containerd 재시작
+
+```bash
+sudo systemctl restart containerd
+```
+
+#### 4. 설정 확인
+
+```bash
+grep "config_path" /etc/containerd/config.toml
+cat /etc/containerd/certs.d/172.30.235.20:30002/hosts.toml
 ```
 
 ## 5단계: (선택) Self-Signed TLS 인증서 생성

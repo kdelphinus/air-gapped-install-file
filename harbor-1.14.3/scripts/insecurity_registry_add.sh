@@ -48,8 +48,17 @@ sudo sed -i "s/config_path = '.*:.*/config_path = '\/etc\/containerd\/certs.d'/g
 # 만약 config_path 설정 자체가 없다면 (또는 위에서 지워져서 없다면) 명시적으로 추가 필요
 if ! grep -q "config_path = " "$CONFIG_FILE"; then
     echo "   [알림] config_path 설정이 없어서 추가합니다."
-    # [plugins."io.containerd.grpc.v1.cri".registry] 섹션을 찾아서 그 아래에 추가
-    sudo sed -i '/\[plugins."io.containerd.grpc.v1.cri".registry\]/a \      config_path = "/etc/containerd/certs.d"' "$CONFIG_FILE"
+    # containerd v2.x vs v1.x 플러그인 키 자동 감지
+    if grep -q 'io.containerd.cri.v1.images' "$CONFIG_FILE"; then
+        # v2.x 키
+        REGISTRY_SECTION='plugins."io.containerd.cri.v1.images".registry'
+        echo "   [감지] containerd v2.x 플러그인 키 사용"
+    else
+        # v1.x 키 (기본)
+        REGISTRY_SECTION='plugins."io.containerd.grpc.v1.cri".registry'
+        echo "   [감지] containerd v1.x 플러그인 키 사용"
+    fi
+    sudo sed -i "/\[${REGISTRY_SECTION}\]/a \      config_path = \"\/etc\/containerd\/certs.d\"" "$CONFIG_FILE"
 fi
 
 # 3. hosts.toml 생성
