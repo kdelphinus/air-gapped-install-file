@@ -87,17 +87,7 @@ read -p "선택 [1/2, 기본값 1]: " IMAGE_LOAD_CHOICE
 IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE:-1}"
 
 if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
-    echo "➡️ 로컬 이미지 로드 중 (sudo ctr import)..."
-    if [ -f "./scripts/load_images.sh" ]; then
-        sudo bash ./scripts/load_images.sh
-    else
-        for tar_file in ./images/*.tar; do
-            [ -e "$tar_file" ] || continue
-            echo "  → $(basename "$tar_file") 로드 중..."
-            sudo ctr -n k8s.io images import "$tar_file"
-        done
-    fi
-    echo "✅ 이미지 로드 완료."
+    echo "✅ 워커 노드에 하버 이미지가 로드되어 있어야 합니다."
 else
     echo "➡️ 이미 이미지가 로드되어 있거나 레지스트리를 사용한다고 가정합니다."
 fi
