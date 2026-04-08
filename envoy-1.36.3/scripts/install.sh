@@ -33,20 +33,11 @@ if [ "${IMAGE_SOURCE}" = "1" ]; then
     IMG_GATEWAY="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/gateway:v1.6.1"
     IMG_PROXY="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/envoy:distroless-v1.36.3"
 elif [ "${IMAGE_SOURCE}" = "2" ]; then
-    echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
-    IMPORT_COUNT=0
-    for tar_file in ./images/*.tar; do
-        [ -e "${tar_file}" ] || continue
-        echo "  → $(basename "${tar_file}")"
-        sudo ctr -n k8s.io images import "${tar_file}"
-        IMPORT_COUNT=$((IMPORT_COUNT + 1))
-    done
-    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
-    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    echo "로컬 tar 파일을 모든 워커 노드에 import 해야 합니다."
     HARBOR_REGISTRY=""
     HARBOR_PROJECT=""
-    IMG_GATEWAY="envoy-gateway/gateway:v1.6.1"
-    IMG_PROXY="envoy-proxy/envoy:distroless-v1.36.3"
+    IMG_GATEWAY="docker.io/envoyproxy/gateway:v1.6.1"
+    IMG_PROXY="docker.io/envoyproxy/envoy:distroless-v1.36.3"
 else
     echo "[오류] 1 또는 2를 선택하세요."; exit 1
 fi
