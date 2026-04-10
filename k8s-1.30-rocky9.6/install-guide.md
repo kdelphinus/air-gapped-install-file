@@ -17,7 +17,7 @@ containerd v2.2.0을 컨테이너 런타임으로, Calico를 CNI로 사용합니
 | :--- | :--- |
 | `common/rpms/` | 공통 의존성 RPM (모든 노드) |
 | `k8s/rpms/` | kubeadm, kubelet, kubectl, containerd RPM |
-| `k8s/binaries/` | helm, cri-dockerd 등 바이너리 |
+| `k8s/binaries/` | helm, cri-dockerd, nerdctl 등 바이너리 |
 | `k8s/images/` | kubeadm, Calico 등 컨테이너 이미지 `.tar` |
 | `k8s/charts/` | Helm 차트 |
 | `k8s/utils/` | calico.yaml 등 매니페스트 |
@@ -478,6 +478,66 @@ cd k8s/binaries
 tar -xzvf helm-v3.14.0-linux-amd64.tar.gz
 sudo mv linux-amd64/helm /usr/local/bin/helm
 helm version
+```
+
+## Phase 8-1: nerdctl 설치 (선택, 전체 노드)
+
+컨테이너 이미지 조회·조작이 필요한 노드에 설치합니다. containerd와 직접 통신하며 `docker` CLI와 유사한 UX를 제공합니다.
+
+```bash
+cd k8s/binaries
+
+# 압축 해제 후 바이너리 배포
+tar -xzvf nerdctl-2.2.2-linux-amd64.tar.gz
+sudo mv nerdctl /usr/local/bin/nerdctl
+sudo chmod +x /usr/local/bin/nerdctl
+
+# 설치 확인
+nerdctl --version
+```
+
+주요 사용 예시:
+
+```bash
+# containerd k8s.io 네임스페이스 이미지 목록 확인
+sudo nerdctl -n k8s.io images
+
+# Harbor에서 이미지 pull (insecure registry)
+sudo nerdctl -n k8s.io pull --insecure-registry <NODE_IP>:30002/library/myapp:1.0.0
+```
+
+## Phase 8-2: skopeo 설치 (선택, 전체 노드)
+
+레지스트리 간 이미지 복사, 이미지 메타데이터 검사 등에 사용합니다. 데몬 없이 동작하며 Harbor push/pull 검증에 유용합니다.
+
+```bash
+cd k8s/rpms
+
+# skopeo 및 의존성 RPM 일괄 설치
+sudo dnf localinstall -y --disablerepo='*' \
+  skopeo-1.20.0-2.el9_7.x86_64.rpm \
+  containers-common-1-135.el9_7.x86_64.rpm \
+  device-mapper-libs-1.02.206-2.el9_7.2.x86_64.rpm \
+  gpgmepp-1.15.1-6.el9.x86_64.rpm \
+  libassuan-2.5.5-3.el9.x86_64.rpm
+
+# 설치 확인
+skopeo --version
+```
+
+주요 사용 예시:
+
+```bash
+# Harbor 이미지 목록 조회 (insecure registry)
+skopeo list-tags --tls-verify=false docker://<NODE_IP>:30002/library/myapp
+
+# 레지스트리 간 이미지 복사
+skopeo copy --src-tls-verify=false --dest-tls-verify=false \
+  docker://<SRC_REGISTRY>/myapp:1.0.0 \
+  docker://<NODE_IP>:30002/library/myapp:1.0.0
+
+# 이미지 메타데이터 확인
+skopeo inspect --tls-verify=false docker://<NODE_IP>:30002/library/myapp:1.0.0
 ```
 
 ## Phase 9: 워커 노드 조인
