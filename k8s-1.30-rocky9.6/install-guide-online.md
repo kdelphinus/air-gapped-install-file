@@ -85,6 +85,9 @@ sudo containerd config default | sudo tee /etc/containerd/config.toml
 # cgroup driver를 systemd로 변경 (필수)
 sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
+# Harbor(또는 사설 레지스트리) insecure registry 사용 시 config_path 설정
+sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+
 # containerd 시작 및 활성화
 sudo systemctl enable --now containerd
 sudo systemctl status containerd
@@ -94,6 +97,46 @@ sudo systemctl status containerd
 >
 > ```bash
 > grep SystemdCgroup /etc/containerd/config.toml
+> ```
+
+### (선택) Harbor insecure registry 등록
+
+Harbor를 HTTP(insecure)로 운영하는 경우 각 노드에 아래 설정을 추가합니다.
+
+```bash
+# Harbor 레지스트리 주소 (예: 192.168.1.10:30002)
+HARBOR_HOST="<NODE_IP>:30002"
+
+sudo mkdir -p /etc/containerd/certs.d/${HARBOR_HOST}
+sudo tee /etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml <<EOF
+server = "http://${HARBOR_HOST}"
+
+[host."http://${HARBOR_HOST}"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true
+EOF
+
+sudo systemctl restart containerd
+```
+
+> **containerd v1.x vs v2.x 플러그인 키 차이**
+>
+> `containerd config default`로 생성한 `config.toml`에서 `config_path`가 없을 경우
+> containerd 버전에 따라 키 이름이 다릅니다.
+>
+> ```bash
+> # containerd 버전 확인
+> containerd --version
+> ```
+>
+> ```toml
+> # containerd v1.x (io.containerd.grpc.v1.cri)
+> [plugins."io.containerd.grpc.v1.cri".registry]
+>   config_path = "/etc/containerd/certs.d"
+>
+> # containerd v2.x (io.containerd.cri.v1.images)
+> [plugins."io.containerd.cri.v1.images".registry]
+>   config_path = "/etc/containerd/certs.d"
 > ```
 
 ### (선택) containerd 데이터 경로 변경 — 소프트링크 방식
@@ -486,6 +529,60 @@ helm version
 > ```bash
 > DESIRED_VERSION=v3.14.0 bash <(curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3)
 > ```
+
+## Phase 8-1: nerdctl 설치 (선택, 전체 노드)
+
+컨테이너 이미지 조회·조작이 필요한 노드에 설치합니다. containerd와 직접 통신하며 `docker` CLI와 유사한 UX를 제공합니다.
+
+```bash
+# GitHub Releases에서 최신 바이너리 다운로드
+NERDCTL_VERSION="2.2.2"
+curl -LO "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION}-linux-amd64.tar.gz"
+
+# 압축 해제 후 바이너리 배포
+tar -xzvf nerdctl-${NERDCTL_VERSION}-linux-amd64.tar.gz
+sudo mv nerdctl /usr/local/bin/nerdctl
+sudo chmod +x /usr/local/bin/nerdctl
+
+# 설치 확인
+nerdctl --version
+```
+
+주요 사용 예시:
+
+```bash
+# containerd k8s.io 네임스페이스 이미지 목록 확인
+sudo nerdctl -n k8s.io images
+
+# Harbor에서 이미지 pull (insecure registry)
+sudo nerdctl -n k8s.io pull --insecure-registry <NODE_IP>:30002/library/myapp:1.0.0
+```
+
+## Phase 8-2: skopeo 설치 (선택, 전체 노드)
+
+레지스트리 간 이미지 복사, 이미지 메타데이터 검사 등에 사용합니다. 데몬 없이 동작하며 Harbor push/pull 검증에 유용합니다.
+
+```bash
+sudo dnf install -y skopeo
+
+# 설치 확인
+skopeo --version
+```
+
+주요 사용 예시:
+
+```bash
+# Harbor 이미지 목록 조회 (insecure registry)
+skopeo list-tags --tls-verify=false docker://<NODE_IP>:30002/library/myapp
+
+# 레지스트리 간 이미지 복사
+skopeo copy --src-tls-verify=false --dest-tls-verify=false \
+  docker://<SRC_REGISTRY>/myapp:1.0.0 \
+  docker://<NODE_IP>:30002/library/myapp:1.0.0
+
+# 이미지 메타데이터 확인
+skopeo inspect --tls-verify=false docker://<NODE_IP>:30002/library/myapp:1.0.0
+```
 
 ## Phase 9: 워커 노드 조인
 
