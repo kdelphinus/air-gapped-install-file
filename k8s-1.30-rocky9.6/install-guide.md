@@ -492,9 +492,21 @@ tar -xzvf nerdctl-2.2.2-linux-amd64.tar.gz
 sudo mv nerdctl /usr/local/bin/nerdctl
 sudo chmod +x /usr/local/bin/nerdctl
 
+# (선택) Rootless 모드용 스크립트 배포
+# sudo 없이 컨테이너를 실행해야 하는 환경에서 사용합니다.
+sudo mv containerd-rootless* /usr/local/bin/
+sudo chmod +x /usr/local/bin/containerd-rootless*
+
 # 설치 확인
 nerdctl --version
 ```
+
+### Rootless 모드 스크립트 안내
+
+`nerdctl` 패키지에 포함된 아래 스크립트들은 `root` 권한 없이 컨테이너를 실행하는 **Rootless 모드** 설정을 돕습니다.
+
+- **`containerd-rootless-setuptool.sh`**: Rootless 환경을 구성하는 도구입니다. 필수 패키지 체크 및 `systemd` 유저 서비스를 등록합니다. (예: `install`, `check` 커맨드)
+- **`containerd-rootless.sh`**: 실제로 `containerd`를 루트리스 환경에서 실행하는 래퍼(Wrapper) 스크립트입니다. 네임스페이스 분리와 경로 매핑을 담당합니다.
 
 주요 사용 예시:
 
