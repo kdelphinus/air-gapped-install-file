@@ -72,6 +72,53 @@ CHART_PATH="./charts/jenkins"
 # ==============================================================================
 set -e # 에러 발생 시 스크립트 중단
 
+# ==============================================================================
+# 🗑️ [0/6] 기존 자원 삭제 여부 확인
+# ==============================================================================
+EXISTING_RELEASE=$(helm status jenkins -n "$NAMESPACE" > /dev/null 2>&1 && echo "yes" || echo "no")
+EXISTING_NS=$(kubectl get namespace "$NAMESPACE" > /dev/null 2>&1 && echo "yes" || echo "no")
+
+if [ "$EXISTING_RELEASE" = "yes" ] || [ "$EXISTING_NS" = "yes" ]; then
+    echo ""
+    echo "⚠️  기존 Jenkins 자원이 감지되었습니다."
+    [ "$EXISTING_RELEASE" = "yes" ] && echo "   - Helm 릴리스 'jenkins' (네임스페이스: $NAMESPACE)"
+    [ "$EXISTING_NS" = "yes" ]      && echo "   - 네임스페이스 '$NAMESPACE'"
+    echo ""
+    read -p "기존 자원을 삭제하고 새로 설치하시겠습니까? (y/N): " DO_CLEANUP
+    if [[ "$DO_CLEANUP" =~ ^[yY]([eE][sS])?$ ]]; then
+        echo ""
+        echo "🗑️  기존 자원 삭제 중..."
+
+        if [ "$EXISTING_RELEASE" = "yes" ]; then
+            echo "   - Helm 릴리스 삭제 중..."
+            helm uninstall jenkins -n "$NAMESPACE" || true
+        fi
+
+        echo "   - PVC 삭제 중..."
+        kubectl delete pvc --all -n "$NAMESPACE" --ignore-not-found
+
+        echo "   - PV 삭제 중..."
+        kubectl delete -f ./manifests/pv-volume.yaml --ignore-not-found
+        kubectl delete -f ./manifests/gradle-cache-pv-pvc.yaml --ignore-not-found
+
+        if [ "$EXISTING_NS" = "yes" ]; then
+            echo "   - 네임스페이스 삭제 중 (완료까지 시간이 걸릴 수 있습니다)..."
+            kubectl delete namespace "$NAMESPACE" --ignore-not-found
+            echo -n "   대기 중"
+            until ! kubectl get namespace "$NAMESPACE" > /dev/null 2>&1; do
+                echo -n "."
+                sleep 3
+            done
+            echo " 완료"
+        fi
+
+        echo "   ✅ 기존 자원 삭제 완료."
+    else
+        echo "   ℹ️  기존 자원을 유지한 채로 설치를 진행합니다."
+    fi
+fi
+
+echo ""
 echo "🔄 [1/6] 네임스페이스 확인 및 생성..."
 if kubectl get namespace "$NAMESPACE" > /dev/null 2>&1; then
     echo "   ✅ 네임스페이스 '$NAMESPACE'가 이미 존재합니다."
@@ -102,30 +149,33 @@ echo "--------------------------------------------------------"
 echo "🖥️  [설정] Jenkins Controller가 배포될 노드 지정 [3/6]"
 echo "--------------------------------------------------------"
 
-# 기존 라벨 정리 (중복 방지)
-echo "🧹 기존 노드에 부여된 Jenkins 라벨 정리 중..."
-kubectl label nodes --all ${NODE_LABEL_KEY}- > /dev/null 2>&1 || true
-
 echo "현재 클러스터의 노드 목록:"
 kubectl get nodes
 echo ""
 
-read -p "❓ Jenkins를 배포할 노드 이름(NAME)을 입력해주세요: " TARGET_NODE
+read -p "❓ Jenkins를 배포할 노드 이름(NAME)을 입력하세요 (Enter 입력 시 자동 배포): " TARGET_NODE
 
+NODE_SELECTOR_ARGS=()
 if [ -z "$TARGET_NODE" ]; then
-    echo "❌ 노드 이름이 입력되지 않았습니다. 스크립트를 종료합니다."
-    exit 1
-fi
+    echo "   ℹ️ 노드 미지정 — 클러스터 스케줄러가 자동으로 노드를 선택합니다."
+else
+    # 노드 존재 여부 확인
+    if ! kubectl get node "$TARGET_NODE" > /dev/null 2>&1; then
+        echo "❌ 오류: '$TARGET_NODE'라는 노드를 찾을 수 없습니다."
+        exit 1
+    fi
 
-# 노드 존재 여부 확인
-if ! kubectl get node "$TARGET_NODE" > /dev/null 2>&1; then
-    echo "❌ 오류: '$TARGET_NODE'라는 노드를 찾을 수 없습니다."
-    exit 1
-fi
+    # 기존 라벨 정리 후 선택 노드에 적용
+    echo "🧹 기존 노드에 부여된 Jenkins 라벨 정리 중..."
+    kubectl label nodes --all ${NODE_LABEL_KEY}- > /dev/null 2>&1 || true
+    echo "🔹 '$TARGET_NODE' 노드에 '$NODE_LABEL_KEY=$NODE_LABEL_VALUE' 라벨을 적용합니다..."
+    kubectl label nodes "$TARGET_NODE" $NODE_LABEL_KEY=$NODE_LABEL_VALUE --overwrite
+    echo "✅ 노드 고정 설정 완료."
 
-echo "🔹 '$TARGET_NODE' 노드에 '$NODE_LABEL_KEY=$NODE_LABEL_VALUE' 라벨을 적용합니다..."
-kubectl label nodes "$TARGET_NODE" $NODE_LABEL_KEY=$NODE_LABEL_VALUE --overwrite
-echo "✅ 노드 고정 설정 완료."
+    NODE_SELECTOR_ARGS=(
+        "--set-string" "controller.nodeSelector.${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}"
+    )
+fi
 
 # ==============================================================================
 # 📦 [4/6] Jenkins Helm 차트 배포
@@ -162,7 +212,6 @@ if [ "${IMAGE_SOURCE}" = "1" ]; then
     )
 fi
 
-# --set controller.nodeSelector 옵션 추가됨
 helm $ACTION jenkins "$CHART_PATH" \
   --namespace "$NAMESPACE" \
   $JENKINS_VALUES \
@@ -176,7 +225,7 @@ helm $ACTION jenkins "$CHART_PATH" \
   --set controller.serviceType=NodePort \
   --set controller.nodePort="$NODE_PORT" \
   \
-  --set-string controller.nodeSelector.${NODE_LABEL_KEY}=${NODE_LABEL_VALUE} \
+  "${NODE_SELECTOR_ARGS[@]}" \
   \
   --set agent.image.tag="$AGENT_TAG" \
   --set agent.imagePullPolicy=IfNotPresent \
