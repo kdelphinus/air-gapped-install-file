@@ -532,33 +532,46 @@ helm version
 
 ## Phase 8-1: nerdctl 설치 (선택, 전체 노드)
 
-컨테이너 이미지 조회·조작이 필요한 노드에 설치합니다. containerd와 직접 통신하며 `docker` CLI와 유사한 UX를 제공합니다.
+컨테이너 이미지 조회·조작이 필요한 노드에 설치합니다. containerd와 직접 통신하며 `docker` CLI와 유사한 UX를 제공합니다. Rootless 모드 사용을 위해 모든 의존성(`rootlesskit`, `slirp4netns` 등)이 포함된 **Full 패키지** 사용을 권장합니다.
 
 ```bash
-# GitHub Releases에서 최신 바이너리 다운로드
+# GitHub Releases에서 Full 패키지 다운로드
 NERDCTL_VERSION="2.2.2"
-curl -LO "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION}-linux-amd64.tar.gz"
+curl -LO "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-full-${NERDCTL_VERSION}-linux-amd64.tar.gz"
 
-# 압축 해제 후 바이너리 배포
-tar -xzvf nerdctl-${NERDCTL_VERSION}-linux-amd64.tar.gz
-sudo mv nerdctl /usr/local/bin/nerdctl
-sudo chmod +x /usr/local/bin/nerdctl
-
-# (선택) Rootless 모드용 스크립트 배포
-# sudo 없이 컨테이너를 실행해야 하는 환경에서 사용합니다.
-sudo mv containerd-rootless* /usr/local/bin/
-sudo chmod +x /usr/local/bin/containerd-rootless*
+# 압축 해제 후 전체 바이너리 및 스크립트 배포
+tar -xzvf nerdctl-full-${NERDCTL_VERSION}-linux-amd64.tar.gz
+sudo mv bin/* /usr/local/bin/
+sudo chmod +x /usr/local/bin/nerdctl /usr/local/bin/rootlesskit /usr/local/bin/slirp4netns /usr/local/bin/containerd-rootless*
 
 # 설치 확인
 nerdctl --version
 ```
 
-### Rootless 모드 스크립트 안내
+### Rootless 모드 활성화 절차 (일반 사용자 계정)
 
-`nerdctl` 패키지에 포함된 아래 스크립트들은 `root` 권한 없이 컨테이너를 실행하는 **Rootless 모드** 설정을 돕습니다.
+바이너리 설치 후, `sudo` 없이 `nerdctl`을 사용하려면 아래 절차를 **일반 사용자 계정**으로 진행해야 합니다.
 
-- **`containerd-rootless-setuptool.sh`**: Rootless 환경을 구성하는 도구입니다. 필수 패키지 체크 및 `systemd` 유저 서비스를 등록합니다. (예: `install`, `check` 커맨드)
-- **`containerd-rootless.sh`**: 실제로 `containerd`를 루트리스 환경에서 실행하는 래퍼(Wrapper) 스크립트입니다. 네임스페이스 분리와 경로 매핑을 담당합니다.
+1. **필수 패키지 확인**: `shadow-utils` 패키지가 설치되어 있어야 합니다.
+   ```bash
+   sudo dnf install -y shadow-utils
+   ```
+
+2. **사용자 환경 설정 도구 실행**: (root가 아닌 일반 계정으로 실행)
+   ```bash
+   containerd-rootless-setuptool.sh install
+   ```
+   *성공 시 `~/.config/systemd/user/containerd.service`가 등록됩니다.*
+
+3. **환경 변수 등록**: `~/.bashrc` 또는 `~/.zshrc` 하단에 아래 내용을 추가하고 적용(`source`)합니다.
+   ```bash
+   export CONTAINERD_ADDRESS="unix://$XDG_RUNTIME_DIR/containerd/containerd.sock"
+   ```
+
+4. **Linger 설정 (권장)**: 로그아웃 후에도 서비스가 유지되도록 설정합니다.
+   ```bash
+   sudo loginctl enable-linger $(id -un)
+   ```
 
 주요 사용 예시:
 
