@@ -107,13 +107,14 @@ EOF
 cat > "${COMPONENTS_VALUES_FILE}" <<EOF
 # 선택 설치 컴포넌트 (install.sh 자동 생성 — 수동 편집 가능)
 # install.sh / upgrade.sh 가 -f 플래그로 자동 포함
+installCertmanager: $(_bool "${OPT_CERTMANAGER}")
 global:
   registry:
     enabled: $(_bool "${OPT_REGISTRY}")
   kas:
     enabled: $(_bool "${OPT_KAS}")
-certmanager:
-  install: $(_bool "${OPT_CERTMANAGER}")
+registry:
+  enabled: $(_bool "${OPT_REGISTRY}")
 gitlab-runner:
   install: $(_bool "${OPT_RUNNER}")
 prometheus:
@@ -169,6 +170,52 @@ kubectl delete -f $HTTPROUTE_FILE --ignore-not-found=true
 # 1-6. 기존 노드 라벨 정리
 echo "  - 기존 노드에 부여된 GitLab 라벨 제거 중..."
 kubectl label nodes --all ${NODE_LABEL_KEY}- > /dev/null 2>&1 || true
+
+# 1-7. 데이터 디렉토리 초기화 (선택)
+# Helm 재설치 시 새 Secret(비밀번호)이 생성되지만, Retain 정책으로 남은 PV 데이터에는
+# 이전 비밀번호가 그대로 남아 DB 접속 실패가 발생할 수 있음.
+# → 완전 초기화(데이터 삭제)를 선택하면 이 문제를 방지할 수 있음.
+echo ""
+echo "  ⚠️  [주의] 데이터 디렉토리 초기화 여부"
+echo "  재설치 시 PV 데이터가 남아있으면 비밀번호 불일치로 DB 접속이 실패합니다."
+echo "  (기존 GitLab 데이터를 유지하려면 N을 선택하세요)"
+read -p "  기존 데이터를 모두 삭제하고 완전 초기화할까요? (y/N): " WIPE_DATA
+WIPE_DATA="${WIPE_DATA:-N}"
+
+DATA_DIRS=(
+    "/data/gitlab_pg"
+    "/data/gitlab_redis"
+    "/data/gitlab_data"
+)
+
+if [[ "$WIPE_DATA" =~ ^[Yy]$ ]]; then
+    echo "  - 데이터 디렉토리 초기화 중..."
+    for dir in "${DATA_DIRS[@]}"; do
+        if [ -d "$dir" ]; then
+            sudo rm -rf "${dir:?}"/*
+            echo "    ✅ $dir 초기화 완료"
+        else
+            echo "    ℹ️  $dir 없음 (건너뜀)"
+        fi
+    done
+else
+    echo "  - 데이터 디렉토리 유지 (기존 데이터 보존)"
+fi
+
+# 1-8. 데이터 디렉토리 생성 및 권한 설정
+# 각 컨테이너가 실행되는 UID에 맞게 소유권을 설정해야 쓰기 권한이 생긴다.
+#   PostgreSQL (bitnami) : UID 1001
+#   Redis      (bitnami) : UID 1001
+#   MinIO                : UID 1000
+#   Gitaly               : UID 1000
+echo "  - 데이터 디렉토리 생성 및 권한 설정 중..."
+sudo mkdir -p /data/gitlab_pg /data/gitlab_redis /data/gitlab_data /data/gitlab_data/minio
+sudo chown -R 1001:1001 /data/gitlab_pg
+sudo chown -R 1001:1001 /data/gitlab_redis
+sudo chown -R 1000:1000 /data/gitlab_data
+echo "    ✅ 권한 설정 완료"
+
+sleep 10
 
 # ==========================================
 # 2. HTTPRoute 생성 (Gateway API)

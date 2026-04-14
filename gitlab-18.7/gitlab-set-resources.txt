@@ -1,0 +1,8 @@
+kubectl set resources deployment gitlab-webservice-default -n gitlab --requests=cpu=300m,memory=1Gi --limits=cpu=2,memory=2.5Gi
+kubectl set resources deployment gitlab-sidekiq-all-in-1-v2 -n gitlab --requests=cpu=500m,memory=700Mi --limits=cpu=1,memory=1.5Gi
+kubectl set resources deployment gitlab-gitlab-shell -n gitlab --requests=cpu=50m,memory=64Mi --limits=cpu=200m,memory=128Mi
+kubectl set resources deployment gitlab-toolbox -n gitlab --requests=cpu=50m,memory=200Mi --limits=cpu=500m,memory=512Mi
+kubectl set resources deployment gitlab-minio -n gitlab --requests=cpu=100m,memory=128Mi --limits=cpu=500m,memory=256Mi
+kubectl set resources statefulset gitlab-gitaly -n gitlab --requests=cpu=100m,memory=400Mi --limits=cpu=1,memory=800Mi
+kubectl set resources statefulset gitlab-postgresql -n gitlab -c postgresql --requests=cpu=100m,memory=256Mi --limits=cpu=500m,memory=512Mi
+kubectl set resources statefulset gitlab-redis-master -n gitlab -c redis --requests=cpu=50m,memory=64Mi --limits=cpu=200m,memory=256Mi

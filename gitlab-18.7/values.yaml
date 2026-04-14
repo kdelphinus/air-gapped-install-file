@@ -82,13 +82,14 @@ nginx-ingress:
 
 # ============================================================
 # [선택] TLS 인증서 관리 (cert-manager)
-# HTTP 접속만 사용한다면 false 유지.
-# TLS 필요 시 true로 변경하고 이미지 사전 업로드 필요.
+# HTTP 접속만 사용한다면 아래 블록 전체 주석 유지.
 # ============================================================
-certmanager:
-  install: false
+installCertmanager: false
+global:
+  ingress:
+    configureCertmanager: false
 
-# ============================================================
+#============================================================
 # [선택] CI/CD Runner
 # CI/CD 파이프라인이 필요할 때 true로 변경.
 # 활성화 시 이미지(gitlab-runner) 사전 업로드 필요.
@@ -103,28 +104,110 @@ gitlab-runner:
 prometheus:
   install: false
 
+# ============================================================
+# [리소스] 컴포넌트별 CPU / Memory 설정
+#
+# 기준 노드   : 8 core / 16 GB (단일 노드)
+# 공존 서비스 : Harbor ~2G / Jenkins ~1.5G / ArgoCD ~0.5G / 시스템 ~2G
+# GitLab 가용 : 약 10G (limits 합계 ~6.5G 로 여유 확보)
+#
+# requests 합계 : ~1.0 CPU / ~2.6Gi
+# limits   합계 : ~5.4 CPU / ~6.5Gi
+# ============================================================
+
 gitlab:
   gitlab-exporter:
     enabled: false  # prometheus 비활성화 시 함께 꺼두는 것을 권장
 
-# ============================================================
-# [필수] 스토리지 설정 — StorageClass 및 PV 연동
-# ============================================================
-postgresql:
-  image:
-    tag: "16.2.0"
-  persistence:
-    storageClass: manual
+  webservice:
+    resources:
+      requests:
+        cpu: 300m
+        memory: 1Gi
+      limits:
+        cpu: 2
+        memory: 2.5Gi
 
-redis:
-  master:
+  sidekiq:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 700Mi
+      limits:
+        cpu: 1
+        memory: 1.5Gi
+
+  gitaly:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        cpu: 1
+        memory: 800Mi
     persistence:
       storageClass: manual
 
-gitaly:
-  persistence:
-    storageClass: manual
+  gitlab-shell:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+  migrations:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        cpu: 1
+        memory: 1.5Gi
+
+  toolbox:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 200Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+postgresql:
+  image:
+    tag: "16.2.0"
+  primary:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    persistence:
+      storageClass: manual
+
+redis:
+  master:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    persistence:
+      storageClass: manual
 
 minio:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
   persistence:
     storageClass: manual

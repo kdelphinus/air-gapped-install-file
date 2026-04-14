@@ -139,8 +139,6 @@ global:
     enabled: $(_bool "${OPT_REGISTRY}")
   kas:
     enabled: $(_bool "${OPT_KAS}")
-certmanager:
-  install: $(_bool "${OPT_CERTMANAGER}")
 gitlab-runner:
   install: $(_bool "${OPT_RUNNER}")
 prometheus:
