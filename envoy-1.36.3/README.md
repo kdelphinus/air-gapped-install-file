@@ -9,7 +9,7 @@
 | 항목 | 버전 | 비고 |
 | --- | --- | --- |
 | **Envoy Proxy** | **v1.36.3** | 데이터 평면 (실제 트래픽 처리 엔진) |
-| **Envoy Gateway** | **v1.1.1** | 제어 평면 (Envoy 설정 및 관리) |
+| **Envoy Gateway** | **v1.6.1** | 제어 평면 (Envoy 설정 및 관리) |
 | **Gateway API** | **v1.1 (Standard)** | Kubernetes 표준 Gateway API 준수 |
 
 ---
