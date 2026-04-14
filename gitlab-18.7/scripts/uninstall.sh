@@ -39,20 +39,27 @@ kubectl label nodes --all ${NODE_LABEL_KEY}- > /dev/null 2>&1 || true
 # 임시 파일 제거
 rm -f ./gitlab-images-override.yaml ./gitlab-generated-values.yaml 2>/dev/null || true
 
+# 네임스페이스 삭제 (PVC 포함) — PV 삭제 전에 먼저 실행
+echo "🗑️  Namespace '$NAMESPACE' 삭제 중..."
+kubectl delete ns $NAMESPACE --ignore-not-found=true --wait=false
+
 # PV 삭제 여부 (Retain policy — 삭제 시 데이터 유실)
 echo ""
 read -p "⚠️  PV도 삭제하시겠습니까? (데이터 유실 주의) (y/n): " DELETE_PV
 if [[ "$DELETE_PV" =~ ^[Yy]$ ]]; then
+    # PVC가 완전히 삭제될 때까지 대기 (최대 60초)
+    echo "⏳ PVC 삭제 완료 대기 중..."
+    for i in $(seq 1 60); do
+        PVC_COUNT=$(kubectl get pvc -n $NAMESPACE --no-headers 2>/dev/null | wc -l)
+        [ "$PVC_COUNT" -eq 0 ] && break
+        sleep 1
+    done
     echo "🗑️  PV 삭제 중..."
     if [ -f "$PV_FILE" ]; then
         kubectl delete -f $PV_FILE --ignore-not-found=true
     fi
     kubectl delete pv gitlab-postgresql-pv gitlab-redis-pv gitlab-gitaly-pv gitlab-minio-pv --ignore-not-found=true
 fi
-
-# 네임스페이스 삭제
-echo "🗑️  Namespace '$NAMESPACE' 삭제 중..."
-kubectl delete ns $NAMESPACE --ignore-not-found=true --wait=false
 
 echo ""
 echo "✅ GitLab 삭제 완료."
