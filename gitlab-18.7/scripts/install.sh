@@ -51,6 +51,80 @@ fi
 
 DOMAIN="gitlab.devops.internal" # CoreDNS 등록 도메인, "" 이면 건너뜀
 
+# ==========================================
+# [선택 설치] 선택적 컴포넌트 활성화 여부
+# ==========================================
+echo ""
+echo "========================================================"
+echo "  [선택 설치] 활성화할 선택적 컴포넌트를 고르세요."
+echo "  기본값 N = values.yaml 설정 그대로 사용 (최소 구성)"
+echo "========================================================"
+
+# ── 컨테이너 레지스트리 ──────────────────────────────────────
+read -p "  컨테이너 레지스트리 (Docker image push/pull) 활성화? (y/N): " OPT_REGISTRY
+OPT_REGISTRY="${OPT_REGISTRY:-N}"
+
+# ── KAS (Kubernetes Agent Server) ───────────────────────────
+read -p "  KAS (GitLab-K8s 클러스터 연동) 활성화? (y/N): " OPT_KAS
+OPT_KAS="${OPT_KAS:-N}"
+
+# ── Cert Manager ────────────────────────────────────────────
+read -p "  Cert Manager (TLS 인증서 자동 관리) 활성화? (y/N): " OPT_CERTMANAGER
+OPT_CERTMANAGER="${OPT_CERTMANAGER:-N}"
+
+# ── GitLab Runner ────────────────────────────────────────────
+read -p "  GitLab Runner (CI/CD 파이프라인 실행) 활성화? (y/N): " OPT_RUNNER
+OPT_RUNNER="${OPT_RUNNER:-N}"
+
+# ── Prometheus ───────────────────────────────────────────────
+read -p "  Prometheus + GitLab Exporter (모니터링) 활성화? (y/N): " OPT_PROMETHEUS
+OPT_PROMETHEUS="${OPT_PROMETHEUS:-N}"
+
+echo ""
+echo "선택 결과:"
+echo "  - 컨테이너 레지스트리 : ${OPT_REGISTRY}"
+echo "  - KAS                 : ${OPT_KAS}"
+echo "  - Cert Manager        : ${OPT_CERTMANAGER}"
+echo "  - GitLab Runner       : ${OPT_RUNNER}"
+echo "  - Prometheus          : ${OPT_PROMETHEUS}"
+echo ""
+
+# 선택 결과를 YAML 파일로 저장 (upgrade.sh 재사용 및 이력 보존)
+COMPONENTS_STATE_FILE="gitlab-components-state.sh"
+COMPONENTS_VALUES_FILE="gitlab-components.yaml"
+
+_bool() { [[ "$1" =~ ^[Yy]$ ]] && echo "true" || echo "false"; }
+
+cat > "${COMPONENTS_STATE_FILE}" <<EOF
+# 선택 설치 컴포넌트 상태 (install.sh 자동 생성 — 수동 편집 가능)
+OPT_REGISTRY=${OPT_REGISTRY}
+OPT_KAS=${OPT_KAS}
+OPT_CERTMANAGER=${OPT_CERTMANAGER}
+OPT_RUNNER=${OPT_RUNNER}
+OPT_PROMETHEUS=${OPT_PROMETHEUS}
+EOF
+
+cat > "${COMPONENTS_VALUES_FILE}" <<EOF
+# 선택 설치 컴포넌트 (install.sh 자동 생성 — 수동 편집 가능)
+# install.sh / upgrade.sh 가 -f 플래그로 자동 포함
+global:
+  registry:
+    enabled: $(_bool "${OPT_REGISTRY}")
+  kas:
+    enabled: $(_bool "${OPT_KAS}")
+certmanager:
+  install: $(_bool "${OPT_CERTMANAGER}")
+gitlab-runner:
+  install: $(_bool "${OPT_RUNNER}")
+prometheus:
+  install: $(_bool "${OPT_PROMETHEUS}")
+gitlab:
+  gitlab-exporter:
+    enabled: $(_bool "${OPT_PROMETHEUS}")
+EOF
+
+echo "✅ 컴포넌트 설정 저장: ${COMPONENTS_VALUES_FILE}"
+
 echo "========================================================"
 echo "🚀 GitLab 완전 초기화 및 재설치 스크립트를 시작합니다."
 echo "========================================================"
@@ -317,6 +391,7 @@ if [ -n "$NODE_SELECTOR_ARGS" ]; then
     echo "   Target Node Label: $NODE_LABEL_KEY=$NODE_LABEL_VALUE"
     helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f $VALUES_FILE \
+    -f $COMPONENTS_VALUES_FILE \
     $IMAGE_VALUES_ARG \
     --namespace $NAMESPACE \
     --timeout 600s \
@@ -325,6 +400,7 @@ else
     echo "   Node Selector: None (Automatic Scheduling)"
     helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f $VALUES_FILE \
+    -f $COMPONENTS_VALUES_FILE \
     $IMAGE_VALUES_ARG \
     --namespace $NAMESPACE \
     --timeout 600s

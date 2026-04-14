@@ -10,6 +10,8 @@ NAMESPACE="gitlab"
 RELEASE_NAME="gitlab"
 CHART_PATH="./charts/gitlab"
 VALUES_FILE="./values.yaml"
+COMPONENTS_STATE_FILE="./gitlab-components-state.sh"
+COMPONENTS_VALUES_FILE="./gitlab-components.yaml"
 
 # ── 이미지 소스 선택 ──────────────────────────────────────────
 echo ""
@@ -65,6 +67,90 @@ CURRENT_VERSION=$(helm list -n "$NAMESPACE" -o json \
     | python3 -c "import sys,json; r=[x for x in json.load(sys.stdin) if x['name']=='$RELEASE_NAME']; print(r[0]['chart'] if r else '')" 2>/dev/null || true)
 echo "  - 현재 배포된 Chart: ${CURRENT_VERSION:-알 수 없음}"
 echo "  - 업그레이드 대상 Chart: ${CHART_PATH}"
+
+# ==========================================
+# 0.5. 선택 설치 컴포넌트 확인 및 설정
+# ==========================================
+echo ""
+echo "========================================================"
+echo "  [선택 설치] 현재 활성화된 선택적 컴포넌트"
+echo "========================================================"
+
+_bool() { [[ "$1" =~ ^[Yy]$ ]] && echo "true" || echo "false"; }
+
+# 이전 설치 시 저장한 상태 파일이 있으면 불러오기
+OPT_REGISTRY=N
+OPT_KAS=N
+OPT_CERTMANAGER=N
+OPT_RUNNER=N
+OPT_PROMETHEUS=N
+
+if [ -f "${COMPONENTS_STATE_FILE}" ]; then
+    # shellcheck source=/dev/null
+    source "${COMPONENTS_STATE_FILE}"
+    echo "  이전 설치 설정을 불러왔습니다: ${COMPONENTS_STATE_FILE}"
+else
+    echo "  [경고] ${COMPONENTS_STATE_FILE} 없음 — 모든 선택 컴포넌트를 비활성화로 시작합니다."
+fi
+
+echo ""
+echo "  현재 설정:"
+echo "    컨테이너 레지스트리 : $( [[ "${OPT_REGISTRY}" =~ ^[Yy]$ ]] && echo "활성화" || echo "비활성화" )"
+echo "    KAS                 : $( [[ "${OPT_KAS}" =~ ^[Yy]$ ]] && echo "활성화" || echo "비활성화" )"
+echo "    Cert Manager        : $( [[ "${OPT_CERTMANAGER}" =~ ^[Yy]$ ]] && echo "활성화" || echo "비활성화" )"
+echo "    GitLab Runner       : $( [[ "${OPT_RUNNER}" =~ ^[Yy]$ ]] && echo "활성화" || echo "비활성화" )"
+echo "    Prometheus          : $( [[ "${OPT_PROMETHEUS}" =~ ^[Yy]$ ]] && echo "활성화" || echo "비활성화" )"
+echo ""
+
+read -p "  현재 설정을 그대로 유지하시겠습니까? (Y/n): " KEEP_COMPONENTS
+KEEP_COMPONENTS="${KEEP_COMPONENTS:-Y}"
+
+if [[ "${KEEP_COMPONENTS}" =~ ^[Nn]$ ]]; then
+    echo ""
+    echo "  새 컴포넌트 설정을 선택하세요 (기본값: 현재 설정):"
+    read -p "  컨테이너 레지스트리 활성화? (y/N, 현재: ${OPT_REGISTRY}): " NEW_REGISTRY
+    read -p "  KAS 활성화? (y/N, 현재: ${OPT_KAS}): " NEW_KAS
+    read -p "  Cert Manager 활성화? (y/N, 현재: ${OPT_CERTMANAGER}): " NEW_CERTMANAGER
+    read -p "  GitLab Runner 활성화? (y/N, 현재: ${OPT_RUNNER}): " NEW_RUNNER
+    read -p "  Prometheus 활성화? (y/N, 현재: ${OPT_PROMETHEUS}): " NEW_PROMETHEUS
+
+    OPT_REGISTRY="${NEW_REGISTRY:-${OPT_REGISTRY}}"
+    OPT_KAS="${NEW_KAS:-${OPT_KAS}}"
+    OPT_CERTMANAGER="${NEW_CERTMANAGER:-${OPT_CERTMANAGER}}"
+    OPT_RUNNER="${NEW_RUNNER:-${OPT_RUNNER}}"
+    OPT_PROMETHEUS="${NEW_PROMETHEUS:-${OPT_PROMETHEUS}}"
+fi
+
+# 상태 파일 및 Helm values 파일 갱신
+cat > "${COMPONENTS_STATE_FILE}" <<EOF
+# 선택 설치 컴포넌트 상태 (upgrade.sh 자동 생성 — 수동 편집 가능)
+OPT_REGISTRY=${OPT_REGISTRY}
+OPT_KAS=${OPT_KAS}
+OPT_CERTMANAGER=${OPT_CERTMANAGER}
+OPT_RUNNER=${OPT_RUNNER}
+OPT_PROMETHEUS=${OPT_PROMETHEUS}
+EOF
+
+cat > "${COMPONENTS_VALUES_FILE}" <<EOF
+# 선택 설치 컴포넌트 (upgrade.sh 자동 생성 — 수동 편집 가능)
+# install.sh / upgrade.sh 가 -f 플래그로 자동 포함
+global:
+  registry:
+    enabled: $(_bool "${OPT_REGISTRY}")
+  kas:
+    enabled: $(_bool "${OPT_KAS}")
+certmanager:
+  install: $(_bool "${OPT_CERTMANAGER}")
+gitlab-runner:
+  install: $(_bool "${OPT_RUNNER}")
+prometheus:
+  install: $(_bool "${OPT_PROMETHEUS}")
+gitlab:
+  gitlab-exporter:
+    enabled: $(_bool "${OPT_PROMETHEUS}")
+EOF
+
+echo "  ✅ 컴포넌트 설정 저장: ${COMPONENTS_VALUES_FILE}"
 
 # ==========================================
 # 1. 노드 고정 설정 (선택)
@@ -253,10 +339,10 @@ fi
 
 if [ -n "$NODE_SELECTOR_ARGS" ]; then
     echo "   Target Node Label: $NODE_LABEL_KEY=$NODE_LABEL_VALUE"
-    HELM_CMD="helm upgrade ${RELEASE_NAME} ${CHART_PATH} -f ${VALUES_FILE} ${IMAGE_VALUES_ARG} --namespace ${NAMESPACE} --timeout 600s ${NODE_SELECTOR_ARGS}"
+    HELM_CMD="helm upgrade ${RELEASE_NAME} ${CHART_PATH} -f ${VALUES_FILE} -f ${COMPONENTS_VALUES_FILE} ${IMAGE_VALUES_ARG} --namespace ${NAMESPACE} --timeout 600s ${NODE_SELECTOR_ARGS}"
 else
     echo "   Node Selector: None (Automatic Scheduling)"
-    HELM_CMD="helm upgrade ${RELEASE_NAME} ${CHART_PATH} -f ${VALUES_FILE} ${IMAGE_VALUES_ARG} --namespace ${NAMESPACE} --timeout 600s"
+    HELM_CMD="helm upgrade ${RELEASE_NAME} ${CHART_PATH} -f ${VALUES_FILE} -f ${COMPONENTS_VALUES_FILE} ${IMAGE_VALUES_ARG} --namespace ${NAMESPACE} --timeout 600s"
 fi
 
 echo ""

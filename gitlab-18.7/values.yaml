@@ -1,72 +1,115 @@
+# ============================================================
+# GitLab 18.7 — 폐쇄망 설치 values
+#
+# [선택 설치] 섹션의 각 컴포넌트는 필요에 따라 활성화하세요.
+# 기본값: 로컬 개발 최소 구성 (git 저장소 + 기본 UI)
+# ============================================================
+
+# ============================================================
+# [필수] 기본 환경 설정
+# ============================================================
 global:
   edition: ce
   hosts:
-    domain: devops.internal # 내부 도메인에 맞게 변경 (DNS 없이 쓸 경우 /etc/hosts에 등록)
+    domain: gitlab.devops.internal # 내부 도메인에 맞게 변경 (DNS 없이 쓸 경우 /etc/hosts에 등록)
     externalIP: 1.1.1.213   # 실제 노드 IP로 변경 — GitLab이 external_url 생성에 사용
     https: false
 
   image:
     registry: 1.1.1.213:30002 # Harbor domain
-    repository: library # Harbor Project
+    repository: library        # Harbor Project
     pullPolicy: IfNotPresent
 
-  # [핵심] Ingress 설정
-  # 1. Gateway API를 사용할 때
+  # ── Ingress 방식 선택 (1, 2, 3 중 하나만 활성화) ──────────
+
+  # 1. Gateway API(Envoy)를 사용할 때
   ingress:
     enabled: false
     configureCertmanager: false
     tls:
-      enabled: false          # TLS 비활성화 (HTTP 접속)
+      enabled: false
 
   # 2. 이미 설치된 ingress nginx를 사용할 때
   # ingress:
-  #   enabled: true           # Ingress 객체(라우팅 규칙) 생성: YES
+  #   enabled: true
   #   configureCertmanager: false
-  #   class: "none"           # NGINX가 채가면 안되므로 none 설정 (나중에 Envoy가 처리)
+  #   class: "none"
   #   tls:
-  #     enabled: false          # TLS 비활성화 (HTTP 접속)
+  #     enabled: false
 
-  # 3. gitlab의 ingress nginx를 사용할 떄
+  # 3. gitlab 내장 ingress nginx를 사용할 때
   # ingress:
-  #   enabled: true             # Ingress 활성화
-  #   configureCertmanager: false # 인증서 관리자 끔 (HTTP 사용)
-  #   class: gitlab-nginx              # 내장 NGINX 사용
+  #   enabled: true
+  #   configureCertmanager: false
+  #   class: gitlab-nginx
   #   tls:
-  #     enabled: false          # TLS 비활성화 (HTTP 접속)
+  #     enabled: false
 
-# [핵심] NGINX 컨트롤러 비활성화 (이미지는 받았지만 설치는 안 함)
-# 1,2. Gateway API를 사용할 때 혹은 이미 설치된 ingress nginx를 사용할 때
+  # ── [선택] Kubernetes Agent Server (KAS) ──────────────────
+  # GitLab과 K8s 클러스터 연동 기능 (GitLab Agent for Kubernetes).
+  # 로컬 개발 전용이거나 K8s 연동이 필요 없으면 false 유지.
+  kas:
+    enabled: false
+
+  # ── [선택] 컨테이너 레지스트리 ────────────────────────────
+  # Docker 이미지를 GitLab에 Push/Pull하는 기능.
+  # Git 저장소·CI만 사용한다면 false 유지.
+  registry:
+    enabled: false
+
+# ============================================================
+# [선택] 인그레스 컨트롤러 (gitlab 내장 nginx)
+# 3번 방식 선택 시 아래 블록 활성화
+# ============================================================
 nginx-ingress:
   enabled: false
+  # enabled: true
+  # controller:
+  #   ingressClassResource:
+  #     name: gitlab-nginx
+  #     controllerValue: "k8s.io/gitlab-nginx"
+  #   image:
+  #     registry: 1.1.1.213:30002
+  #     repository: library/ingress-nginx-controller
+  #     tag: "v1.11.8"
+  #     digest: ""
+  #   service:
+  #     type: NodePort
+  #     nodePorts:
+  #       http: 30080
+  #       https: 30443
+  #       ssh: 30022
 
-# 3. gitlab의 ingress nginx를 사용할 때
-# nginx-ingress:
-#   enabled: true
-#   controller:
-#     ingressClassResource:
-#       # [핵심] IngressClass 이름 변경 (충돌 방지)
-#       name: gitlab-nginx
-#       # 컨트롤러 값도 유니크하게 변경
-#       controllerValue: "k8s.io/gitlab-nginx"
-#     image:
-#       registry: 1.1.1.213:30002 # Harbor domain
-#       repository: library/ingress-nginx-controller # Harbor에 올라간 이미지
-#       tag: "v1.11.8"
-#       digest: ""
-#     service:
-#       type: NodePort
-#       nodePorts:
-#         http: 30080
-#         https: 30443
-#         ssh: 30022
-
-# [필수] Prometheus, Runner 등 무거운 컴포넌트 우선 비활성화 (안정화 후 켜기 권장)
-prometheus:
+# ============================================================
+# [선택] TLS 인증서 관리 (cert-manager)
+# HTTP 접속만 사용한다면 false 유지.
+# TLS 필요 시 true로 변경하고 이미지 사전 업로드 필요.
+# ============================================================
+certmanager:
   install: false
+
+# ============================================================
+# [선택] CI/CD Runner
+# CI/CD 파이프라인이 필요할 때 true로 변경.
+# 활성화 시 이미지(gitlab-runner) 사전 업로드 필요.
+# ============================================================
 gitlab-runner:
   install: false
 
-# [필수] DB 버전 (GitLab 18 대응)
+# ============================================================
+# [선택] 모니터링 (Prometheus + gitlab-exporter)
+# 리소스 현황 모니터링이 필요할 때 true로 변경.
+# ============================================================
+prometheus:
+  install: false
+
+gitlab:
+  gitlab-exporter:
+    enabled: false  # prometheus 비활성화 시 함께 꺼두는 것을 권장
+
+# ============================================================
+# [필수] 스토리지 설정 — StorageClass 및 PV 연동
+# ============================================================
 postgresql:
   image:
     tag: "16.2.0"
