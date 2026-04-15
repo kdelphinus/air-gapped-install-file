@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.." || exit 1
 # ==========================================
 NAMESPACE="envoy-gateway-system"
 CONTROLLER_CHART="./charts/gateway-1.6.1"
-INFRA_CHART="./charts/strato-gateway-infra"
+INFRA_CHART="./charts/gateway-infra"
 GW_NAME="cmp-gateway"
 GW_CLASS_NAME="eg-cluster-entry"
 GLOBAL_POLICY_FILE="./manifests/policy-global-config.yaml"
@@ -50,7 +50,7 @@ function cleanup_resources() {
   echo "🧹 [Clean Up] 기존 리소스 강제 정리 시작..."
 
   # 1. 헬름 차트 제거 (기다리지 않고 백그라운드로 던짐)
-  helm uninstall strato-gateway-infra -n $NAMESPACE --wait=false 2>/dev/null &
+  helm uninstall gateway-infra -n $NAMESPACE --wait=false 2>/dev/null &
   helm uninstall eg -n $NAMESPACE --wait=false 2>/dev/null &
   
   echo "⏳ 리소스 삭제 대기 중..."
@@ -184,7 +184,7 @@ if [ "$INSTALL_MODE" == "2" ]; then
         exit 1
     fi
     echo "🔧 [NodePort Mode] 적용 중..."
-    helm upgrade --install strato-gateway-infra $INFRA_CHART $BASE_OPTS \
+    helm upgrade --install gateway-infra $INFRA_CHART $BASE_OPTS \
         -f $INFRA_CHART/nodeport-values.yaml
     
     echo "⏳ Envoy 서비스 생성 대기 중..."
@@ -204,7 +204,7 @@ if [ "$INSTALL_MODE" == "2" ]; then
 else
     # LoadBalancer 모드: values.yaml만 적용
     echo "ℹ️  [LoadBalancer Mode] 적용 중..."
-    helm upgrade --install strato-gateway-infra $INFRA_CHART $BASE_OPTS
+    helm upgrade --install gateway-infra $INFRA_CHART $BASE_OPTS
 fi
 
 # ==========================================

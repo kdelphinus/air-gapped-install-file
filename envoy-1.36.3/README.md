@@ -107,14 +107,14 @@
 #### 신규 설치 — Local + DaemonSet (기본값, 추가 옵션 불필요)
 
 ```bash
-helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
+helm upgrade --install gateway-infra ./gateway-infra \
   -n envoy-gateway-system
 ```
 
 #### 신규 설치 — Cluster + Deployment
 
 ```bash
-helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
+helm upgrade --install gateway-infra ./gateway-infra \
   -n envoy-gateway-system \
   --set service.trafficPolicy=Cluster \
   --set envoy.deploymentType=Deployment
@@ -126,12 +126,12 @@ helm upgrade --install strato-gateway-infra ./strato-gateway-infra \
 
 ```bash
 # 1단계: trafficPolicy 먼저 변경 (무중단)
-helm upgrade strato-gateway-infra ./strato-gateway-infra \
+helm upgrade gateway-infra ./gateway-infra \
   -n envoy-gateway-system \
   --set service.trafficPolicy=Local
 
 # 2단계: DaemonSet 전환 (약 30초 중단)
-helm upgrade strato-gateway-infra ./strato-gateway-infra \
+helm upgrade gateway-infra ./gateway-infra \
   -n envoy-gateway-system \
   --set envoy.deploymentType=DaemonSet
 ```

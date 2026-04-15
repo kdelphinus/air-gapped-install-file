@@ -18,7 +18,7 @@ if [ -f "$GLOBAL_POLICY_FILE" ]; then
 fi
 
 # Helm 제거
-for RELEASE in strato-gateway-infra eg; do
+for RELEASE in gateway-infra eg; do
     if helm status $RELEASE -n $NAMESPACE > /dev/null 2>&1; then
         echo "🗑️  Helm Release '$RELEASE' 삭제 중..."
         helm uninstall $RELEASE -n $NAMESPACE --wait=false

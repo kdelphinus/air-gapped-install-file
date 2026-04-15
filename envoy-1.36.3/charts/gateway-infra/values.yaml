@@ -5,7 +5,7 @@ common:
 gateway:
   name: "cmp-gateway" # 기본값 (스크립트에서 덮어쓸 예정)
   tls:
-    name: "strato-tls"
+    name: "gateway-tls"
 
 service:
   trafficPolicy: Local

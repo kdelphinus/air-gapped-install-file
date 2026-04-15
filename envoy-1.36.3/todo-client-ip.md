@@ -61,9 +61,9 @@ kubectl patch svc -n envoy-gateway-system $SVC_NAME \
 ```bash
 cd <envoy-1.36.3 경로>/
 
-helm upgrade strato-gateway-infra ./strato-gateway-infra \
+helm upgrade gateway-infra ./gateway-infra \
   -n envoy-gateway-system \
-  -f strato-gateway-infra/nodeport-values.yaml
+  -f gateway-infra/nodeport-values.yaml
 ```
 
 적용되는 변경사항:
@@ -147,7 +147,7 @@ kubectl describe clienttrafficpolicy enable-proxy-protocol -n envoy-gateway-syst
 
 ```bash
 # PROXY Protocol 비활성화 + LoadBalancer 복원
-helm upgrade strato-gateway-infra ./strato-gateway-infra \
+helm upgrade gateway-infra ./gateway-infra \
   -n envoy-gateway-system
 
 # externalIPs 재패치 (필요 시)
@@ -165,8 +165,8 @@ kubectl patch svc -n envoy-gateway-system $SVC_NAME \
 
 | 파일 | 설명 |
 | :--- | :--- |
-| `strato-gateway-infra/nodeport-values.yaml` | NodePort + PROXY Protocol 활성화 values |
-| `strato-gateway-infra/values.yaml` | 기본 values (`clientIP.proxyProtocol: false`) |
-| `strato-gateway-infra/templates/main.yaml` | ClientTrafficPolicy 조건부 포함 |
+| `gateway-infra/nodeport-values.yaml` | NodePort + PROXY Protocol 활성화 values |
+| `gateway-infra/values.yaml` | 기본 values (`clientIP.proxyProtocol: false`) |
+| `gateway-infra/templates/main.yaml` | ClientTrafficPolicy 조건부 포함 |
 | `haproxy-proxy-protocol.cfg` | HAProxy 샘플 설정 |
 | `client-ip-preservation.md` | 상세 구성 가이드 |

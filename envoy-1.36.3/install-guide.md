@@ -59,7 +59,7 @@ HTTPS를 사용할 경우 Helm 배포 전 Gateway 네임스페이스에 TLS Secr
 kubectl create ns envoy-gateway-system --dry-run=client -o yaml | kubectl apply -f -
 
 # TLS Secret 생성
-kubectl create secret tls strato-tls \
+kubectl create secret tls gateway-tls \
   --cert=cert.pem \
   --key=key.pem \
   --namespace envoy-gateway-system
