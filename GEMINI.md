@@ -23,7 +23,15 @@ by OS:
 - `gitlab-*`: GitLab EE v18.7 deployment (Helm based).
 - `jenkins-*`: Jenkins CI/CD deployment and plugin management.
 - `mariadb-*`: Database installation.
+- `redis-stream-*`: Redis Stream HA configuration (Sentinel).
 - `envoy-*`: Envoy Gateway configuration.
+- `nginx-nic-*`: NGINX Ingress Controller.
+- `metallb-*`: MetalLB LoadBalancer.
+- `monitoring-*`: Prometheus + Grafana stack.
+- `nexus-*`: Nexus Repository Manager.
+- `velero-*`: Backup/Restore.
+- `falco-*`: Runtime security detection.
+- `tetragon-*`: Runtime security prevention.
 - `nfs-provisioner-4.0.2`: Dynamic NFS storage provisioning for K8s.
 - `basic-tools-*`: Essential utilities for specific OS versions.
 

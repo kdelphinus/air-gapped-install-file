@@ -38,7 +38,7 @@ Namespace: redis-stream-official
 ## 디렉토리 구조
 
 ```text
-redis-stream-7.2-official/
+redis-stream-8.6.2-official/
 ├── charts/
 │   └── redis-sentinel/                ← 커스텀 Helm Chart (templates, Chart.yaml)
 ├── images/
@@ -61,7 +61,7 @@ redis-stream-7.2-official/
 
 ```bash
 # 1. 이미지 Harbor 업로드
-cd redis-stream-7.2-official
+cd redis-stream-8.6.2-official
 ./images/upload_images_to_harbor_v3-lite.sh
 
 # 2. 설치

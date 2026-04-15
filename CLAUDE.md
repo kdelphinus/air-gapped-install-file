@@ -29,12 +29,20 @@ air-gapped/
 ├── basic-tools-rocky9.6/       # 기본 유틸 (curl, vimi, jq 등) - Rocky
 ├── basic-tools-ubuntu24.04/    # 기본 유틸 - Ubuntu
 ├── nfs-provisioner-4.0.2/      # NFS 동적 스토리지 프로비저닝 (Multi-OS 스크립트 포함)
+├── metallb-0.14.8/             # MetalLB L2 LoadBalancer
 ├── ingress-nginx-4.10.1/       # K8s Ingress 컨트롤러
+├── nginx-nic-5.3.1/            # NGINX Ingress Controller (NIC)
 ├── envoy-1.36.3/               # Envoy Gateway (L7 라우팅)
+├── monitoring-82.12.0/         # kube-prometheus-stack
+├── nexus-3.70.1/               # Nexus Repository Manager
 ├── gitlab-18.7/                # GitLab EE (Helm)
 ├── jenkins-2.528.3/            # Jenkins CI/CD (Helm)
 ├── argocd-2.12.1/              # ArgoCD GitOps (Helm)
-└── mariadb-*-rocky9.6/         # MariaDB DB
+├── mariadb-*-rocky9.6/         # MariaDB DB
+├── redis-stream-*-official/    # Redis Stream HA 구성
+├── velero-1.14.1/              # K8s 백업/복구
+├── falco-8.0.1/                # 런타임 이상행위 감지
+└── tetragon-1.6.0/             # 런타임 보안 차단
 ```
 
 ## Deployment Order
@@ -42,10 +50,13 @@ air-gapped/
 1. OS 기본 설정 + `basic-tools`
 2. `docker-offline` (필요 시)
 3. `k8s-1.30-rocky9.6` — containerd + kubeadm + Calico
-4. `harbor-2.10.3` — 내부 레지스트리 먼저 구축
+4. `harbor-2.10.3` — 내부 레지스트리 구축
 5. `nfs-provisioner` — 스토리지 클래스 확보
-6. `ingress-nginx` 또는 `envoy` — 인그레스
-7. `gitlab`, `jenkins`, `argocd`, `mariadb` — 앱 레이어
+6. `metallb` — LoadBalancer IP 확보
+7. `ingress-nginx` / `nginx-nic` / `envoy` — 인그레스/게이트웨이
+8. `monitoring` — 모니터링 구축
+9. `nexus`, `gitlab`, `jenkins`, `argocd`, `mariadb`, `redis-stream` — 앱 레이어
+10. `velero`, `falco`, `tetragon` — 백업 및 보안 (선택)
 
 ## Helm Component Directory Structure
 
