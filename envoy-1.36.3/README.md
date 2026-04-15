@@ -21,10 +21,10 @@
 - **역할**: `Gateway`, `HTTPRoute` 등 API 리소스를 감시하여 Envoy용 설정(xDS)으로 변환.
 - **특징**: 데이터 평면과 분리되어 있어, 컨트롤러에 문제가 생겨도 이미 설정된 트래픽 처리는 중단되지 않습니다.
 
-### 🔹 Data Plane: `cmp-gateway` (Envoy v1.36.3)
+### 🔹 Data Plane: `cluster-gateway` (Envoy v1.36.3)
 
 - **역할**: 실제 사용자 요청을 받아 백엔드 서비스로 라우팅.
-- **구성**: `pod/envoy-envoy-gateway-system-cmp-gateway-...` (2/2 Ready)
+- **구성**: `pod/envoy-envoy-gateway-system-cluster-gateway-...` (2/2 Ready)
 - **Envoy Container**: 고성능 L7 프록시 실행.
 - **Shutdown Manager**: 안전한 연결 종료를 위한 관리 컨테이너.
 
@@ -35,7 +35,7 @@
 ### 🔹 Gateway API 리소스
 
 - **GatewayClass**: `eg-cluster-entry` (Gateway 생성 방식 정의)
-- **Gateway**: `cmp-gateway` (IP `1.1.1.198`에 바인딩된 실제 진입점)
+- **Gateway**: `cluster-gateway` (IP `1.1.1.198`에 바인딩된 실제 진입점)
 
 ### 🔹 서비스 포트 맵핑 (NodePort)
 
@@ -65,7 +65,7 @@
 ### ✅ 신규 서비스 노출 절차
 
 1. 서비스에 맞는 `HTTPRoute` 리소스 생성.
-2. `parentRefs`를 `cmp-gateway`로 지정.
+2. `parentRefs`를 `cluster-gateway`로 지정.
 3. 폐쇄망 환경이므로 외부 도메인 대신 내부 DNS 또는 `/etc/hosts`에 `1.1.1.198`을 등록하여 테스트.
 
 ### ✅ 모니터링 및 트러블슈팅

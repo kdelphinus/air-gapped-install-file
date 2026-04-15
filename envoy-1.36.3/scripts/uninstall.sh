@@ -2,7 +2,7 @@
 cd "$(dirname "$0")/.." || exit 1
 
 NAMESPACE="envoy-gateway-system"
-GW_NAME="cmp-gateway"
+GW_NAME="cluster-gateway"
 GLOBAL_POLICY_FILE="./manifests/policy-global-config.yaml"
 
 echo "==========================================="
@@ -18,7 +18,7 @@ if [ -f "$GLOBAL_POLICY_FILE" ]; then
 fi
 
 # Helm 제거
-for RELEASE in gateway-infra eg; do
+for RELEASE in gateway-infra eg-gateway; do
     if helm status $RELEASE -n $NAMESPACE > /dev/null 2>&1; then
         echo "🗑️  Helm Release '$RELEASE' 삭제 중..."
         helm uninstall $RELEASE -n $NAMESPACE --wait=false

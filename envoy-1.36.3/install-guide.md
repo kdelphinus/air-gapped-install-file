@@ -131,7 +131,7 @@ kubectl patch svc -n envoy-gateway-system $SVC_NAME \
 **단일 IP:**
 
 ```bash
-kubectl patch gateway cmp-gateway -n envoy-gateway-system \
+kubectl patch gateway cluster-gateway -n envoy-gateway-system \
   --type='merge' \
   -p '{"spec":{"addresses":[{"type":"IPAddress","value":"<NODE_IP>"}]}}'
 ```
@@ -139,7 +139,7 @@ kubectl patch gateway cmp-gateway -n envoy-gateway-system \
 **여러 IP (DaemonSet 구성):**
 
 ```bash
-kubectl patch gateway cmp-gateway -n envoy-gateway-system \
+kubectl patch gateway cluster-gateway -n envoy-gateway-system \
   --type='merge' \
   -p '{
     "spec":{
@@ -225,7 +225,7 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system
   hostnames:
     - "my-app.devops.internal"
@@ -282,7 +282,7 @@ rules:
 
 ```bash
 # Gateway 상태 (attachedRoutes 수, Programmed 상태 확인)
-kubectl get gateway cmp-gateway -n envoy-gateway-system -o yaml
+kubectl get gateway cluster-gateway -n envoy-gateway-system -o yaml
 
 # 전체 HTTPRoute 연결 상태 요약
 kubectl get httproute -A
@@ -293,7 +293,7 @@ kubectl describe httproute <ROUTE_NAME> -n <NAMESPACE>
 
 주요 실패 원인:
 
-- `parentRefs.name`이 실제 Gateway 이름(`cmp-gateway`)과 불일치
+- `parentRefs.name`이 실제 Gateway 이름(`cluster-gateway`)과 불일치
 - Gateway Listener의 `allowedRoutes.namespaces` 설정으로 해당 네임스페이스가 차단됨
 
 ## 운영 — 로그 확인
@@ -301,7 +301,7 @@ kubectl describe httproute <ROUTE_NAME> -n <NAMESPACE>
 ```bash
 # Envoy Proxy (Data Plane) 로그 — 실제 트래픽, 접속 오류 확인
 kubectl logs -n envoy-gateway-system -f \
-  -l gateway.envoyproxy.io/owning-gateway-name=cmp-gateway
+  -l gateway.envoyproxy.io/owning-gateway-name=cluster-gateway
 
 # Gateway Controller (Control Plane) 로그 — 설정 변환, 배포 실패 원인 확인
 kubectl logs -n envoy-gateway-system -f \
@@ -327,7 +327,7 @@ kubectl create secret tls wildcard-tls-secret \
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: cmp-gateway
+  name: cluster-gateway
   namespace: envoy-gateway-system
 spec:
   gatewayClassName: eg-cluster-entry
@@ -364,7 +364,7 @@ metadata:
   namespace: nexus
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system
   hostnames:
     - "nexus.devops.internal"

@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.." || exit 1
 NAMESPACE="envoy-gateway-system"
 CONTROLLER_CHART="./charts/gateway-1.6.1"
 INFRA_CHART="./charts/gateway-infra"
-GW_NAME="cmp-gateway"
+GW_NAME="cluster-gateway"
 GW_CLASS_NAME="eg-cluster-entry"
 GLOBAL_POLICY_FILE="./manifests/policy-global-config.yaml"
 
@@ -51,7 +51,7 @@ function cleanup_resources() {
 
   # 1. 헬름 차트 제거 (기다리지 않고 백그라운드로 던짐)
   helm uninstall gateway-infra -n $NAMESPACE --wait=false 2>/dev/null &
-  helm uninstall eg -n $NAMESPACE --wait=false 2>/dev/null &
+  helm uninstall eg-gateway -n $NAMESPACE --wait=false 2>/dev/null &
   
   echo "⏳ 리소스 삭제 대기 중..."
   sleep 5
@@ -154,7 +154,7 @@ if [ -f "./values-controller.yaml" ]; then
     echo "ℹ️  루트의 values-controller.yaml 설정을 적용합니다."
 fi
 
-helm upgrade --install eg $CONTROLLER_CHART \
+helm upgrade --install eg-gateway $CONTROLLER_CHART \
   -n $NAMESPACE --create-namespace \
   $CONTROLLER_VALUES \
   --set global.images.envoyGateway.image=$IMG_GATEWAY \

@@ -85,7 +85,7 @@ kubectl delete clienttrafficpolicy enable-proxy-protocol -n envoy-gateway-system
 ### 4단계 — Gateway 주소를 VIP로 변경
 
 ```bash
-kubectl patch gateway cmp-gateway -n envoy-gateway-system \
+kubectl patch gateway cluster-gateway -n envoy-gateway-system \
   --type='merge' \
   -p '{"spec":{"addresses":[{"type":"IPAddress","value":"<VIP_IP>"}]}}'
 ```
@@ -94,7 +94,7 @@ kubectl patch gateway cmp-gateway -n envoy-gateway-system \
 
 ```bash
 # Gateway ADDRESS가 VIP로 바뀌었는지 확인
-kubectl get gateway cmp-gateway -n envoy-gateway-system
+kubectl get gateway cluster-gateway -n envoy-gateway-system
 
 # Envoy 서비스가 NodePort 30080/30443인지 확인
 kubectl get svc -n envoy-gateway-system
@@ -132,7 +132,7 @@ SNAT + PP 미지원 환경에서 실IP가 필요하다면 네트워크 팀과 �
 
 ```bash
 # 1. Gateway 주소를 워커 노드 IP로 되돌리기
-kubectl patch gateway cmp-gateway -n envoy-gateway-system \
+kubectl patch gateway cluster-gateway -n envoy-gateway-system \
   --type='merge' \
   -p '{"spec":{"addresses":[{"type":"IPAddress","value":"<WORKER_NODE_IP>"}]}}'
 
@@ -147,7 +147,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: cmp-gateway
+    name: cluster-gateway
   enableProxyProtocol: true
 EOF
 ```

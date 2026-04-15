@@ -11,7 +11,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: cmp-gateway
+    name: cluster-gateway
   
   # envoy 앞에 있는 LB의 개수
   clientIPDetection:
@@ -38,7 +38,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: cmp-gateway
+    name: cluster-gateway
   type: JSONPatch
   jsonPatches:
     # =======================================================
@@ -46,7 +46,7 @@ spec:
     # =======================================================
     # 1-A. X-Real-IP 헤더 주입
     - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
-      name: "envoy-gateway-system/cmp-gateway/http"
+      name: "envoy-gateway-system/cluster-gateway/http"
       operation:
         op: add
         path: "/filter_chains/0/filters/0/typed_config/http_filters/0"
@@ -63,7 +63,7 @@ spec:
     
     # 1-B. Body Size 5GB 설정
     - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
-      name: "envoy-gateway-system/cmp-gateway/http"
+      name: "envoy-gateway-system/cluster-gateway/http"
       operation:
         op: add
         path: "/filter_chains/0/filters/0/typed_config/max_request_bytes"
@@ -74,7 +74,7 @@ spec:
     # =======================================================
     # 2-A. X-Real-IP 헤더 주입
     - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
-      name: "envoy-gateway-system/cmp-gateway/https"
+      name: "envoy-gateway-system/cluster-gateway/https"
       operation:
         op: add
         path: "/filter_chains/0/filters/0/typed_config/http_filters/0"
@@ -91,7 +91,7 @@ spec:
 
     # 2-B. Body Size 5GB 설정
     - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
-      name: "envoy-gateway-system/cmp-gateway/https"
+      name: "envoy-gateway-system/cluster-gateway/https"
       operation:
         op: add
         path: "/filter_chains/0/filters/0/typed_config/max_request_bytes"
@@ -111,7 +111,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: cmp-gateway
+    name: cluster-gateway
   timeout:
     http:
       requestTimeout: 600s
