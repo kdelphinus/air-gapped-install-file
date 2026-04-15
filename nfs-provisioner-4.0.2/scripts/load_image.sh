@@ -36,8 +36,7 @@ if command -v ctr &> /dev/null; then
     echo ""
     echo "   [Harbor push] 내부 레지스트리로 업로드하려면 upload_images_to_harbor_v3-lite.sh 를 사용합니다."
     echo "   스크립트 내 IMAGE_DIR, HARBOR_REGISTRY, HARBOR_PROJECT, HARBOR_USER, HARBOR_PASSWORD 변수를 수정 후 실행:"
-    echo "   bash ../../harbor-1.14.3/utils/upload_images_to_harbor_v3-lite.sh"
-
+    echo "   bash ../../harbor-2.10.3/scripts/upload_images_to_harbor_v3-lite.sh"
 # 2. Docker 확인
 elif command -v docker &> /dev/null; then
     echo ">> Docker 환경이 감지되었습니다."
