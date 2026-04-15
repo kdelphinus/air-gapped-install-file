@@ -23,7 +23,7 @@
 ```text
 air-gapped/
 ├── k8s-1.30-*/                 # K8s 클러스터 구성 (RPM/DEB, 바이너리, 이미지)
-├── harbor-1.14.3/              # 내부 컨테이너 레지스트리
+├── harbor-2.10.3/              # 내부 컨테이너 레지스트리
 ├── docker-offline-*/           # Docker Engine (OS별)
 ├── git-*-rocky9.6/             # Git 오프라인 설치 (Rocky)
 ├── basic-tools-rocky9.6/       # 기본 유틸 (curl, vimi, jq 등) - Rocky
@@ -42,7 +42,7 @@ air-gapped/
 1. OS 기본 설정 + `basic-tools`
 2. `docker-offline` (필요 시)
 3. `k8s-1.30-rocky9.6` — containerd + kubeadm + Calico
-4. `harbor-1.14.3` — 내부 레지스트리 먼저 구축
+4. `harbor-2.10.3` — 내부 레지스트리 먼저 구축
 5. `nfs-provisioner` — 스토리지 클래스 확보
 6. `ingress-nginx` 또는 `envoy` — 인그레스
 7. `gitlab`, `jenkins`, `argocd`, `mariadb` — 앱 레이어
