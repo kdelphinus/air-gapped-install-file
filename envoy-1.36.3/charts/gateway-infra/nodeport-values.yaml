@@ -1,9 +1,0 @@
-# nodeport-values.yaml
-# HAProxy 앞단 + PROXY Protocol 구성 시 사용
-# helm upgrade ... -f nodeport-values.yaml
-service:
-  type: NodePort
-  trafficPolicy: Local
-
-clientIP:
-  proxyProtocol: true

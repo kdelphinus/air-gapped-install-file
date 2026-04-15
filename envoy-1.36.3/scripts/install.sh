@@ -52,7 +52,7 @@ function cleanup_resources() {
   # 1. 헬름 차트 제거 (기다리지 않고 백그라운드로 던짐)
   helm uninstall gateway-infra -n $NAMESPACE --wait=false 2>/dev/null &
   helm uninstall eg-gateway -n $NAMESPACE --wait=false 2>/dev/null &
-  
+
   echo "⏳ 리소스 삭제 대기 중..."
   sleep 5
 
@@ -63,14 +63,14 @@ function cleanup_resources() {
     kubectl get $KIND -n $NAMESPACE -o name 2>/dev/null | \
     xargs -r -I {} kubectl patch {} -n $NAMESPACE -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null
   done
-  
+
   # 전역 정책 삭제
   kubectl delete -f $GLOBAL_POLICY_FILE 2>/dev/null
 
   # 3. 네임스페이스 강제 삭제 (최후의 수단)
   if kubectl get ns $NAMESPACE > /dev/null 2>&1; then
       echo "🗑️  네임스페이스($NAMESPACE) 강제 삭제 시도..."
-      
+
       # 일단 일반 삭제 시도
       kubectl delete ns $NAMESPACE --timeout=5s --wait=false 2>/dev/null
 
@@ -80,7 +80,7 @@ function cleanup_resources() {
         sed "s/\"kubernetes\"//g" | \
         kubectl replace --raw "/api/v1/namespaces/$NAMESPACE/finalize" -f - > /dev/null 2>&1
   fi
-  
+
   echo "✅ 초기화 완료."
   echo ""
 }
@@ -93,28 +93,44 @@ function cleanup_resources() {
 
 
 # ==========================================
-# [1] 재설치 여부 확인
+# [1] 기존 설치 감지 — 재설치 / 업그레이드 / 취소
 # ==========================================
+DO_UPGRADE=false
 if kubectl get ns $NAMESPACE > /dev/null 2>&1; then
+  echo ""
   echo "⚠️  기존 설치가 감지되었습니다."
-  read -p "❓ 삭제 후 재설치하시겠습니까? (y/n): " DO_CLEANUP
-  if [[ "$DO_CLEANUP" =~ ^[Yy]$ ]]; then
-    cleanup_resources
-  else
-    echo "ℹ️  기존 리소스를 유지하고 업데이트(Upgrade)합니다."
-  fi
+  echo "  1) 삭제 후 재설치"
+  echo "  2) 업그레이드 (helm upgrade, 기존 설정 유지)"
+  echo "  3) 취소"
+  read -p "선택 [1/2/3]: " EXIST_ACTION
+  case "$EXIST_ACTION" in
+    1)
+      cleanup_resources
+      ;;
+    2)
+      DO_UPGRADE=true
+      echo ""
+      echo "ℹ️  업그레이드 모드로 진행합니다."
+      echo "⚠️  CRD 변경이 있는 경우 helm upgrade로는 자동 적용되지 않습니다."
+      echo "    필요 시 아래 명령어로 CRD를 수동 적용하세요:"
+      echo "    kubectl apply -f ./charts/gateway-1.6.1/crds/"
+      echo ""
+      ;;
+    *)
+      echo "취소되었습니다."; exit 0
+      ;;
+  esac
 fi
 
 # ==========================================
-# [2] 설치 모드 선택 (LB vs NodePort)
+# [2] values-infra.yaml에서 서비스 타입 감지
 # ==========================================
-echo ""
-echo "----------------------------------------------------------------"
-echo " 🛠️  설치 모드 선택:"
-echo " 1) LoadBalancer Mode (기본) - HostNetwork/MetalLB 사용"
-echo " 2) NodePort Mode (권장) - 외부 LB 연동 (NodePort 30443)"
-echo "----------------------------------------------------------------"
-read -p "선택 [1 or 2]: " INSTALL_MODE
+if [ ! -f "./values-infra.yaml" ]; then
+  echo "❌ 에러: values-infra.yaml 파일이 없습니다. 배포 설정을 확인하세요."
+  exit 1
+fi
+SVC_TYPE=$(grep -A2 '^service:' ./values-infra.yaml | grep 'type:' | awk '{print $2}')
+echo "ℹ️  서비스 타입: ${SVC_TYPE:-LoadBalancer} (values-infra.yaml 기준)"
 
 # ==========================================
 # [3] 노드 고정 설정 (선택 사항)
@@ -122,7 +138,6 @@ read -p "선택 [1 or 2]: " INSTALL_MODE
 echo ""
 echo "🌐 현재 클러스터 노드 목록:"
 echo "----------------------------------------------------------------"
-# 노드 이름, 상태, 역할을 표 형태로 출력합니다.
 kubectl get nodes -o custom-columns="NAME:.metadata.name,STATUS:.status.conditions[?(@.type=='Ready')].status,ROLE:.metadata.labels['kubernetes\.io/role']" | sed 's/True/Ready/g'
 echo "----------------------------------------------------------------"
 echo "위 목록에서 Envoy를 고정할 노드 이름을 입력하세요."
@@ -132,7 +147,6 @@ if [ -z "$TARGET_NODE" ]; then
     NODE_FLAG=""
     echo "ℹ️  노드 고정 없이 자동 배치합니다."
 else
-    # 입력한 노드 이름이 실제 존재하는지 한 번 더 체크 (방어 로직)
     if ! kubectl get node "$TARGET_NODE" > /dev/null 2>&1; then
         echo "⚠️  경고: '$TARGET_NODE' 노드를 찾을 수 없습니다. 자동 배치로 진행합니다."
         NODE_FLAG=""
@@ -148,15 +162,8 @@ fi
 echo ""
 echo "🚀 [1/2] Envoy Gateway Controller 설치 중..."
 
-CONTROLLER_VALUES=""
-if [ -f "./values-controller.yaml" ]; then
-    CONTROLLER_VALUES="-f ./values-controller.yaml"
-    echo "ℹ️  루트의 values-controller.yaml 설정을 적용합니다."
-fi
-
 helm upgrade --install eg-gateway $CONTROLLER_CHART \
   -n $NAMESPACE --create-namespace \
-  $CONTROLLER_VALUES \
   --set global.images.envoyGateway.image=$IMG_GATEWAY \
   --set global.images.envoyGateway.pullPolicy="IfNotPresent"
 
@@ -164,47 +171,32 @@ echo "⏳ 컨트롤러 준비 대기..."
 kubectl wait --timeout=5m -n $NAMESPACE deployment/envoy-gateway --for=condition=Available
 
 # ==========================================
-# [5] Infrastructure 설치 (핵심)
+# [5] Infrastructure 설치
 # ==========================================
 echo "🚀 [2/2] Infrastructure 배포 중..."
 
-INFRA_VALUES=""
-if [ -f "./values-infra.yaml" ]; then
-    INFRA_VALUES="-f ./values-infra.yaml"
-    echo "ℹ️  루트의 values-infra.yaml 설정을 적용합니다."
-fi
+helm upgrade --install gateway-infra $INFRA_CHART \
+  -n $NAMESPACE \
+  -f ./values-infra.yaml \
+  --set envoy.image=$IMG_PROXY \
+  --set gateway.name=$GW_NAME \
+  $NODE_FLAG
 
-# 공통 옵션
-BASE_OPTS="-n $NAMESPACE --set envoy.image=$IMG_PROXY --set gateway.name=$GW_NAME $NODE_FLAG $INFRA_VALUES"
-
-if [ "$INSTALL_MODE" == "2" ]; then
-    # NodePort 모드: values.yaml + nodeport-values.yaml 함께 적용
-    if [ ! -f "$INFRA_CHART/nodeport-values.yaml" ]; then
-        echo "❌ 에러: $INFRA_CHART/nodeport-values.yaml 파일이 없습니다!"
-        exit 1
-    fi
-    echo "🔧 [NodePort Mode] 적용 중..."
-    helm upgrade --install gateway-infra $INFRA_CHART $BASE_OPTS \
-        -f $INFRA_CHART/nodeport-values.yaml
-    
+# NodePort 모드: 포트를 30080/30443으로 고정
+if [ "$SVC_TYPE" == "NodePort" ]; then
     echo "⏳ Envoy 서비스 생성 대기 중..."
-    sleep 10 # 리소스 생성 대기
+    sleep 10
 
-    # 서비스 이름 찾기 (Gateway 이름이 포함된 서비스)
     SVC_NAME=$(kubectl get svc -n $NAMESPACE -l gateway.envoyproxy.io/owning-gateway-name=$GW_NAME -o jsonpath='{.items[0].metadata.name}')
 
-    if [ ! -z "$SVC_NAME" ]; then
-        echo "🔧 서비스($SVC_NAME) 포트를 30443으로 변경합니다..."
-        # 443 -> 30443, 80 -> 30080 강제 패치
-        kubectl patch svc $SVC_NAME -n $NAMESPACE --type='merge' -p '{"spec":{"ports":[{"name":"https","port":443,"targetPort":10443,"nodePort":30443},{"name":"http","port":80,"targetPort":10080,"nodePort":30080}]}}'
+    if [ -n "$SVC_NAME" ]; then
+        echo "🔧 서비스($SVC_NAME) 포트를 30080/30443으로 변경합니다..."
+        kubectl patch svc $SVC_NAME -n $NAMESPACE --type='merge' \
+          -p '{"spec":{"ports":[{"name":"https","port":443,"targetPort":10443,"nodePort":30443},{"name":"http","port":80,"targetPort":10080,"nodePort":30080}]}}'
         echo "✅ 포트 변경 완료."
     else
         echo "⚠️  서비스를 찾지 못해 포트 변경에 실패했습니다. (수동 확인 필요)"
     fi
-else
-    # LoadBalancer 모드: values.yaml만 적용
-    echo "ℹ️  [LoadBalancer Mode] 적용 중..."
-    helm upgrade --install gateway-infra $INFRA_CHART $BASE_OPTS
 fi
 
 # ==========================================
@@ -215,7 +207,7 @@ if [ -f "$GLOBAL_POLICY_FILE" ]; then
   echo "----------------------------------------------------------------"
   echo " 📜 전역 정책 설정 확인 ($GLOBAL_POLICY_FILE)"
   read -p "❓ 전역 정책(EnvoyPatchPolicy 등)을 지금 적용하시겠습니까? (y/n): " APPLY_POLICY
-  
+
   if [[ "$APPLY_POLICY" =~ ^[Yy]$ ]]; then
     echo "🚀 전역 정책 적용 중..."
     kubectl apply -f $GLOBAL_POLICY_FILE
@@ -236,8 +228,8 @@ echo ""
 echo "========================================================"
 echo "🎉 설치 완료!"
 echo "Gateway   : $GW_NAME"
-if [ "$INSTALL_MODE" == "2" ]; then
-    echo "Mode      : NodePort (30443)"
+if [ "$SVC_TYPE" == "NodePort" ]; then
+    echo "Mode      : NodePort (30080/30443)"
     echo "Check     : netstat -tlpn | grep 30443"
 else
     echo "Mode      : LoadBalancer"
