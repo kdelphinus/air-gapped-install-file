@@ -16,7 +16,7 @@
 
 ## 2. 시스템 아키텍처 및 역할 (Architecture)
 
-### 🔹 Control Plane: `envoy-gateway` (v1.1.1)
+### 🔹 Control Plane: `envoy-gateway` (v1.6.1)
 
 - **역할**: `Gateway`, `HTTPRoute` 등 API 리소스를 감시하여 Envoy용 설정(xDS)으로 변환.
 - **특징**: 데이터 평면과 분리되어 있어, 컨트롤러에 문제가 생겨도 이미 설정된 트래픽 처리는 중단되지 않습니다.
@@ -56,7 +56,7 @@
 
 ### ⚙️ 시스템 설정 (ConfigMaps)
 
-- `envoy-gateway-config`: Envoy Gateway v1.1.1의 동작 파라미터(필터 설정, 로그 관리 등) 저장.
+- `envoy-gateway-config`: Envoy Gateway v1.6.1의 동작 파라미터(필터 설정, 로그 관리 등) 저장.
 
 ---
 
