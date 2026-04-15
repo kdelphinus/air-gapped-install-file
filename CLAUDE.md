@@ -16,7 +16,7 @@
 | Kubernetes | v1.30.0 (kubeadm 기반) |
 | Container Runtime | containerd v2.2.0 |
 | CNI | Calico |
-| Internal Registry | Harbor v1.14.3 → `<NODE_IP>:30002` |
+| Internal Registry | Harbor v2.10.3 → `<NODE_IP>:30002` |
 
 ## Component Directory Map
 
