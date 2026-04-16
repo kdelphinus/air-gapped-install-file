@@ -20,7 +20,7 @@ by OS:
 - `k8s-*`: Kubernetes cluster setup (RPMs/DEBs, binaries, images).
 - `harbor-*`: Enterprise container registry setup.
 - `ingress-nginx-*`: K8s Ingress controller.
-- `gitlab-*`: GitLab EE v18.7 deployment (Helm based).
+- `gitlab-*`: GitLab EE deployment.
 - `jenkins-*`: Jenkins CI/CD deployment and plugin management.
 - `mariadb-*`: Database installation.
 - `redis-stream-*`: Redis Stream HA configuration (Sentinel).
@@ -32,12 +32,12 @@ by OS:
 - `velero-*`: Backup/Restore.
 - `falco-*`: Runtime security detection.
 - `tetragon-*`: Runtime security prevention.
-- `nfs-provisioner-4.0.2`: Dynamic NFS storage provisioning for K8s.
+- `nfs-provisioner-*`: Dynamic NFS storage provisioning for K8s.
 - `basic-tools-*`: Essential utilities for specific OS versions.
 
 ## 🛠️ Key Conventions & Tech Stack
 
-- **OS**: Multi-OS support including Rocky Linux 9.6 and Ubuntu 24.04.
+- **OS**: Multi-OS support including RHEL-based (e.g., Rocky Linux) and Debian-based (e.g., Ubuntu) systems.
 - **Scripts**: Primarily Bash (`.sh`). Many scripts handle offline image
   loading (`docker load`) and pushing to local Harbor. Scripts should handle
   OS-specific differences (e.g., `dnf` vs `apt`).
@@ -46,7 +46,7 @@ by OS:
 - **Offline Strategy**:
   - Download all RPMs/DEBs/Binaries beforehand.
   - Export container images to `.tar` or `.tgz` files.
-  - Use local Harbor (`30002` port by default) as the image registry.
+  - Use local Harbor (Default Port 30002 or Domain-based) as the image registry.
 
 ## 📖 Key Documentation
 
@@ -59,7 +59,7 @@ by OS:
 - Always assume **no internet access**. All tools and dependencies must be
   sourced from within the repository or the local network.
 - When generating scripts, prefer Bash and ensure they are compatible with
-  the target OS (Rocky Linux 9.6, Ubuntu 24.04, etc.).
+  the target OS versions.
 - For Kubernetes resources, prioritize stability and data persistence
   (`Retain` policy for PVs).
 - Reference existing `upload_images_to_harbor_v3-lite.sh` scripts when

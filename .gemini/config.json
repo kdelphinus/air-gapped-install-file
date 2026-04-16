@@ -5,16 +5,16 @@
     "constraints": [
       "No internet access",
       "Support multiple Linux distributions (RHEL-based, Debian-based)",
-      "K8s version: 1.30",
-      "GitLab version: 18.7",
-      "Harbor version: 2.10.3",
-      "NFS Provisioner version: 4.0.2"
+      "K8s version: Support for latest stable and project-specific versions",
+      "GitLab version: Support for latest stable and project-specific versions",
+      "Harbor version: Support for latest stable and project-specific versions",
+      "NFS Provisioner version: Support for latest stable and project-specific versions"
     ]
   },
   "conventions": {
     "scripting": "Bash",
     "infrastructure": "Kubernetes/Helm",
-    "registry": "Local Harbor (Port 30002)",
+    "registry": "Local Harbor (Default Port 30002 or Domain-based)",
     "git_commit": "Include 'Co-Authored-By: Gemini CLI <noreply@google.com>' in all commit messages.",
     "documentation": {
       "format": "Markdown",
