@@ -177,9 +177,19 @@ chmod +x scripts/create_self-signed_tls.sh
 ## 이미지 Push 예시
 
 ```bash
-docker login <NODE_IP>:30002 -u admin
-docker tag my-image:v1 <NODE_IP>:30002/library/my-image:v1
-docker push <NODE_IP>:30002/library/my-image:v1
+# 1. 이미지 import (로컬 .tar → containerd k8s.io 네임스페이스)
+sudo ctr -n k8s.io images import my-image.tar
+
+# 2. Tag (Harbor 대상 주소로 변환)
+sudo ctr -n k8s.io images tag \
+  docker.io/library/my-image:v1 \
+  <NODE_IP>:30002/library/my-image:v1
+
+# 3. Push (HTTP 사용 시 --plain-http 추가)
+sudo ctr -n k8s.io images push \
+  --plain-http \
+  --user admin:<PASSWORD> \
+  <NODE_IP>:30002/library/my-image:v1
 ```
 
 ## 삭제
