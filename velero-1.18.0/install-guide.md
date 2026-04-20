@@ -38,7 +38,7 @@ velero version --client-only
 
 ### 이미지 소스 선택
 
-```
+```sh
 이미지 소스를 선택하세요:
   1) Harbor 레지스트리 사용  ← 권장
   2) 로컬 tar 직접 import
@@ -46,7 +46,7 @@ velero version --client-only
 
 Harbor 선택 시 레지스트리 주소와 프로젝트명을 입력합니다.
 
-```
+```sh
 Harbor 레지스트리 주소 (예: 192.168.1.10:30002): 
 Harbor 프로젝트 (예: library, oss): 
 ```
@@ -55,7 +55,7 @@ Harbor 프로젝트 (예: library, oss):
 
 MinIO 데이터 볼륨을 어디에 저장할지 선택합니다.
 
-```
+```sh
 MinIO 스토리지 타입을 선택하세요:
   1) HostPath  — 로컬 노드 디렉토리 (단일 노드 환경 권장)
   2) NAS/NFS   — 네트워크 공유 스토리지
@@ -83,7 +83,7 @@ MinIO 웹 콘솔은 아래 주소로 접속합니다.
 
 이미 설치된 상태에서 `install.sh`를 다시 실행하면 아래 메뉴가 나타납니다.
 
-```
+```sh
 동작을 선택하세요:
   1) 업그레이드   — 저장된 설정 유지, Helm upgrade --install
   2) 재설치       — 설정 재입력, MinIO 데이터 삭제 여부 선택
