@@ -1,0 +1,66 @@
+# Gitea 1.25.5 (Chart 12.5.3) Air-gapped Values
+#
+# [기본 구성] SQLite — 추가 이미지 없이 단순 설치
+# [선택 구성] PostgreSQL — install.sh 에서 선택 시 postgresql.enabled: true 로 오버라이드
+#
+# 이미지 주소는 install.sh 에서 --set 으로 주입됩니다.
+# 아래 경로는 values.yaml 기본값 (Harbor 업로드 전 로컬 개발용 참조)
+image:
+  registry: <NODE_IP>:30002
+  repository: library/gitea
+  tag: "1.25.5"
+  pullPolicy: IfNotPresent
+
+# 서비스 타입 — NodePort 고정 (install.sh 에서 패치)
+service:
+  http:
+    type: NodePort
+    port: 3000
+    nodePort: 30003
+  ssh:
+    type: NodePort
+    port: 22
+    nodePort: 30022
+
+# 폐쇄망 설정
+gitea:
+  config:
+    server:
+      OFFLINE_MODE: "true"
+      DISABLE_GRAVATAR: "true"
+      ROOT_URL: "http://gitea.devops.internal"
+    repository:
+      DEFAULT_BRANCH: main
+    cache:
+      ADAPTER: memory
+    session:
+      PROVIDER: memory
+    queue:
+      TYPE: level
+    database:
+      DB_TYPE: sqlite3
+      PATH: /data/gitea/gitea.db
+
+# 영구 데이터 스토리지
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+  claimName: gitea-data-pvc
+
+# 초기 관리자 계정
+adminUser: gitea-admin
+adminEmail: admin@devops.internal
+
+# 의존 서브차트 기본 비활성화 (SQLite 기본 구성)
+# PostgreSQL 사용 시 install.sh 에서 --set postgresql.enabled=true 로 전환
+postgresql-ha:
+  enabled: false
+valkey-cluster:
+  enabled: false
+redis-cluster:
+  enabled: false
+postgresql:
+  enabled: false
