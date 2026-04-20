@@ -40,6 +40,8 @@ air-gapped/
 ├── argocd-2.12.1/              # ArgoCD GitOps (Helm)
 ├── mariadb-*-rocky9.6/         # MariaDB DB
 ├── redis-stream-*-official/    # Redis Stream HA 구성
+├── gitea-1.25.5/               # Gitea Git 서버 (Helm, 경량)
+├── tekton-1.9.0/               # Tekton Pipelines CI/CD (manifests 기반)
 ├── velero-1.14.1/              # K8s 백업/복구
 ├── falco-8.0.1/                # 런타임 이상행위 감지
 └── tetragon-1.6.0/             # 런타임 보안 차단
@@ -55,7 +57,7 @@ air-gapped/
 6. `metallb` — LoadBalancer IP 확보
 7. `ingress-nginx` / `nginx-nic` / `envoy` — 인그레스/게이트웨이
 8. `monitoring` — 모니터링 구축
-9. `nexus`, `gitlab`, `jenkins`, `argocd`, `mariadb`, `redis-stream` — 앱 레이어
+9. `nexus`, `gitlab`, `gitea`, `jenkins`, `tekton`, `argocd`, `mariadb`, `redis-stream` — 앱 레이어
 10. `velero`, `falco`, `tetragon` — 백업 및 보안 (선택)
 
 ## Helm Component Directory Structure

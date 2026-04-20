@@ -21,7 +21,9 @@ by OS:
 - `harbor-*`: Enterprise container registry setup.
 - `ingress-nginx-*`: K8s Ingress controller.
 - `gitlab-*`: GitLab EE deployment.
+- `gitea-*`: Lightweight Git service (Gitea).
 - `jenkins-*`: Jenkins CI/CD deployment and plugin management.
+- `tekton-*`: Kubernetes-native CI/CD framework (Tekton).
 - `mariadb-*`: Database installation.
 - `redis-stream-*`: Redis Stream HA configuration (Sentinel).
 - `envoy-*`: Envoy Gateway configuration.
