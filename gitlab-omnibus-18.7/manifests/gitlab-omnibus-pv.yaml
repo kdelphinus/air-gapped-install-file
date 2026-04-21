@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gitlab-omnibus-data-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  claimRef:
+    namespace: gitlab-omnibus
+    name: gitlab-omnibus-data
+  hostPath:
+    path: <HOSTPATH_DIR>/data
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gitlab-omnibus-config-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  claimRef:
+    namespace: gitlab-omnibus
+    name: gitlab-omnibus-config
+  hostPath:
+    path: <HOSTPATH_DIR>/config
+    type: DirectoryOrCreate

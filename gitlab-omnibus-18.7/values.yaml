@@ -1,0 +1,33 @@
+# ============================================================
+# GitLab CE 18.7 Omnibus — 폐쇄망 단일 파드 설치 values
+# ============================================================
+
+image:
+  registry: <NODE_IP>:30002
+  repository: <PROJECT>/gitlab-ce
+  tag: 18.7.0-ce.0
+  pullPolicy: IfNotPresent
+
+externalUrl: http://gitlab.devops.internal
+sshPort: 30022
+timezone: Asia/Seoul
+
+storage:
+  data:
+    size: 50Gi
+    storageClass: manual
+  config:
+    size: 1Gi
+    storageClass: manual
+
+# ── 리소스 설정 ────────────────────────────────────────────
+# Omnibus는 PostgreSQL/Redis/Nginx/Sidekiq 전부 포함 → 최소 2Gi 권장
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    cpu: 4
+    memory: 6Gi
+
+nodeSelector: {}

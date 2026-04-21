@@ -1,0 +1,27 @@
+image:
+  registry: ""
+  repository: gitlab-ce
+  tag: 18.7.0-ce.0
+  pullPolicy: IfNotPresent
+
+externalUrl: http://gitlab.devops.internal
+sshPort: 30022
+timezone: Asia/Seoul
+
+storage:
+  data:
+    size: 50Gi
+    storageClass: manual
+  config:
+    size: 1Gi
+    storageClass: manual
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    cpu: 4
+    memory: 6Gi
+
+nodeSelector: {}

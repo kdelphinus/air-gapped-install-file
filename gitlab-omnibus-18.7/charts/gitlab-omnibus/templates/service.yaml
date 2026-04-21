@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: gitlab-omnibus
+    release: {{ .Release.Name }}
+spec:
+  selector:
+    app: gitlab-omnibus
+    release: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+    - name: ssh
+      port: 22
+      targetPort: 22
+      nodePort: {{ .Values.sshPort }}
+  type: NodePort

@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  namespace: {{ .Release.Namespace }}
+data:
+  gitlab.rb: |
+    external_url '{{ .Values.externalUrl }}'
+
+    # Nginx
+    nginx['listen_port'] = 80
+    nginx['listen_https'] = false
+    nginx['redirect_http_to_https'] = false
+
+    # SSH
+    gitlab_rails['gitlab_shell_ssh_port'] = {{ .Values.sshPort }}
+
+    # 시간대
+    gitlab_rails['time_zone'] = '{{ .Values.timezone }}'
+
+    # 모니터링 비활성화 (리소스 절약)
+    prometheus_monitoring['enable'] = false
+    alertmanager['enable'] = false
+    node_exporter['enable'] = false
+    redis_exporter['enable'] = false
+    postgres_exporter['enable'] = false
+    gitlab_exporter['enable'] = false
+    grafana['enable'] = false
+
+    # 로그: stdout (kubectl logs로 확인 가능)
+    logging['svlogd_size'] = 200 * 1024 * 1024
+    logging['svlogd_num'] = 2

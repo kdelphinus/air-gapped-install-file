@@ -1,0 +1,92 @@
+{{- $image := printf "%s/%s:%s" .Values.image.registry .Values.image.repository .Values.image.tag }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: gitlab-omnibus
+    release: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-omnibus
+      release: {{ .Release.Name }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: gitlab-omnibus
+        release: {{ .Release.Name }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: setup-config
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              cp /tmp/gitlab.rb /etc/gitlab/gitlab.rb
+              echo "gitlab.rb 복사 완료"
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: config-pvc
+              mountPath: /etc/gitlab
+            - name: gitlab-rb-cm
+              mountPath: /tmp/gitlab.rb
+              subPath: gitlab.rb
+      containers:
+        - name: gitlab
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+            - name: ssh
+              containerPort: 22
+          volumeMounts:
+            - name: data-pvc
+              mountPath: /var/opt/gitlab
+            - name: config-pvc
+              mountPath: /etc/gitlab
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /-/readiness
+              port: 80
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /-/liveness
+              port: 80
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /-/readiness
+              port: 80
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data-pvc
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-data
+        - name: config-pvc
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-config
+        - name: gitlab-rb-cm
+          configMap:
+            name: {{ .Release.Name }}-config

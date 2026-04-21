@@ -246,5 +246,11 @@ tmp/
 # --- Component Install State ---
 # 환경별 설치 설정 파일 (install.sh 실행 시 자동 생성)
 **/install.conf
+# GitLab Helm chart 자동 생성 파일
+**/gitlab-components.yaml
+**/gitlab-components-state.sh
+**/gitlab-images-override.yaml
+# 임시 매니페스트 (치환 후 생성)
+**/*-temp.yaml
 # 압축 해제된 velero 바이너리 디렉토리
 velero-*/velero-v*/

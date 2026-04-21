@@ -136,6 +136,23 @@ gitlab:
       limits:
         cpu: 1
         memory: 1.5Gi
+    # /tmp sticky bit 수정 — 이미지 빌드 시 0777(sticky 없음)로 인한 Ruby tmpdir 오류 방지
+    # emptyDir 단독으로 1777이 보장되지 않는 kubelet 버전이 있으므로 initContainer로 명시 보강
+    extraVolumes: |
+      - name: sidekiq-tmp
+        emptyDir: {}
+    extraVolumeMounts: |
+      - name: sidekiq-tmp
+        mountPath: /tmp
+    extraInitContainers: |
+      - name: fix-tmp
+        image: "{{ .Values.global.image.registry }}/{{ .Values.global.image.repository }}/gitlab-base:v18.7.0"
+        command: ['sh', '-c', 'chmod 1777 /tmp']
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: sidekiq-tmp
+          mountPath: /tmp
 
   gitaly:
     resources:
@@ -164,7 +181,7 @@ gitlab:
         memory: 400Mi
       limits:
         cpu: 1
-        memory: 1.5Gi
+        memory: 2Gi
 
   toolbox:
     resources:
