@@ -688,11 +688,29 @@ nerdctl --version
 ## Phase 9: 워커 노드 조인
 
 Master-1 `kubeadm init` 출력에서 워커 조인 명령을 복사하여 실행합니다.
+Phase 6에서 선택한 구성 방식에 맞춰 아래 옵션을 선택하세요.
+
+### 옵션 A: HA 구성 — VIP 사용
 
 ```bash
-sudo kubeadm join <CONTROL_PLANE_ENDPOINT>:6443 \
-  --token <TOKEN> \
-  --discovery-token-ca-cert-hash sha256:<HASH>
+sudo kubeadm join <VIP>:6443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH>
+```
+
+### 옵션 B: HA 구성 — Localhost LB 사용
+
+각 워커 노드에도 HAProxy가 `127.0.0.1:8443`으로 떠 있어야 합니다.
+
+```bash
+sudo kubeadm join 127.0.0.1:8443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH>
+```
+
+### 옵션 C: 단일 구성
+
+```bash
+sudo kubeadm join <MASTER_IP>:6443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH>
 ```
 
 ## Phase 10: 설치 확인

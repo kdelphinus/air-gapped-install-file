@@ -96,6 +96,9 @@ sudo containerd config default | sudo tee /etc/containerd/config.toml
 # cgroup driver를 systemd로 변경 (필수)
 sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
+# pause 이미지 버전 변경 (준비된 설치 파일의 pause 버전에 맞게 수정)
+sudo sed -i 's/pause:3.10.1/pause:3.9/g' /etc/containerd/config.toml
+
 # Harbor 인증서 경로 설정
 sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
 
@@ -568,11 +571,41 @@ skopeo inspect --tls-verify=false docker://<NODE_IP>:30002/library/myapp:1.0.0
 ## Phase 9: 워커 노드 조인
 
 Master-1의 `kubeadm init` 출력에서 워커 조인 명령을 복사하여 실행합니다.
+Phase 6에서 선택한 구성 방식에 맞춰 아래 옵션을 선택하세요.
+
+### 옵션 A: HA 구성 — VIP 사용
 
 ```bash
-sudo kubeadm join <CONTROL_PLANE_ENDPOINT>:6443 \
-  --token <TOKEN> \
-  --discovery-token-ca-cert-hash sha256:<HASH>
+sudo kubeadm join <VIP>:6443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH>
+```
+
+### 옵션 B: HA 구성 — Localhost LB 사용
+
+각 워커 노드에도 HAProxy가 `127.0.0.1:8443`으로 떠 있어야 합니다.
+
+```bash
+sudo kubeadm join 127.0.0.1:8443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH>
+```
+
+### 옵션 C: 단일 구성
+
+```bash
+sudo kubeadm join <MASTER_IP>:6443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH>
+```
+
+### 트러블슈팅: hostname 오류
+
+조인 시 `[WARNING Hostname]: hostname "..." could not be reached` 오류가 발생하면
+`/etc/hosts`에 해당 hostname을 등록합니다.
+
+```bash
+# /etc/hosts 예시
+<MASTER1_IP>  <MASTER1_HOSTNAME>
+<WORKER1_IP>  <WORKER1_HOSTNAME> <WORKER1_HOSTNAME>.novalocal
+<WORKER2_IP>  <WORKER2_HOSTNAME> <WORKER2_HOSTNAME>.novalocal
 ```
 
 ## Phase 10: 설치 확인
