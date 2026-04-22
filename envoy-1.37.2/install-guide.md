@@ -78,7 +78,7 @@ chmod +x scripts/install.sh
 
 스크립트 환경에 문제가 있거나 세밀한 제어가 필요할 경우 아래 순서대로 직접 실행합니다.
 
-**1) CRD 수동 적용 (설치/업그레이드 공통)**
+#### 1) CRD 수동 적용 (설치/업그레이드 공통)
 
 Envoy Gateway는 Helm 배포 전에 CRD를 먼저 적용해야 합니다.
 
@@ -91,7 +91,7 @@ kubectl replace --force -f charts/gateway-1.7.2/crds/gatewayapi-crds.yaml
 kubectl replace --force -f charts/gateway-1.7.2/crds/generated/
 ```
 
-**2) 컨트롤 플레인 설치/업그레이드**
+#### 2) 컨트롤 플레인 설치/업그레이드
 
 `values.yaml` 파일을 환경(이미지 경로 등)에 맞게 수정한 뒤 실행합니다.
 
@@ -101,7 +101,7 @@ helm upgrade --install eg-gateway ./charts/gateway-1.7.2 \
   -f ./values.yaml
 ```
 
-**3) 데이터 플레인 (인프라) 설치/업그레이드**
+#### 3) 데이터 플레인 (인프라) 설치/업그레이드
 
 `values-infra.yaml` 파일을 환경에 맞게 수정한 뒤 실행합니다.
 
@@ -111,7 +111,7 @@ helm upgrade --install gateway-infra ./charts/gateway-infra \
   -f ./values-infra.yaml
 ```
 
-**4) 전역 정책 적용 (선택)**
+#### 4) 전역 정책 적용 (선택)
 
 ```bash
 kubectl apply -f manifests/policy-global-config.yaml
@@ -125,7 +125,7 @@ kubectl apply -f manifests/policy-global-config.yaml
 
 전체 워커 노드 IP를 `externalIPs`에 등록하여 고가용성을 확보합니다. 서비스(Service) 뿐만 아니라 게이트웨이(Gateway) 리소스에도 주소를 명시적으로 바인딩해야 정상적으로 가동(`Programmed: True`)됩니다.
 
-**1) 서비스(Service) 외부 IP 등록**
+#### 1) 서비스(Service) 외부 IP 등록
 
 ```bash
 # 서비스 이름 확인
@@ -140,7 +140,7 @@ kubectl patch svc -n envoy-gateway-system $SVC_NAME --type merge \
   -p '{"spec":{"externalIPs":["[Worker1 IP]","[Worker2 IP]","[Worker3 IP]"]}}'
 ```
 
-**2) 게이트웨이(Gateway) 리소스 주소 바인딩**
+#### 2) 게이트웨이(Gateway) 리소스 주소 바인딩
 
 서비스 패치 후에도 Gateway 상태가 `False`인 경우 아래 명령어로 주소를 직접 바인딩합니다.
 
@@ -159,7 +159,6 @@ kubectl patch gateway cluster-gateway -n envoy-gateway-system --type='merge' \
 ```
 
 > **주의**: `[Worker1 IP]`, `[Worker2 IP]` 등의 부분은 실제 환경의 워커 노드 IP 주소로 변경하여 실행해야 합니다.
-
 
 ### 2. NodePort — 포트 확인 및 HAProxy 연동
 
