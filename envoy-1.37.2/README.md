@@ -1,6 +1,6 @@
 # 📝 Envoy Gateway Infrastructure Specification
 
-본 문서는 **Envoy v1.37.2** 및 **Gateway API v1.1**을 기반으로 구축된 클러스터 진입점(Entry Point) 명세를 정의합니다.
+본 문서는 **Envoy v1.37.2** 및 **Gateway API v1.4.1**을 기반으로 구축된 클러스터 진입점(Entry Point) 명세를 정의합니다.
 
 ## 1. 시스템 버전 정보 (Version Specification)
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | **Envoy Proxy** | **v1.37.2** | 데이터 평면 (실제 트래픽 처리 엔진) |
 | **Envoy Gateway** | **v1.7.2** | 제어 평면 (Envoy 설정 및 관리) |
-| **Gateway API** | **v1.1 (Standard)** | Kubernetes 표준 Gateway API 준수 |
+| **Gateway API** | **v1.4.1 (Standard)** | Kubernetes 표준 Gateway API 준수 |
 
 ---
 
