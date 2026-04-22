@@ -5,6 +5,7 @@ common:
 gateway:
   name: "cluster-gateway"
   tls:
+    enabled: true
     name: "gateway-tls"
 
 # 1. 배포 방식 (Deployment Type)

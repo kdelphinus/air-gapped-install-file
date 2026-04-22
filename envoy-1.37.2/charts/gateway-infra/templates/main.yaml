@@ -29,8 +29,10 @@ spec:
                     ports:
                     - containerPort: 10080
                       name: http
+                    {{- if .Values.gateway.tls.enabled }}
                     - containerPort: 10443
                       name: https
+                    {{- end }}
       {{- else }}
       envoyDeployment:
         container:
@@ -52,8 +54,10 @@ spec:
                     ports:
                     - containerPort: 10080
                       name: http
+                    {{- if .Values.gateway.tls.enabled }}
                     - containerPort: 10443
                       name: https
+                    {{- end }}
       {{- end }}
 
       envoyService:
@@ -68,9 +72,11 @@ spec:
               - name: http
                 port: 80
                 nodePort: {{ .Values.service.nodePorts.http | default 30080 }}
+              {{- if .Values.gateway.tls.enabled }}
               - name: https
                 port: 443
                 nodePort: {{ .Values.service.nodePorts.https | default 30443 }}
+              {{- end }}
         {{- end }}
 
 ---
@@ -103,6 +109,7 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+  {{- if .Values.gateway.tls.enabled }}
   - name: https
     protocol: HTTPS
     port: 443
@@ -114,6 +121,7 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+  {{- end }}
 
 {{- if .Values.clientIP.proxyProtocol }}
 ---

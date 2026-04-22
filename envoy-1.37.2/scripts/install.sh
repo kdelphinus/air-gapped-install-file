@@ -24,6 +24,7 @@ IMAGE_SOURCE="${IMAGE_SOURCE}"
 HARBOR_REGISTRY="${HARBOR_REGISTRY}"
 HARBOR_PROJECT="${HARBOR_PROJECT}"
 SVC_TYPE="${SVC_TYPE}"
+TLS_ENABLED="${TLS_ENABLED}"
 NODE_HTTP_PORT="${NODE_HTTP_PORT}"
 NODE_HTTPS_PORT="${NODE_HTTPS_PORT}"
 TARGET_NODE="${TARGET_NODE}"
@@ -80,6 +81,7 @@ if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     [ -f "$CONF_FILE" ] && echo "  📋 저장된 설정 정보:"
     [ -n "$IMAGE_SOURCE" ] && echo "     - 이미지 소스  : $IMAGE_SOURCE"
     [ -n "$SVC_TYPE" ] && echo "     - 서비스 타입  : $SVC_TYPE"
+    [ -n "$TLS_ENABLED" ] && echo "     - TLS 활성화   : $TLS_ENABLED"
     [ "$SVC_TYPE" == "NodePort" ] && echo "     - NodePort     : $NODE_HTTP_PORT / $NODE_HTTPS_PORT"
     [ -n "$TARGET_NODE" ] && echo "     - 고정 노드    : $TARGET_NODE"
 
@@ -140,7 +142,16 @@ if [ "$DO_UPGRADE" != "true" ]; then
         NODE_HTTPS_PORT="${NODE_HTTPS_PORT:-30443}"
     fi
 
-    # 2-3. 노드 고정
+    # 2-3. TLS(HTTPS) 사용 여부
+    echo ""
+    read -p "HTTPS(TLS)를 활성화하시겠습니까? (y/n, 기본값 y): " _TLS_YN
+    if [[ "${_TLS_YN:-y}" =~ ^[Yy]$ ]]; then
+        TLS_ENABLED="true"
+    else
+        TLS_ENABLED="false"
+    fi
+
+    # 2-4. 노드 고정
     echo ""
     kubectl get nodes -o wide
     read -p "Envoy를 고정할 노드 이름 (입력 없이 엔터 시 자동 배치): " TARGET_NODE
@@ -164,8 +175,10 @@ echo "🔧 설정 파일(values.yaml, values-infra.yaml) 업데이트 중..."
 sed -i "s|image: .*|image: \"$IMG_GATEWAY\"|g" ./values.yaml
 
 # 2. values-infra.yaml (Envoy Proxy)
+TLS_ENABLED="${TLS_ENABLED:-true}"
 sed -i "s|image: .*envoy:.*|image: \"$IMG_PROXY\"|g" ./values-infra.yaml
 sed -i "s|type: .*|type: $SVC_TYPE|g" ./values-infra.yaml
+sed -i "s|enabled: .*|enabled: $TLS_ENABLED|g" ./values-infra.yaml
 sed -i "s|http: [0-9]*|http: $NODE_HTTP_PORT|g" ./values-infra.yaml
 sed -i "s|https: [0-9]*|https: $NODE_HTTPS_PORT|g" ./values-infra.yaml
 

@@ -5,6 +5,7 @@ common:
 gateway:
   name: "cluster-gateway"
   tls:
+    enabled: true
     name: "gateway-tls"
 
 service:
