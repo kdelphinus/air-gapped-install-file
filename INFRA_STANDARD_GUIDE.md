@@ -71,7 +71,7 @@
 - **NFS Provisioner**: `nfs-provisioner-4.0.2`
 
 ### ✅ 준수 완료 (Compliant)
-- **Envoy**: `envoy-1.37.2`
+- **Envoy**: `envoy-1.37.2` (Standard Reference / 표준 모델)
 - **Cilium**: `cilium-1.19.3`
 - **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`
 - **Velero**: `velero-1.18.0`
