@@ -5,7 +5,7 @@ metadata:
   namespace: gitlab  # GitLab이 설치된 네임스페이스
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system # Gateway가 위치한 네임스페이스
   hostnames:
     - "gitlab.devops.internal"
@@ -26,7 +26,7 @@ metadata:
   namespace: gitlab
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system
   hostnames:
     - "registry.devops.internal"
@@ -47,7 +47,7 @@ metadata:
   namespace: gitlab
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system
   hostnames:
     - "minio.devops.internal"
@@ -68,7 +68,7 @@ metadata:
   namespace: gitlab
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system
   hostnames:
     - "kas.devops.internal"

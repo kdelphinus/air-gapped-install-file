@@ -5,15 +5,15 @@ metadata:
   namespace: nexus
 spec:
   parentRefs:
-  - name: cmp-gateway
-    namespace: envoy-gateway-system
+    - name: cluster-gateway
+      namespace: envoy-gateway-system
   hostnames:
-  - nexus.devops.internal
+    - nexus.devops.internal
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /
-    backendRefs:
-    - name: nexus-nexus-repository-manager
-      port: 8081
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: nexus-nexus-repository-manager
+          port: 8081

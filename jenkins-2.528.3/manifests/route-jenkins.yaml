@@ -5,7 +5,7 @@ metadata:
   namespace: jenkins # Jenkins가 설치된 네임스페이스
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system
   hostnames:
     - "jenkins.test.com" # 접속할 도메인
@@ -16,4 +16,4 @@ spec:
             value: /
       backendRefs:
         - name: jenkins # kubectl get svc에서 확인된 서비스 이름
-          port: 8080    # NodePort(30000)가 아닌 서비스의 내부 포트(8080)
+          port: 8080 # NodePort(30000)가 아닌 서비스의 내부 포트(8080)

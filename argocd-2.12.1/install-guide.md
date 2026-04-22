@@ -49,7 +49,7 @@ NAS_REPO_PATH="/nas/argocd/repo"
 # Networking
 NODEPORT="30001"
 DOMAIN="argocd.devops.internal"
-GATEWAY_NAME="cmp-gateway"
+GATEWAY_NAME="cluster-gateway"
 GATEWAY_NAMESPACE="envoy-gateway-system"
 # ================================================
 ```

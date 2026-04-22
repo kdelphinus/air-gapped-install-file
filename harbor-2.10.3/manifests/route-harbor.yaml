@@ -5,7 +5,7 @@ metadata:
   namespace: harbor
 spec:
   parentRefs:
-    - name: cmp-gateway       # 클러스터에 생성된 Gateway 리소스 이름으로 변경
+    - name: cluster-gateway       # 클러스터에 생성된 Gateway 리소스 이름으로 변경
       namespace: envoy-gateway-system
   hostnames:
     - "harbor.devops.internal"

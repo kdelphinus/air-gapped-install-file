@@ -5,7 +5,7 @@ metadata:
   namespace: envoy-gateway-system
 spec:
   parentRefs:
-    - name: cmp-gateway
+    - name: cluster-gateway
       namespace: envoy-gateway-system
   hostnames:
     - gitlab.devops.internal
