@@ -40,6 +40,13 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 ./images/upload_images_to_harbor_v3-lite.sh
 ```
 
+하버가 없다면 모든 노드에서 아래 절차를 시행합니다.
+
+```bash
+chmod +x images/load_images_locally.sh
+sudo ./images/load_images_locally.sh
+```
+
 ## 2단계: 설치 및 운영 설정 (values.yaml)
 
 루트 디렉토리의 설정 파일들을 환경에 맞게 수정합니다.
@@ -67,7 +74,7 @@ kubectl create secret tls gateway-tls \
 
 추가 인증서가 있으면 Secret을 각각 생성한 뒤 `manifests/gateway.yaml`의 `listeners` 항목에 추가합니다.
 
-HTTP만 사용하는 경우 `manifests/gateway.yaml`에서 HTTPS 리스너를 제거하고, `values-infra.yaml`에서 TLS 설정을 주석 처리합니다.
+HTTP만 사용하는 경우 `chart/gateway-infra/values.yaml`에서 HTTPS 리스너를 제거하고, `values-infra.yaml`에서 TLS 설정을 주석 처리합니다.
 
 ## 4단계: 설치 실행
 
@@ -78,7 +85,7 @@ chmod +x scripts/install.sh
 
 스크립트 실행 중 다음 항목을 선택합니다.
 
-1. **설치 모드**: `1` (LoadBalancer) 또는 `2` (NodePort — 권장)
+1. **설치 모드**: `1` (LoadBalancer) 또는 `2` (NodePort)
 2. **노드 고정**: Envoy Proxy를 배치할 특정 노드 이름 입력 (선택)
 3. **전역 정책**: `manifests/policy-global.yaml` 적용 여부
 

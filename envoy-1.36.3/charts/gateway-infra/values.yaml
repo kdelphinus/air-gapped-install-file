@@ -3,7 +3,7 @@ common:
   namespace: envoy-gateway-system
 
 gateway:
-  name: "cluster-gateway" # 기본값 (스크립트에서 덮어쓸 예정)
+  name: "cluster-gateway"
   tls:
     name: "gateway-tls"
 
