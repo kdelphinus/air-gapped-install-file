@@ -49,3 +49,31 @@
 
 ---
 **주의**: 본 가이드의 내용을 위반하는 스크립트나 구조는 기술 부채로 간주되며, 리뷰 단계에서 반드시 수정되어야 합니다.
+
+## 4. Standardization Status (표준화 현황)
+
+현재 프로젝트 내 서비스 중 본 표준에 따라 업데이트가 필요한 리스트입니다. (2026-04-22 기준)
+
+### ⚠️ 업데이트 필요 (Non-compliant)
+- **ArgoCD**: `argocd-2.12.1`
+- **Harbor**: `harbor-2.10.3`
+- **Nexus**: `nexus-3.70.1`
+- **Jenkins**: `jenkins-2.528.3`
+- **Gitea**: `gitea-1.25.5`
+- **Ingress-Nginx**: `ingress-nginx-4.10.1`
+- **Monitoring**: `monitoring-82.12.0`
+- **NGINX Ingress Controller**: `nginx-nic-5.3.1`
+- **Falco**: `falco-8.0.1`
+- **Tetragon**: `tetragon-1.6.0`
+- **Tekton**: `tekton-1.9.0`
+- **Redis Stream**: `redis-stream-8.6.2-official`
+- **MetalLB**: `metallb-0.14.8`
+- **NFS Provisioner**: `nfs-provisioner-4.0.2`
+
+### ✅ 준수 완료 (Compliant)
+- **Envoy**: `envoy-1.37.2`
+- **Cilium**: `cilium-1.19.3`
+- **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`
+- **Velero**: `velero-1.18.0`
+- **K8s Installation**: `k8s-1.33.11-ubuntu24.04`
+
