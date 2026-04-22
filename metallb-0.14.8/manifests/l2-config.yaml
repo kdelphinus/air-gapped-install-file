@@ -1,5 +1,6 @@
-# MetalLB L2 Configuration (변수화 버전)
-# 사용자가 자신의 환경에 맞게 IPAddressPool 범위를 수정해야 합니다.
+# MetalLB L2 Configuration
+# ⚠️ spec.addresses 의 "- <start>-<end>" 라인은 ./scripts/install.sh 가 자동 치환합니다.
+#    수동 편집 시 형식을 유지하세요 (한 줄에 범위 하나, 들여쓰기 보존).
 
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool

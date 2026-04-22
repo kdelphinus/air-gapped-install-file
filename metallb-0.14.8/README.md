@@ -11,10 +11,20 @@
 | `images/` | 컨트롤러 및 스피커 이미지 `.tar` 및 `upload_images_to_harbor_v3-lite.sh` |
 | `scripts/` | 이미지 로드 및 헬름 설치 자동화 스크립트 |
 
+## 🚀 설치
+
+```bash
+sudo ./scripts/install.sh
+```
+
+- 이미지 소스(Harbor / 로컬 ctr), IP 풀 범위를 대화형으로 입력받아 설정을 `install.conf` 에 저장합니다.
+- 기존 설치가 감지되면 **1) 업그레이드 / 2) 재설치 / 3) 초기화 / 4) 취소** 메뉴를 제공합니다.
+- 상세 절차 및 수동 설치(`Manual Installation & Upgrade`)는 [install-guide.md](./install-guide.md) 참고.
+
 ## 🛠️ 주요 설정 (변수화)
 
 - **Registry**: `values.yaml` 내 `controller.image.repository` / `speaker.image.repository` (형식: `<NODE_IP>:30002/library/<name>`)
-- **IP Range**: `manifests/l2-config.yaml` 내 `addresses` (기본: `192.168.1.200-250`)
+- **IP Range**: `manifests/l2-config.yaml` 내 `addresses` (install.sh 가 자동 치환)
 
 ## 💡 운영 팁
 

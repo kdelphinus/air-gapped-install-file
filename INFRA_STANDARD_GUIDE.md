@@ -71,7 +71,6 @@
 - **Tetragon**: `tetragon-1.6.0`
 - **Tekton**: `tekton-1.9.0`
 - **Redis Stream**: `redis-stream-8.6.2-official`
-- **MetalLB**: `metallb-0.14.8`
 - **NFS Provisioner**: `nfs-provisioner-4.0.2`
 
 ### ✅ 준수 완료 (Compliant)
@@ -81,3 +80,4 @@
 - **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`
 - **Velero**: `velero-1.18.0`
 - **K8s Installation**: `k8s-1.33.11-ubuntu24.04`
+- **MetalLB**: `metallb-0.14.8`
