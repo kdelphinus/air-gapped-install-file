@@ -69,34 +69,10 @@ by OS:
 - **Commit Strategy**: When performing multiple independent tasks, always
   separate them into multiple logical commits instead of a single monolithic
   commit. **All git commit messages must be written in Korean.**
-- **Engineering Standards**:
-  - **Markdownlint**: Always adhere to markdownlint standards (including headers, language tags for code blocks, and list spacing).
-  - **Directory Structure**: All service components must follow the standard structure below:
-
-    ```text
-    <component>/
-    ├── charts/          # Helm charts (folder or .tgz)
-    ├── images/          # .tar files + Harbor upload script
-    ├── manifests/       # K8s manifests (HTTPRoute, PV/PVC, etc.)
-    ├── scripts/         # Install/Operation scripts (Root-relative execution)
-    ├── values.yaml      # Production values (Harbor-based)
-    ├── README.md        # Service specifications and specs
-    └── install-guide.md # Phase-based installation instructions
-    ```
-
-  - **Execution Logic & Scripts**:
-    - All scripts in `scripts/` must work relative to the component root using `cd "$(dirname "$0")/.."`.
-    - **Installation Scripts (`install.sh`)** MUST implement the following stateful and interactive behaviors:
-      - Implement a configuration persistence mechanism using an `install.conf` file to save user inputs (e.g., Image source, Storage type, Service type).
-      - If an existing installation or `install.conf` is detected, the script MUST prompt the user with options to:
-        1. **Upgrade**: Retain existing data/settings and perform a `helm upgrade`.
-        2. **Reinstall**: Clean up existing Helm releases/resources and install from scratch.
-        3. **Reset**: Completely remove all resources, namespaces, and the `install.conf` file.
-      - Scripts MUST automatically sync the user's interactive choices into the actual `values.yaml` or `values-infra.yaml` files using `sed` before running `helm upgrade --install`. This ensures the `.yaml` files remain the single source of truth for manual deployments.
-    - Avoid hardcoding specific Kubernetes distributions (e.g., use standard `ctr` instead of `k3s ctr`) to maintain broad compatibility.
-  - **Installation Guides (`install-guide.md`)**:
-    - All installation guides must instruct users to execute commands from the component root (e.g., `./scripts/install.sh`).
-    - **Manual Fallback**: Guides MUST include a dedicated section for "Manual Installation & Upgrade" detailing the exact `helm upgrade --install` and `kubectl apply` commands. This serves as a fallback in case the automated `install.sh` script fails or cannot be used in a specific environment.
+- **Engineering Standards**: All infrastructure component creation, script development, and documentation MUST strictly adhere to the project standards defined in [INFRA_STANDARD_GUIDE.md](INFRA_STANDARD_GUIDE.md). This includes:
+  - **Directory Structure**: Standardized folder layout for all services.
+  - **Scripting Standards**: Stateful `install.sh` logic with `install.conf` and `sed`-based sync.
+  - **Documentation Standards**: Mandatory manual installation procedures in `install-guide.md`.
 - Handle OS-specific package management:
   - RHEL/Rocky: `dnf localinstall` / `yum`
   - Ubuntu/Debian: `dpkg -i` / `apt install`
