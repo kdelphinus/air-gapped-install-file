@@ -1,0 +1,132 @@
+# 1. EnvoyProxy: 표준 아키텍처 (Pod 격리 + Service 노출)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: direct-node-proxy
+  namespace: {{ .Values.common.namespace }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      {{- if eq .Values.envoy.deploymentType "DaemonSet" }}
+      envoyDaemonSet:
+        container:
+          image: {{ .Values.envoy.image | quote }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              template:
+                spec:
+                  hostNetwork: false
+                  dnsPolicy: ClusterFirst
+                  tolerations:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                    effect: NoSchedule
+                  containers:
+                  - name: envoy
+                    ports:
+                    - containerPort: 10080
+                      name: http
+                    - containerPort: 10443
+                      name: https
+      {{- else }}
+      envoyDeployment:
+        container:
+          image: {{ .Values.envoy.image | quote }}
+        pod:
+          {{- if .Values.envoy.nodeName }}
+          nodeName: {{ .Values.envoy.nodeName | quote }}
+          {{- end }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              template:
+                spec:
+                  hostNetwork: false
+                  dnsPolicy: ClusterFirst
+                  containers:
+                  - name: envoy
+                    ports:
+                    - containerPort: 10080
+                      name: http
+                    - containerPort: 10443
+                      name: https
+      {{- end }}
+
+      envoyService:
+        type: {{ .Values.service.type }}
+        externalTrafficPolicy: {{ .Values.service.trafficPolicy | default "Local" }}
+        {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePorts }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+              - name: http
+                port: 80
+                nodePort: {{ .Values.service.nodePorts.http | default 30080 }}
+              - name: https
+                port: 443
+                nodePort: {{ .Values.service.nodePorts.https | default 30443 }}
+        {{- end }}
+
+---
+# 2. GatewayClass
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg-cluster-entry
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: direct-node-proxy
+    namespace: {{ .Values.common.namespace }}
+
+---
+# 3. Gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.common.namespace }}
+spec:
+  gatewayClassName: eg-cluster-entry
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80 # 서비스가 외부로 노출할 포트
+    allowedRoutes:
+      namespaces:
+        from: All
+  - name: https
+    protocol: HTTPS
+    port: 443
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: {{ .Values.gateway.tls.name }}
+        kind: Secret
+    allowedRoutes:
+      namespaces:
+        from: All
+
+{{- if .Values.clientIP.proxyProtocol }}
+---
+# 4. ClientTrafficPolicy: PROXY Protocol 활성화 (HAProxy 앞단 구성 시 사용)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: enable-proxy-protocol
+  namespace: {{ .Values.common.namespace }}
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: {{ .Values.gateway.name }}
+  enableProxyProtocol: true
+{{- end }}

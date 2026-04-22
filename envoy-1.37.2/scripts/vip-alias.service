@@ -1,0 +1,17 @@
+[Unit]
+Description=VIP alias for Envoy Gateway (172.30.235.100 on eth0)
+Documentation=https://github.com/Kdelphinus/air-gapped
+# eth0 인터페이스가 올라온 뒤 실행
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# VIP를 eth0에 추가 (이미 존재하면 무시)
+ExecStart=/bin/sh -c '/sbin/ip addr add 172.30.235.100/20 dev eth0 || true'
+# 서비스 중지 시 VIP 제거
+ExecStop=/bin/sh -c '/sbin/ip addr del 172.30.235.100/20 dev eth0 || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

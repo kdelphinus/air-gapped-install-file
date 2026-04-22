@@ -1,0 +1,29 @@
+# 공통 설정
+common:
+  namespace: envoy-gateway-system
+
+gateway:
+  name: "cluster-gateway"
+  tls:
+    name: "gateway-tls"
+
+# 1. 배포 방식 (Deployment Type)
+# - DaemonSet : 모든 노드에 Envoy Proxy 파드를 하나씩 배치합니다. (멀티 노드 HA 환경 및 실IP 보존에 권장)
+# - Deployment : 일반적인 배포 방식으로, 특정 개수의 파드만 유지합니다. (단일 노드 또는 특정 리소스 제약 환경)
+envoy:
+  deploymentType: DaemonSet
+  image: "docker.io/envoyproxy/envoy:distroless-v1.37.2"
+  nodeName: ""
+
+# 2. 서비스 노출 방식 (Service Type)
+# - LoadBalancer : 클라우드 LB 또는 MetalLB가 있는 환경에서 사용합니다. (가장 표준적인 방식)
+# - NodePort : 외부 LB(HAProxy, L4 스위치 등)가 앞단에 따로 있는 환경에서 사용합니다. (NodePort 고정 필요 시)
+service:
+  type: LoadBalancer
+  trafficPolicy: Local
+  nodePorts:
+    http: 30080
+    https: 30443
+
+clientIP:
+  proxyProtocol: false

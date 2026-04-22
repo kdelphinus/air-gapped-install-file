@@ -1,0 +1,20 @@
+# 공통 설정
+common:
+  namespace: envoy-gateway-system
+
+gateway:
+  name: "cluster-gateway"
+  tls:
+    name: "gateway-tls"
+
+service:
+  trafficPolicy: Local
+  type: LoadBalancer
+
+envoy:
+  nodeName: "" # 스크립트에서 주입
+  image: "docker.io/envoyproxy/envoy:distroless-v1.37.2"
+  deploymentType: DaemonSet # "Deployment" 또는 "DaemonSet"
+
+clientIP:
+  proxyProtocol: false # true 시 HAProxy 앞단 필수 (NodePort 직접 접근 차단됨)
