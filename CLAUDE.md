@@ -29,7 +29,6 @@ air-gapped/
 ├── basic-tools-*/        # 기본 유틸 (curl, vim, jq 등) — OS별 복수 존재
 ├── nfs-provisioner-*/    # NFS 동적 스토리지 프로비저닝 (Multi-OS 스크립트 포함)
 ├── metallb-*/            # MetalLB L2 LoadBalancer
-├── ingress-nginx-*/      # K8s Ingress 컨트롤러
 ├── nginx-nic-*/          # NGINX Ingress Controller (NIC)
 ├── cilium-*/             # Cilium CNI (kubeProxyReplacement, Gateway API 내장)
 ├── envoy-*/              # Envoy Gateway (L7 라우팅, Calico CNI 선택 시 활용)
@@ -55,7 +54,7 @@ air-gapped/
 4. `harbor-*` — 내부 레지스트리 구축
 5. `nfs-provisioner` — 스토리지 클래스 확보
 6. `metallb` — LoadBalancer IP 확보
-7. `ingress-nginx` / `nginx-nic` / `envoy` — 인그레스/게이트웨이
+7. `nginx-nic` / `envoy` — 인그레스/게이트웨이
 8. `monitoring` — 모니터링 구축
 9. `nexus`, `gitlab`, `gitea`, `jenkins`, `tekton`, `argocd`, `mariadb`, `redis-stream` — 앱 레이어
 10. `velero`, `falco`, `tetragon` — 백업 및 보안 (선택)
@@ -102,7 +101,6 @@ air-gapped/
 | :--- | :--- | :--- |
 | Harbor | NodePort | 30002 |
 | Jenkins | NodePort | 30000 |
-| Ingress-Nginx | HostNetwork | 80 / 443 |
 | Envoy Gateway | NodePort | 30080 / 30443 |
 | K8s API | - | 6443 |
 | CoreDNS | ClusterIP | 10.96.0.10 |

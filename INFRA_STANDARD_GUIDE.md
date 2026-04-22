@@ -65,7 +65,6 @@
 - **Nexus**: `nexus-3.70.1`
 - **Jenkins**: `jenkins-2.528.3`
 - **Gitea**: `gitea-1.25.5`
-- **Ingress-Nginx**: `ingress-nginx-4.10.1`
 - **Monitoring**: `monitoring-82.12.0`
 - **NGINX Ingress Controller**: `nginx-nic-5.3.1`
 - **Falco**: `falco-8.0.1`

@@ -19,7 +19,6 @@ by OS:
 - `docker-offline-*`: Docker engine installation (e.g., for Rocky Linux).
 - `k8s-*`: Kubernetes cluster setup (RPMs/DEBs, binaries, images).
 - `harbor-*`: Enterprise container registry setup.
-- `ingress-nginx-*`: K8s Ingress controller.
 - `gitlab-*`: GitLab EE deployment.
 - `gitea-*`: Lightweight Git service (Gitea).
 - `jenkins-*`: Jenkins CI/CD deployment and plugin management.
