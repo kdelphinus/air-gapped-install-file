@@ -13,46 +13,46 @@
 | 항목 | 값 |
 | :--- | :--- |
 | OS | Rocky Linux 9.6, Ubuntu 24.04 등 (특정 OS 한정 없음) |
-| Kubernetes | v1.30.0 (kubeadm 기반) |
-| Container Runtime | containerd v2.2.0 |
-| CNI | Calico |
+| Kubernetes | v1.30.0 / v1.33.11 (kubeadm 기반) — 컴포넌트별 상이 |
+| Container Runtime | containerd v2.2.x |
+| CNI | Calico / Cilium (v1.33.11 한정) |
 | Internal Registry | Harbor v2.10.3 → `<NODE_IP>:30002` |
 
 ## Component Directory Map
 
 ```text
 air-gapped/
-├── k8s-1.30-*/                 # K8s 클러스터 구성 (RPM/DEB, 바이너리, 이미지)
-├── harbor-2.10.3/              # 내부 컨테이너 레지스트리
-├── docker-offline-*/           # Docker Engine (OS별)
-├── git-*-rocky9.6/             # Git 오프라인 설치 (Rocky)
-├── basic-tools-rocky9.6/       # 기본 유틸 (curl, vimi, jq 등) - Rocky
-├── basic-tools-ubuntu24.04/    # 기본 유틸 - Ubuntu
-├── nfs-provisioner-4.0.2/      # NFS 동적 스토리지 프로비저닝 (Multi-OS 스크립트 포함)
-├── metallb-0.14.8/             # MetalLB L2 LoadBalancer
-├── ingress-nginx-4.10.1/       # K8s Ingress 컨트롤러
-├── nginx-nic-5.3.1/            # NGINX Ingress Controller (NIC)
-├── envoy-1.36.3/               # Envoy Gateway (L7 라우팅)
-├── monitoring-82.12.0/         # kube-prometheus-stack
-├── nexus-3.70.1/               # Nexus Repository Manager
-├── gitlab-18.7/                # GitLab EE (Helm)
-├── jenkins-2.528.3/            # Jenkins CI/CD (Helm)
-├── argocd-2.12.1/              # ArgoCD GitOps (Helm)
-├── mariadb-*-rocky9.6/         # MariaDB DB
-├── redis-stream-*-official/    # Redis Stream HA 구성
-├── gitea-1.25.5/               # Gitea Git 서버 (Helm, 경량)
-├── tekton-1.9.0/               # Tekton Pipelines CI/CD (manifests 기반)
-├── velero-1.14.1/              # K8s 백업/복구
-├── falco-8.0.1/                # 런타임 이상행위 감지
-└── tetragon-1.6.0/             # 런타임 보안 차단
+├── k8s-*/                # K8s 클러스터 — 버전/OS별 복수 존재 (Rocky=RPM, Ubuntu=DEB)
+├── harbor-*/             # 내부 컨테이너 레지스트리
+├── docker-offline-*/     # Docker Engine (OS별)
+├── git-*/                # Git 오프라인 설치 (OS별)
+├── basic-tools-*/        # 기본 유틸 (curl, vim, jq 등) — OS별 복수 존재
+├── nfs-provisioner-*/    # NFS 동적 스토리지 프로비저닝 (Multi-OS 스크립트 포함)
+├── metallb-*/            # MetalLB L2 LoadBalancer
+├── ingress-nginx-*/      # K8s Ingress 컨트롤러
+├── nginx-nic-*/          # NGINX Ingress Controller (NIC)
+├── cilium-*/             # Cilium CNI (kubeProxyReplacement, Gateway API 내장)
+├── envoy-*/              # Envoy Gateway (L7 라우팅, Calico CNI 선택 시 활용)
+├── monitoring-*/         # kube-prometheus-stack
+├── nexus-*/              # Nexus Repository Manager
+├── gitlab-*/             # GitLab EE (Helm) — gitlab-omnibus 포함
+├── jenkins-*/            # Jenkins CI/CD (Helm)
+├── argocd-*/             # ArgoCD GitOps (Helm)
+├── mariadb-*/            # MariaDB DB (OS별)
+├── redis-stream-*/       # Redis Stream HA 구성
+├── gitea-*/              # Gitea Git 서버 (Helm, 경량)
+├── tekton-*/             # Tekton Pipelines CI/CD (manifests 기반)
+├── velero-*/             # K8s 백업/복구
+├── falco-*/              # 런타임 이상행위 감지
+└── tetragon-*/           # 런타임 보안 차단
 ```
 
 ## Deployment Order
 
 1. OS 기본 설정 + `basic-tools`
 2. `docker-offline` (필요 시)
-3. `k8s-1.30-rocky9.6` — containerd + kubeadm + Calico
-4. `harbor-2.10.3` — 내부 레지스트리 구축
+3. `k8s-*` — containerd + kubeadm + CNI (Calico 또는 Cilium)
+4. `harbor-*` — 내부 레지스트리 구축
 5. `nfs-provisioner` — 스토리지 클래스 확보
 6. `metallb` — LoadBalancer IP 확보
 7. `ingress-nginx` / `nginx-nic` / `envoy` — 인그레스/게이트웨이
