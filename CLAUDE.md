@@ -46,42 +46,28 @@ air-gapped/
 └── tetragon-*/           # 런타임 보안 차단
 ```
 
-## Deployment Order
+## Component Directory & Script Standard
 
-1. OS 기본 설정 + `basic-tools`
-2. `docker-offline` (필요 시)
-3. `k8s-*` — containerd + kubeadm + CNI (Calico 또는 Cilium)
-4. `harbor-*` — 내부 레지스트리 구축
-5. `nfs-provisioner` — 스토리지 클래스 확보
-6. `metallb` — LoadBalancer IP 확보
-7. `nginx-nic` / `envoy` — 인그레스/게이트웨이
-8. `monitoring` — 모니터링 구축
-9. `nexus`, `gitlab`, `gitea`, `jenkins`, `tekton`, `argocd`, `mariadb`, `redis-stream` — 앱 레이어
-10. `velero`, `falco`, `tetragon` — 백업 및 보안 (선택)
+> **전체 규칙은 `INFRA_STANDARD_GUIDE.md` 참조. 아래는 AI 작업 시 즉시 적용할 체크리스트.**
 
-## Helm Component Directory Structure
+- Helm chart 경로: `./charts/<name>` 또는 `./charts/<name>.tgz`
+- 매니페스트(HTTPRoute 등): 루트가 아닌 `./manifests/` 에 위치
+- `scripts/` 내 모든 스크립트 첫 줄: `cd "$(dirname "$0")/.." || exit 1`
 
-새 Helm 컴포넌트 폴더를 생성할 때는 반드시 아래 표준 구조를 따른다.
+### install.sh 필수 구현 항목 (MUST)
 
-```text
-<component>/
-├── charts/       ← Helm 차트 (압축 해제된 폴더 또는 .tgz)
-├── images/       ← 이미지 .tar + upload_images_to_harbor_v3-lite.sh
-├── manifests/    ← 보조 K8s 매니페스트 (HTTPRoute, PV/PVC 등)
-├── scripts/      ← 설치·운영 스크립트
-├── values.yaml   ← Harbor 레지스트리 대상 (운영 환경)
-├── README.md
-└── install-guide.md
-```
+1. **설정 보존**: 사용자 입력값을 `./install.conf`에 저장/로드 (`load_conf` / `save_conf` 패턴)
+2. **설치 상태 분기**: 기존 릴리스 또는 `install.conf` 감지 시 세 가지 옵션 제공
+   - `1) Upgrade` — `helm upgrade` (기존 설정 유지)
+   - `2) Reinstall` — 자원 삭제 후 재설치
+   - `3) Reset` — 네임스페이스·`install.conf` 포함 완전 삭제
+3. **YAML 동기화**: 수집한 변수를 `helm --set`으로만 넘기지 말고, `sed`로 `values.yaml`/`values-infra.yaml`에 직접 반영 (수동 `helm upgrade` 시에도 동일 환경 보장)
+4. **범용 명령어**: `k3s ctr` 같은 배포판 종속 명령어 금지 → `ctr` 또는 `docker` 사용
 
-- `scripts/` 내 모든 스크립트 상단에 반드시 추가:
+### install-guide.md 필수 포함 항목
 
-  ```bash
-  cd "$(dirname "$0")/.." || exit 1
-  ```
-
-- Helm chart 경로는 `./charts/<name>` 또는 `./charts/<name>.tgz` 형식 사용
-- 매니페스트(HTTPRoute 등)는 루트가 아닌 `./manifests/` 에 위치
+- 실행 지침: 컴포넌트 루트에서 `./scripts/install.sh` 형태로 명시
+- **"Manual Installation & Upgrade"** 섹션: `helm upgrade --install` 및 `kubectl apply` 기반 구체적 명령어 포함
 
 ## Key Conventions
 
@@ -95,22 +81,12 @@ air-gapped/
 - **Harbor 포트**: `30002` (NodePort)
 - **이미지 주소 형식**: `<NODE_IP>:30002/<project>/<image>:<tag>`
 
-## Network Reference
-
-| 서비스 | 접근 방식 | 포트 |
-| :--- | :--- | :--- |
-| Harbor | NodePort | 30002 |
-| Jenkins | NodePort | 30000 |
-| Envoy Gateway | NodePort | 30080 / 30443 |
-| K8s API | - | 6443 |
-| CoreDNS | ClusterIP | 10.96.0.10 |
-
 ## K8s Cluster Spec
 
 - Pod CIDR: `192.168.0.0/16`
 - Service CIDR: `10.96.0.0/12`
 - Cgroup driver: `systemd`
-- Helm: v3.14.0
+- Helm: v3.20.2
 
 ## AI Instructions
 
