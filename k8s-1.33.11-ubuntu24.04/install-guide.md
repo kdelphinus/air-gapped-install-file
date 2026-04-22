@@ -10,15 +10,86 @@ containerd v2.2.x를 컨테이너 런타임으로, CNI는 **Calico(+ Envoy Gatew
 
 ## 스크립트 사용 가이드
 
+### 자동 / 수동 처리 범위
+
+| 작업 | 단일 구성 | HA 구성 |
+| --- | --- | --- |
+| DEB 설치 · OS 설정 · containerd · 이미지 로드 | ✅ 자동 | ✅ 자동 |
+| kubeadm init / join | ✅ 자동 | ✅ 자동 |
+| kubeconfig 설정 | ✅ 자동 | ✅ 자동 |
+| CNI 설치 (auto 선택 시) | ✅ 자동 | ✅ 자동 |
+| HAProxy 중지/재시작 (충돌 방지) | — | ✅ 자동 (설치된 경우 감지) |
+| HAProxy · Keepalived 설치 및 설정 | — | **🔧 수동 (Phase 5)** |
+| kube-apiserver `--bind-address` 설정 | — | **🔧 수동 (각 마스터 init/join 직후)** |
+| `/etc/hosts` FQDN 등록 | — | **🔧 수동 (FQDN 방식 선택 시)** |
+
 ### 스크립트 목록
 
 | 스크립트 | 실행 위치 | 설명 |
 | --- | --- | --- |
 | `scripts/download.sh` | 인터넷 호스트 (root) | 오프라인 설치 파일 수집 → `k8s/` 채움 |
 | `scripts/wsl2_prep.sh` | WSL2 노드 (root) | systemd 활성화 + iptables-legacy 전환 |
-| `scripts/install.sh` | 폐쇄망 노드 (root) | 컨트롤 플레인 설치 (WSL2/VM 자동 감지, CNI 선택) |
-| `scripts/install.sh --join` | 폐쇄망 워커 노드 (root) | 워커/추가 마스터 합류 |
-| `scripts/uninstall.sh` | 폐쇄망 노드 (root) | 클러스터 초기화 |
+| `scripts/install.sh` | Master-1 (root) | 컨트롤 플레인 설치 (CNI·Gateway 포함) |
+| `scripts/install.sh --join <token> <hash> <ep>` | Worker (root) | 워커 노드 합류 |
+| `scripts/install.sh --join <token> <hash> <ep> --control-plane <cert-key>` | Master-2, 3 (root) | 추가 마스터 합류 |
+| `scripts/uninstall.sh` | 모든 노드 (root) | 클러스터 초기화 |
+
+---
+
+### 구성 유형별 실행 순서
+
+#### 단일 구성 (WSL2 / 단일 VM)
+
+```
+[WSL2만] scripts/wsl2_prep.sh  →  wsl --shutdown 재기동
+    ↓
+[Master-1] scripts/install.sh
+    - 환경 확인 (wsl2 / vm)
+    - CNI 선택 + Pod CIDR
+    - CNI 설치 모드 (auto / manual)
+    - Service CIDR
+    - 컨트롤 플레인 엔드포인트 (노드 IP, WSL2는 자동 감지)
+    ↓
+완료 — 클러스터 Ready
+```
+
+#### HA 구성 (Master 3대 + Worker N대)
+
+```
+[전체 노드] 파일 배포 (scp + tar 해제)
+
+[전체 마스터] 🔧 수동: Phase 5 — HAProxy + Keepalived 설치/설정 + VIP 확인
+
+[전체 마스터, FQDN 방식] 🔧 수동: /etc/hosts 에 VIP → FQDN 등록
+
+[Master-1] scripts/install.sh
+    - 환경 확인 (vm)
+    - CNI 선택 + Pod CIDR
+    - CNI 설치 모드
+    - Service CIDR
+    - 컨트롤 플레인 엔드포인트: VIP 또는 FQDN 입력
+    ※ HAProxy 자동 중지 → kubeadm init → HAProxy 자동 재시작
+    ↓
+[Master-1] 🔧 수동: kube-apiserver bind-address 설정 (아래 참고)
+    ↓
+[Master-2, 3] scripts/install.sh --join <token> <hash> <endpoint> --control-plane <cert-key>
+    ※ HAProxy 자동 중지 → kubeadm join → HAProxy 자동 재시작
+    ↓
+[Master-2, 3] 🔧 수동: kube-apiserver bind-address 설정 (아래 참고)
+    ↓
+[Worker 1~N] scripts/install.sh --join <token> <hash> <endpoint>
+    ↓
+완료 — 클러스터 Ready
+```
+
+> `install.sh` 완료 시 워커/마스터 합류 명령(실제 토큰·hash 포함)이 자동 출력됩니다.
+> certificate-key는 1시간 유효입니다. 만료 시 Master-1에서 재생성:
+>
+> ```bash
+> kubeadm init phase upload-certs --upload-certs
+> ```
+
+---
 
 ### Step 1 — 파일 수집 (인터넷 호스트)
 
@@ -40,39 +111,87 @@ sudo ./scripts/wsl2_prep.sh
 # 이후 WSL2 재진입 후 Step 3 진행
 ```
 
-### Step 3 — 컨트롤 플레인 설치
+### Step 3 — 컨트롤 플레인 설치 (Master-1)
+
+**⚠️ HA(3중화) 구성이라면 `install.sh` 실행 전에 반드시 Phase 5(로드밸런서 구성)를 먼저 완료하세요.**
+HAProxy + Keepalived로 VIP를 확보한 뒤, 아래 스크립트 실행 시 엔드포인트에 VIP 또는 FQDN을 입력해야 합니다.
+단일 구성(WSL2 / 단일 컨트롤 플레인)이라면 이 주의사항은 무시하세요.
 
 ```bash
-# 폐쇄망 노드에서 압축 해제 후
 sudo ./scripts/install.sh
 # 대화형 메뉴:
 #   1) 환경 확인 (wsl2 / vm)
-#   2) CNI 선택 (calico / cilium)
+#   2) CNI 선택 (calico / cilium) + Pod CIDR
 #   3) CNI 설치 모드 (auto / manual)
-#   4) Envoy Gateway 모드 (calico 선택 시, auto / manual)
-#   5) 컨트롤 플레인 엔드포인트 입력
+#   4) Envoy Gateway 모드 (calico+auto 선택 시)
+#   5) Service CIDR
+#   6) 컨트롤 플레인 엔드포인트
+#      → 단일: 노드 IP (WSL2는 자동 감지)
+#      → HA  : VIP 또는 FQDN
 ```
 
-> HA(3중화) 구성은 `kubeadm init` 전에 HAProxy + Keepalived를 먼저 구성해야 합니다.
-> 상세 절차는 **Phase 5** (로드밸런서 구성)를 먼저 수동으로 진행하세요.
+**HA 구성이라면** 완료 후 즉시 아래를 수동으로 수행합니다.
 
-### Step 4 — 워커 노드 합류
+#### 🔧 [HA 전용] kube-apiserver bind-address 설정
+
+kube-apiserver가 기본 `0.0.0.0`으로 바인딩되면 HAProxy와 포트 충돌이 발생합니다.
+이 노드의 실제 IP로 고정하세요.
 
 ```bash
-# 컨트롤 플레인에서 합류 명령 확인
-kubeadm token create --print-join-command
-# 출력 예시: kubeadm join <endpoint>:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+# 이 노드의 실제 IP 확인
+ip -4 -o addr show | grep -v '127\.' | awk '{print $4}' | cut -d/ -f1
 
-# 워커 노드에서 실행
+# kube-apiserver 매니페스트 편집
+sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+# spec.containers[].command 섹션에 추가:
+# - --bind-address=<이 노드의 실제 IP>   # 예: 192.168.10.11
+```
+
+저장 후 kubelet이 자동으로 apiserver를 재기동합니다. 약 30초 후 확인:
+
+```bash
+sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock pods \
+    --namespace kube-system | grep apiserver
+# Running 확인 후 HAProxy 정상 동작 확인
+curl -k https://<VIP>:6443/livez
+```
+
+### Step 4 — 추가 마스터 합류 (Master-2, 3 — HA 구성 시에만)
+
+`install.sh` 완료 시 출력된 명령어를 그대로 사용합니다.
+certificate-key가 만료됐다면 Master-1에서 재생성 후 사용하세요.
+
+```bash
+# Master-2, Master-3 각각에서 실행
+sudo ./scripts/install.sh --join <token> <hash> <endpoint> --control-plane <cert-key>
+```
+
+**각 노드 완료 후** 즉시 위 **Step 3의 🔧 bind-address 설정**을 동일하게 수행합니다.
+(각 노드의 실제 IP가 다르므로 노드별로 각각 실행)
+
+### Step 5 — 워커 노드 합류
+
+```bash
+# Worker 각각에서 실행
 sudo ./scripts/install.sh --join <token> <hash> <endpoint>
 ```
 
-### Step 5 — 언인스톨
+### Step 6 — 언인스톨
+
+| 명령 | 동작 |
+| --- | --- |
+| `sudo ./scripts/uninstall.sh` | 대화형 확인 후 클러스터 상태 초기화 |
+| `sudo ./scripts/uninstall.sh --yes` | 확인 생략 (install.sh 재설치 흐름에서 자동 호출) |
+| `sudo ./scripts/uninstall.sh --purge` | 클러스터 초기화 + DEB 패키지(kubeadm/kubelet/kubectl/containerd.io)까지 제거 |
+
+**초기화 후에도 `kubectl` / `kubelet` 바이너리는 남아있습니다.**
+폐쇄망 환경에서 재설치 시 DEB를 다시 가져올 수 없으므로 패키지는 기본적으로 유지합니다.
+바이너리까지 완전히 제거하려면 `--purge` 옵션을 사용하세요.
 
 ```bash
-sudo ./scripts/uninstall.sh          # 대화형 확인
+sudo ./scripts/uninstall.sh          # 클러스터만 초기화 (바이너리 유지)
 sudo ./scripts/uninstall.sh --yes    # 확인 생략
-sudo ./scripts/uninstall.sh --purge  # DEB 패키지까지 제거
+sudo ./scripts/uninstall.sh --purge  # 바이너리까지 완전 제거
 ```
 
 ### 설정 저장 (`install.conf`)

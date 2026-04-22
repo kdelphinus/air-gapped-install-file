@@ -61,11 +61,10 @@ EOF
 
 reset_conf_vars() {
     ENV_TYPE="" NODE_ROLE="" CNI_CHOICE="" CNI_INSTALL_MODE="" GATEWAY_INSTALL_MODE=""
-    POD_CIDR="" CONTROL_PLANE_ENDPOINT=""
+    POD_CIDR="" SERVICE_CIDR="" CONTROL_PLANE_ENDPOINT=""
 }
 
 load_conf
-SERVICE_CIDR="${SERVICE_CIDR:-10.96.0.0/12}"
 CRI_SOCKET="${CRI_SOCKET:-unix:///run/containerd/containerd.sock}"
 
 # ==========================================
@@ -75,19 +74,40 @@ if [ "$1" = "--join" ]; then
     JOIN_TOKEN="$2"
     JOIN_HASH="$3"
     JOIN_ENDPOINT="$4"
+    JOIN_IS_CP=0
+    JOIN_CERT_KEY=""
+
+    if [ "$5" = "--control-plane" ]; then
+        JOIN_IS_CP=1
+        JOIN_CERT_KEY="$6"
+        if [ -z "$JOIN_CERT_KEY" ]; then
+            echo -e "${RED}[오류] --control-plane 옵션에는 certificate-key 가 필요합니다.${NC}"
+            echo "       사용법: $0 --join <token> <ca-hash> <endpoint> --control-plane <cert-key>"
+            exit 1
+        fi
+    fi
 
     if [ -z "$JOIN_TOKEN" ] || [ -z "$JOIN_HASH" ] || [ -z "$JOIN_ENDPOINT" ]; then
-        echo -e "${RED}[오류] 사용법: $0 --join <token> <ca-hash> <endpoint>${NC}"
+        echo -e "${RED}[오류] 사용법:${NC}"
+        echo "   워커      : $0 --join <token> <ca-hash> <endpoint>"
+        echo "   추가 마스터: $0 --join <token> <ca-hash> <endpoint> --control-plane <cert-key>"
         exit 1
     fi
 
-    echo -e "${CYAN}============================================================${NC}"
-    echo -e "${CYAN} 워커 노드 합류 모드${NC}"
-    echo -e "${CYAN}   endpoint: ${JOIN_ENDPOINT}${NC}"
-    echo -e "${CYAN}============================================================${NC}"
+    if [ "$JOIN_IS_CP" -eq 1 ]; then
+        NODE_ROLE="control-plane"
+        echo -e "${CYAN}============================================================${NC}"
+        echo -e "${CYAN} 추가 마스터(컨트롤 플레인) 합류 모드${NC}"
+        echo -e "${CYAN}   endpoint: ${JOIN_ENDPOINT}${NC}"
+        echo -e "${CYAN}============================================================${NC}"
+    else
+        NODE_ROLE="worker"
+        echo -e "${CYAN}============================================================${NC}"
+        echo -e "${CYAN} 워커 노드 합류 모드${NC}"
+        echo -e "${CYAN}   endpoint: ${JOIN_ENDPOINT}${NC}"
+        echo -e "${CYAN}============================================================${NC}"
+    fi
 
-    # 공통 준비(DEB/OS/containerd/이미지)는 아래 함수에서 재사용
-    NODE_ROLE="worker"
     echo -e "${YELLOW}DEB 설치 · OS 사전 설정 · containerd 구성 · 이미지 로드 진행...${NC}"
 
     dpkg -i "$DEB_DIR"/*.deb 2>/dev/null || apt-get install -f -y --no-download || true
@@ -119,9 +139,45 @@ EOF
     done
 
     echo -e "${CYAN}kubeadm join 실행 중...${NC}"
-    kubeadm join "$JOIN_ENDPOINT" \
-        --token "$JOIN_TOKEN" \
-        --discovery-token-ca-cert-hash "sha256:$JOIN_HASH"
+    if [ "$JOIN_IS_CP" -eq 1 ]; then
+        # HA: HAProxy가 VIP:6443을 점유 중이면 kubeadm join 전에 중지
+        _HAPROXY_WAS_ACTIVE=0
+        if systemctl is-active haproxy >/dev/null 2>&1 && grep -q ":6443" /etc/haproxy/haproxy.cfg 2>/dev/null; then
+            echo -e "${YELLOW}  → HAProxy 일시 중지 (VIP 포트 충돌 방지)${NC}"
+            systemctl stop haproxy
+            _HAPROXY_WAS_ACTIVE=1
+        fi
+
+        kubeadm join "$JOIN_ENDPOINT" \
+            --token "$JOIN_TOKEN" \
+            --discovery-token-ca-cert-hash "sha256:$JOIN_HASH" \
+            --control-plane \
+            --certificate-key "$JOIN_CERT_KEY"
+
+        # HAProxy 재시작
+        if [ "$_HAPROXY_WAS_ACTIVE" -eq 1 ]; then
+            systemctl start haproxy
+            echo -e "${GREEN}  → HAProxy 재시작 완료${NC}"
+            echo -e "${YELLOW}[수동 필요] kube-apiserver bind-address 설정 후 HAProxy가 정상 동작하는지 확인하세요.${NC}"
+            echo "   sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml"
+            echo "   # spec.containers[].command 에 추가:"
+            echo "   # - --bind-address=<이 노드의 실제 IP>"
+        fi
+
+        # kubeconfig 설정
+        mkdir -p /root/.kube
+        cp -f /etc/kubernetes/admin.conf /root/.kube/config
+        if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+            SUDO_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+            mkdir -p "$SUDO_HOME/.kube"
+            cp -f /etc/kubernetes/admin.conf "$SUDO_HOME/.kube/config"
+            chown -R "$SUDO_USER:$SUDO_USER" "$SUDO_HOME/.kube"
+        fi
+    else
+        kubeadm join "$JOIN_ENDPOINT" \
+            --token "$JOIN_TOKEN" \
+            --discovery-token-ca-cert-hash "sha256:$JOIN_HASH"
+    fi
 
     save_conf
     echo -e "${GREEN}✅ 노드 합류 완료${NC}"
@@ -218,10 +274,12 @@ if [ -z "$CNI_CHOICE" ]; then
     read -p "선택 [1/2, 기본값: 1]: " _CNI
     _CNI="${_CNI:-1}"
     case "$_CNI" in
-        1) CNI_CHOICE="calico"; POD_CIDR="192.168.0.0/16" ;;
-        2) CNI_CHOICE="cilium"; POD_CIDR="10.0.0.0/16" ;;
+        1) CNI_CHOICE="calico"; DEFAULT_POD_CIDR="192.168.0.0/16" ;;
+        2) CNI_CHOICE="cilium"; DEFAULT_POD_CIDR="10.0.0.0/16" ;;
         *) echo -e "${RED}[오류] 1 또는 2를 선택하세요.${NC}"; exit 1 ;;
     esac
+    read -p "Pod CIDR [기본: ${DEFAULT_POD_CIDR}]: " POD_CIDR
+    POD_CIDR="${POD_CIDR:-$DEFAULT_POD_CIDR}"
 fi
 
 if [ -z "$CNI_INSTALL_MODE" ]; then
@@ -255,7 +313,18 @@ if [ "$CNI_CHOICE" = "calico" ] && [ "$CNI_INSTALL_MODE" = "auto" ]; then
     fi
 fi
 
-# ── [4] 컨트롤 플레인 엔드포인트 ────────────────────────────
+# ── [4] Service CIDR ─────────────────────────────────────────
+if [ -z "$SERVICE_CIDR" ]; then
+    DEFAULT_SVC_CIDR="10.96.0.0/12"
+    read -p "Service CIDR [기본: ${DEFAULT_SVC_CIDR}]: " _SVC_CIDR
+    SERVICE_CIDR="${_SVC_CIDR:-$DEFAULT_SVC_CIDR}"
+fi
+
+# ── [5] 컨트롤 플레인 엔드포인트 ────────────────────────────
+echo ""
+echo -e "${YELLOW}[주의] HA(3중화) 구성이라면 HAProxy + Keepalived(VIP)를 먼저 구성하고${NC}"
+echo -e "${YELLOW}       아래 엔드포인트에 VIP를 입력하세요. (Phase 5 선행 필수)${NC}"
+echo -e "${YELLOW}       단일 구성이라면 무시하세요.${NC}"
 if [ -z "$CONTROL_PLANE_ENDPOINT" ]; then
     if [ "$ENV_TYPE" = "wsl2" ]; then
         # WSL2: eth0 IP 자동 감지
@@ -350,9 +419,18 @@ KUBEADM_ARGS=(
     --service-cidr "$SERVICE_CIDR"
     --kubernetes-version "$K8S_VERSION"
     --cri-socket "$CRI_SOCKET"
+    --upload-certs
 )
 if [ "$CNI_CHOICE" = "cilium" ]; then
     KUBEADM_ARGS+=(--skip-phases=addon/kube-proxy)
+fi
+
+# HA: HAProxy가 VIP:6443 점유 중이면 kubeadm init 전에 중지
+_HAPROXY_WAS_ACTIVE=0
+if systemctl is-active haproxy >/dev/null 2>&1 && grep -q ":6443" /etc/haproxy/haproxy.cfg 2>/dev/null; then
+    echo -e "${YELLOW}  → HAProxy 일시 중지 (VIP 포트 충돌 방지)${NC}"
+    systemctl stop haproxy
+    _HAPROXY_WAS_ACTIVE=1
 fi
 
 kubeadm init "${KUBEADM_ARGS[@]}"
@@ -370,6 +448,16 @@ fi
 
 export KUBECONFIG=/etc/kubernetes/admin.conf
 
+# HA: kubeadm init 후 HAProxy 재시작
+if [ "$_HAPROXY_WAS_ACTIVE" -eq 1 ]; then
+    systemctl start haproxy
+    echo -e "${GREEN}  → HAProxy 재시작 완료${NC}"
+    echo -e "${YELLOW}[수동 필요] kube-apiserver bind-address 설정 후 HAProxy가 정상 동작하는지 확인하세요.${NC}"
+    echo "   sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml"
+    echo "   # spec.containers[].command 에 추가:"
+    echo "   # - --bind-address=<이 노드의 실제 IP>"
+fi
+
 # 단일 노드(WSL2 포함)에서 컨트롤 플레인 taint 제거 옵션
 if [ "$ENV_TYPE" = "wsl2" ]; then
     echo "WSL2 단일 노드 — control-plane taint 제거"
@@ -383,12 +471,28 @@ echo -e "${CYAN}[10/10] CNI / Gateway 처리...${NC}"
 install_calico() {
     echo -e "${CYAN}  → Calico Tigera Operator 설치${NC}"
     kubectl create -f "$UTIL_DIR/tigera-operator.yaml"
+    echo "  → Tigera CRD 등록 대기 (최대 3분)..."
+    _ELAPSED=0
+    until kubectl get crd installations.operator.tigera.io >/dev/null 2>&1; do
+        if [ "$_ELAPSED" -ge 180 ]; then
+            echo -e "${RED}[오류] Tigera CRD 등록 타임아웃 — tigera-operator Pod 상태를 확인하세요.${NC}"
+            exit 1
+        fi
+        sleep 5; _ELAPSED=$((_ELAPSED + 5))
+    done
+    kubectl wait --for=condition=established crd/installations.operator.tigera.io --timeout=60s
     # Pod CIDR 반영
     sed "s|cidr: .*|cidr: ${POD_CIDR}|" "$UTIL_DIR/calico-custom-resources.yaml" \
         | kubectl create -f -
+    echo "  → Calico Pod 생성 대기..."
+    _ELAPSED=0
+    until kubectl get pods -n calico-system -l k8s-app=calico-node 2>/dev/null | grep -q calico-node; do
+        if [ "$_ELAPSED" -ge 120 ]; then break; fi
+        sleep 5; _ELAPSED=$((_ELAPSED + 5))
+    done
     echo "  → Calico Pod Ready 대기 (최대 5분)..."
     kubectl wait --for=condition=Ready pod -l k8s-app=calico-node \
-        -n calico-system --timeout=300s || true
+        -n calico-system --timeout=300s 2>/dev/null || true
 }
 
 case "${CNI_CHOICE}::${CNI_INSTALL_MODE}" in
@@ -440,11 +544,21 @@ echo -e "${GREEN}============================================================${N
 echo -e "${GREEN} ✅ Kubernetes ${K8S_VERSION} 설치 완료${NC}"
 echo -e "${GREEN}============================================================${NC}"
 echo ""
-echo " 워커 합류 토큰 생성:"
-echo "   kubeadm token create --print-join-command"
+echo -e "${CYAN}📋 노드 합류 명령 (토큰 24시간 유효)${NC}"
+_JOIN_CMD=$(kubeadm token create --print-join-command 2>/dev/null || true)
+_JOIN_TOKEN=$(echo "$_JOIN_CMD" | grep -oP '(?<=--token )\S+' || true)
+_JOIN_HASH=$(echo "$_JOIN_CMD" | grep -oP '(?<=sha256:)\S+' || true)
+_CERT_KEY=$(kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1 || true)
 echo ""
-echo " 다른 노드에서 합류:"
-echo "   sudo ./scripts/install.sh --join <token> <ca-hash> <endpoint>"
+echo -e " ${YELLOW}워커 노드:${NC}"
+echo "   sudo ./scripts/install.sh --join ${_JOIN_TOKEN} ${_JOIN_HASH} ${CONTROL_PLANE_ENDPOINT}"
+echo ""
+if [ -n "$_CERT_KEY" ]; then
+    echo -e " ${YELLOW}추가 마스터 노드 (HA):${NC}"
+    echo "   sudo ./scripts/install.sh --join ${_JOIN_TOKEN} ${_JOIN_HASH} ${CONTROL_PLANE_ENDPOINT} --control-plane ${_CERT_KEY}"
+    echo -e "   ${YELLOW}(certificate-key 는 1시간 후 만료됩니다)${NC}"
+    echo ""
+fi
 echo ""
 kubectl get nodes
 echo ""

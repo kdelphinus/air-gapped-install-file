@@ -107,7 +107,7 @@ if [ "$DO_UPGRADE" != "true" ]; then
     echo ""
     echo "이미지 소스를 선택하세요:"
     echo "  1) Harbor 레지스트리 사용"
-    2) 로컬 이미지 직접 사용 (ctr import)
+    echo "  2) 로컬 이미지 직접 사용 (ctr import)"
     read -p "선택 [1/2, 기본값 1]: " _IMG_SRC
     if [ "${_IMG_SRC:-1}" == "1" ]; then
         IMAGE_SOURCE="harbor"

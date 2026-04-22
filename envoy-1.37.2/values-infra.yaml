@@ -22,8 +22,8 @@ service:
   type: LoadBalancer
   trafficPolicy: Local
   nodePorts:
-    http: 30080
-    https: 30443
+    http: 
+    https: 
 
 clientIP:
   proxyProtocol: false

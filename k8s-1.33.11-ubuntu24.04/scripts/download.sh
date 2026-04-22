@@ -165,10 +165,28 @@ else
 fi
 
 # ==========================================
-# [4/6] 컨테이너 이미지 (k8s 코어 + Calico)
+# [4/6] 매니페스트 (Calico + local-path-storage) — 이미지 버전 추출용으로 먼저 실행
 # ==========================================
 echo ""
-echo "[4/6] 컨테이너 이미지 다운로드..."
+echo "[4/6] 매니페스트 다운로드..."
+
+# Calico — Tigera Operator 방식: 두 파일 분리 저장
+curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml" \
+    -o "${UTIL_DIR}/tigera-operator.yaml"
+curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/custom-resources.yaml" \
+    -o "${UTIL_DIR}/calico-custom-resources.yaml"
+echo "  → Calico: tigera-operator.yaml + calico-custom-resources.yaml"
+
+# local-path-storage (Rancher)
+curl -fsSL "https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml" \
+    -o "${UTIL_DIR}/local-path-storage.yaml"
+echo "  → local-path-storage.yaml"
+
+# ==========================================
+# [5/6] 컨테이너 이미지 (k8s 코어 + Calico)
+# ==========================================
+echo ""
+echo "[5/6] 컨테이너 이미지 다운로드..."
 
 # containerd가 설치되어 있어야 ctr 사용 가능 — 임시 설치 확인
 if ! command -v ctr >/dev/null 2>&1; then
@@ -185,9 +203,17 @@ fi
 # k8s 코어 이미지 목록 동적 생성
 K8S_IMAGES=$(kubeadm config images list --kubernetes-version="${K8S_VERSION}")
 
-# Calico v3.31 이미지 (Tigera Operator 방식)
+# Tigera operator 이미지 버전을 yaml에서 동적 추출 (operator 버전 ≠ Calico 버전)
+TIGERA_OPERATOR_IMAGE=$(grep 'image:' "${UTIL_DIR}/tigera-operator.yaml" | awk '{print $2}' | head -1)
+if [ -z "$TIGERA_OPERATOR_IMAGE" ]; then
+    echo "  ! tigera-operator.yaml에서 이미지 추출 실패 — 기본값 사용"
+    TIGERA_OPERATOR_IMAGE="quay.io/tigera/operator:v1.40.0"
+fi
+echo "  → Tigera Operator 이미지: ${TIGERA_OPERATOR_IMAGE}"
+
+# Calico 컴포넌트 이미지 (Calico 버전과 동일)
 CALICO_IMAGES=(
-    "quay.io/tigera/operator:${CALICO_VERSION}"
+    "${TIGERA_OPERATOR_IMAGE}"
     "docker.io/calico/cni:${CALICO_VERSION}"
     "docker.io/calico/node:${CALICO_VERSION}"
     "docker.io/calico/kube-controllers:${CALICO_VERSION}"
@@ -198,18 +224,24 @@ CALICO_IMAGES=(
     "docker.io/calico/apiserver:${CALICO_VERSION}"
 )
 
+FAILED_IMAGES=()
+
 pull_and_save() {
     local IMG="$1"
     # registry prefix 제거 + ':', '/' 를 '-' 로
     local SAFE_NAME
-    SAFE_NAME=$(echo "$IMG" | sed -E 's|^(docker\.io/|quay\.io/|registry\.k8s\.io/)||' | tr ':/' '-')
+    SAFE_NAME=$(echo "$IMG" | sed -E 's#^(docker\.io|quay\.io|registry\.k8s\.io)/##' | tr ':/' '-')
     local TAR="${IMG_DIR}/${SAFE_NAME}.tar"
     if [ -f "$TAR" ]; then
         echo "  → ${IMG} (이미 존재, skip)"
         return 0
     fi
     echo "  → pull: ${IMG}"
-    ctr -n k8s.io images pull "$IMG" >/dev/null 2>&1 || { echo "    ! pull 실패: $IMG"; return 1; }
+    if ! ctr -n k8s.io images pull "$IMG" >/dev/null 2>&1; then
+        echo "    ! pull 실패: $IMG"
+        FAILED_IMAGES+=("$IMG")
+        return 1
+    fi
     echo "    export: $(basename "$TAR")"
     ctr -n k8s.io images export "$TAR" "$IMG"
 }
@@ -223,30 +255,18 @@ done
 
 IMG_COUNT=$(ls -1 "$IMG_DIR"/*.tar 2>/dev/null | wc -l)
 echo "  → 이미지 ${IMG_COUNT}개 저장 완료"
-
-# ==========================================
-# [5/6] 매니페스트 (Calico + local-path-storage)
-# ==========================================
-echo ""
-echo "[5/6] 매니페스트 다운로드..."
-
-# Calico — Tigera Operator 방식: 두 파일 분리 저장 (선택지 A)
-curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml" \
-    -o "${UTIL_DIR}/tigera-operator.yaml"
-curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/custom-resources.yaml" \
-    -o "${UTIL_DIR}/calico-custom-resources.yaml"
-echo "  → Calico: tigera-operator.yaml + calico-custom-resources.yaml"
-
-# local-path-storage (Rancher)
-curl -fsSL "https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml" \
-    -o "${UTIL_DIR}/local-path-storage.yaml"
-echo "  → local-path-storage.yaml"
+if [ ${#FAILED_IMAGES[@]} -gt 0 ]; then
+    echo "  ⚠ pull 실패 목록 (재시도 필요):"
+    for F in "${FAILED_IMAGES[@]}"; do
+        echo "    - $F"
+    done
+fi
 
 # ==========================================
 # [6/6] 임시 APT repo 정리 + 결과 요약
 # ==========================================
 echo ""
-echo "[6/6] 임시 APT repo 정리..."
+echo "[6/6] 임시 APT repo 정리 및 요약..."
 rm -f "$K8S_LIST" "$DOCKER_LIST"
 apt-get update -qq >/dev/null 2>&1 || true
 echo "  → 정리 완료"
