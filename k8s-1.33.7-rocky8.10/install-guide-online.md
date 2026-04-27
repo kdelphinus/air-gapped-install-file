@@ -1,0 +1,746 @@
+# Kubernetes v1.33.7 온라인 설치 가이드 (Rocky Linux 8.10)
+
+인터넷이 가능한 환경에서 kubeadm 기반 Kubernetes v1.33.7 클러스터를 구성하는 절차입니다.
+컨테이너 런타임은 containerd(Docker 공식 리포지토리, v2.1.x — K8s 1.33 공식 지원 라인), CNI는 Calico 또는 Cilium 중 선택하며,
+Rocky Linux 8.10 (RHEL 8 계열) 환경에 최적화되어 있습니다.
+
+> 본 문서는 외부 개방망 환경에서 단독 사용 가능한 가이드입니다.
+
+## 전제 조건
+
+- Rocky Linux 8.10 노드 (인터넷 가능)
+  - **단일 구성**: 컨트롤 플레인 1대 + 워커 1대 이상
+  - **HA(3중화) 구성**: 컨트롤 플레인 3대 + 워커 1대 이상 + VIP 1개
+- swap 비활성화 완료 (`swapoff -a` 및 `/etc/fstab` 주석 처리)
+- `sudo` 권한 및 Root 권한
+- 최소 사양: CPU 2 Core, RAM 2GB 이상
+
+## Phase 0: WSL2 환경 사전 준비 (WSL 환경인 경우에만)
+
+WSL2에서 진행하는 경우, kubelet/containerd가 systemd 단위로 동작해야 하므로
+**Phase 1을 시작하기 전에** systemd를 활성화하고 WSL을 재기동합니다.
+
+```bash
+cat <<EOF | sudo tee /etc/wsl.conf
+[boot]
+systemd=true
+EOF
+```
+
+이후 Windows PowerShell에서 다음 명령으로 재기동합니다.
+
+```powershell
+wsl --shutdown
+```
+
+재진입 후 `systemctl is-system-running` 으로 systemd 정상 동작 여부를 확인합니다.
+
+## Phase 1: 저장소 등록 및 패키지 설치 (전체 노드)
+
+```bash
+# 1. EPEL 먼저 등록 (jq 등 EPEL-only 패키지 의존)
+sudo dnf install -y epel-release
+
+# 2. 시스템 업데이트 및 필수 선행 패키지
+sudo dnf update -y
+sudo dnf install -y socat conntrack-tools iproute-tc libseccomp curl yum-utils jq chrony
+
+# 3. Docker CE 저장소 (containerd.io 획득용)
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+# 4. Kubernetes 저장소 (v1.33)
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.33/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.33/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF
+
+# 5. containerd + kubeadm/kubelet/kubectl 설치
+#    - containerd.io: K8s 1.33 공식 지원 라인(2.1.x)으로 핀닝 — v2.2.x는 K8s 1.35+부터 권장
+#    - kubelet/kubeadm/kubectl: 빌드 suffix(`-150500.x.x` 등)가 붙으므로 와일드카드(`-*`)로 매칭
+sudo dnf install -y containerd.io-2.1.*
+sudo dnf install -y --disableexcludes=kubernetes \
+    kubelet-1.33.7-* kubeadm-1.33.7-* kubectl-1.33.7-*
+
+sudo systemctl enable --now kubelet
+```
+
+> Kubernetes repo는 v1.24부터 `pkgs.k8s.io`로 이전되었으며 버전별 경로(`/v1.33/`)가 구분됩니다.
+> [containerd 공식 호환 매트릭스](https://containerd.io/releases/)에 따라 K8s 1.33은
+> `2.1.0+ / 2.0.4+ / 1.7.24+ / 1.6.36+`를 권장하며, 본 가이드는 `2.1.x` 라인으로 핀닝합니다.
+> v2.2.x는 K8s 1.35부터 권장되므로 의도치 않은 메이저 업그레이드를 차단합니다.
+
+## Phase 2: OS 사전 설정 (전체 노드)
+
+```bash
+# 1. SELinux 설정 (Permissive)
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+# 2. 방화벽 비활성화 (권장) 또는 필요한 포트 개방
+sudo systemctl stop firewalld
+sudo systemctl disable firewalld
+
+# 3. 커널 모듈 로드
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+# 4. 커널 파라미터 (네트워크 브릿지)
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+sudo sysctl --system
+
+# 5. Swap 비활성화
+sudo swapoff -a
+sudo sed -i '/\sswap\s/s/^/#/' /etc/fstab
+```
+
+## Phase 3: containerd 설정 (전체 노드)
+
+```bash
+sudo mkdir -p /etc/containerd
+sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+# SystemdCgroup 활성화
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
+# Sandbox 이미지 설정 (v1.33 호환 pause:3.10)
+sudo sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
+
+# containerd 시작 및 활성화
+sudo systemctl enable --now containerd
+sudo systemctl restart containerd
+```
+
+## Phase 4: 로드밸런서 (HA 3중화 시에만 / 단일 구성이면 Phase 5로)
+
+HA 구성에서 K8s API Server(6443) 앞단에 로드밸런서가 필요합니다.
+
+> **[사전 결정] VIP 주소를 인증서에 직접 설정할지, FQDN으로 추상화할지 먼저 결정하세요.**
+>
+> | 방식 | 장점 | 단점 |
+> | --- | --- | --- |
+> | **FQDN** (`k8s-api.internal`) ← **권장** | VIP 변경 시 `/etc/hosts`만 수정, 인증서 재발급 불필요 | `/etc/hosts` 관리 필요 |
+> | IP 직접 사용 | 설정 단순 | VIP 변경 시 인증서 재발급 필수 |
+
+### 옵션 A: VIP 방식 (표준, 권장)
+
+#### 4-A-1. (FQDN 방식 선택 시) FQDN 등록 (전체 노드)
+
+내부 DNS 서버가 있다면 관리자에게 요청(레코드 `k8s-api.internal` → VIP)합니다.
+없다면 `/etc/hosts`에 등록합니다. **마스터 + 워커 전 노드에서** 실행:
+
+```bash
+echo "<VIP>  k8s-api.internal" | sudo tee -a /etc/hosts
+```
+
+> HAProxy의 `bind`는 안정성을 위해 VIP IP(`<VIP>:6443`)를 그대로 사용합니다.
+> FQDN은 kubeconfig의 server 주소와 인증서 SAN에만 적용됩니다.
+
+#### 4-A-2. HAProxy / Keepalived 설치 (전체 마스터 노드)
+
+```bash
+sudo dnf install -y haproxy keepalived psmisc
+```
+
+> `psmisc`는 keepalived 스크립트의 `killall` 을 위해 필요합니다.
+
+#### 4-A-3. 커널 파라미터 (전체 마스터 노드)
+
+VIP가 자신의 인터페이스에 없어도 바인딩할 수 있도록 설정합니다.
+
+```bash
+cat <<EOF | sudo tee /etc/sysctl.d/haproxy.conf
+net.ipv4.ip_nonlocal_bind = 1
+EOF
+sudo sysctl --system
+```
+
+#### 4-A-4. HAProxy 설정 (전체 마스터 노드)
+
+```bash
+sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
+
+cat <<EOF | sudo tee /etc/haproxy/haproxy.cfg
+global
+    log         127.0.0.1 local2
+    maxconn     4000
+    daemon
+
+defaults
+    mode                    tcp
+    log                     global
+    option                  tcplog
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+
+frontend k8s-api
+    bind <VIP>:6443      # TODO 실제 VIP로 변경 필요
+    mode tcp
+    option tcplog
+    default_backend k8s-masters
+
+backend k8s-masters
+    mode tcp
+    balance roundrobin
+    option tcp-check
+    server <MASTER1_HOSTNAME> <MASTER1_IP>:6443 check fall 3 rise 2
+    server <MASTER2_HOSTNAME> <MASTER2_IP>:6443 check fall 3 rise 2
+    server <MASTER3_HOSTNAME> <MASTER3_IP>:6443 check fall 3 rise 2
+EOF
+```
+
+#### 4-A-5. Keepalived 설정 (전체 마스터 노드)
+
+| 노드 | state | priority |
+| --- | --- | --- |
+| Master-1 | `MASTER` | `101` |
+| Master-2 | `BACKUP` | `100` |
+| Master-3 | `BACKUP` | `99` |
+
+인터페이스명은 `ip -br link`로 확인 후 `interface` 값을 실제명으로 교체합니다.
+
+```bash
+cat <<EOF | sudo tee /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_DEVEL
+}
+
+vrrp_script check_haproxy {
+    script "/usr/bin/killall -0 haproxy"
+    interval 3
+    weight -2
+    fall 10
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state MASTER              # TODO Master-2, 3은 BACKUP으로 변경
+    interface eth0            # TODO 실제 네트워크 인터페이스명으로 변경 (예: ens192)
+    virtual_router_id 51
+    priority 101              # TODO M1: 101, M2: 100, M3: 99
+    advert_int 1
+
+    authentication {
+        auth_type PASS
+        auth_pass 42
+    }
+
+    virtual_ipaddress {
+        <VIP>
+    }
+
+    track_script {
+        check_haproxy
+    }
+}
+EOF
+```
+
+#### 4-A-6. 서비스 시작 및 VIP 확인
+
+```bash
+sudo systemctl enable --now haproxy
+sudo systemctl enable --now keepalived
+
+# Master-1에서 VIP가 활성화되어야 함
+ip addr show | grep <VIP>
+```
+
+### 옵션 B: Localhost LB 방식 (VIP 사용 불가 환경)
+
+전체 마스터 + 워커 노드에 HAProxy를 띄워 Loopback(`127.0.0.1:8443`)으로 통신합니다.
+
+```bash
+sudo dnf install -y haproxy
+
+sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
+
+cat <<EOF | sudo tee /etc/haproxy/haproxy.cfg
+global
+    maxconn     4000
+    daemon
+
+defaults
+    mode                    tcp
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+
+frontend k8s-api-proxy
+    bind 127.0.0.1:8443
+    default_backend k8s-masters
+
+backend k8s-masters
+    balance roundrobin
+    option tcp-check
+    server <MASTER1_HOSTNAME> <MASTER1_IP>:6443 check
+    server <MASTER2_HOSTNAME> <MASTER2_IP>:6443 check
+    server <MASTER3_HOSTNAME> <MASTER3_IP>:6443 check
+EOF
+
+sudo systemctl enable --now haproxy
+```
+
+## Phase 5: kubeadm init (Master-1)
+
+구성 유형(단일 / HA)과 CNI 선택(Calico / Cilium)에 따라 옵션을 조합합니다.
+
+- Calico: `--pod-network-cidr=192.168.0.0/16` (기본)
+- Cilium: `--skip-phases=addon/kube-proxy --pod-network-cidr=10.0.0.0/16`
+
+### 옵션 A: HA(3중화) 구성
+
+HAProxy가 VIP:6443을 점유하고 있으므로 init 전에 중지해야 합니다.
+
+```bash
+# 1. HAProxy 일시 중지
+sudo systemctl stop haproxy
+
+# 2-a. kubeadm init — VIP IP 직접 사용 + CNI=Calico
+sudo kubeadm init \
+  --control-plane-endpoint "<VIP>:6443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="<VIP>,<MASTER1_IP>,<MASTER2_IP>,<MASTER3_IP>,127.0.0.1" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.33.7
+
+# 2-b. kubeadm init — FQDN 사용 + CNI=Calico (권장)
+sudo kubeadm init \
+  --control-plane-endpoint "k8s-api.internal:6443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="k8s-api.internal,<VIP>,<MASTER1_IP>,<MASTER2_IP>,<MASTER3_IP>,127.0.0.1" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.33.7
+
+# 2-c. kubeadm init — FQDN 사용 + CNI=Cilium (kube-proxy skip 필요)
+sudo kubeadm init \
+  --skip-phases=addon/kube-proxy \
+  --control-plane-endpoint "k8s-api.internal:6443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="k8s-api.internal,<VIP>,<MASTER1_IP>,<MASTER2_IP>,<MASTER3_IP>,127.0.0.1" \
+  --pod-network-cidr=10.0.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.33.7
+
+# 3. API 서버 bind-address를 Master-1 실제 IP로 수정
+sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+# - --bind-address=<MASTER1_IP> 부분 확인/수정
+
+# 4. API 서버 재기동 확인 후 HAProxy 시작
+sudo crictl pods --namespace kube-system | grep apiserver
+sudo systemctl start haproxy
+
+# 5. kubeconfig 설정
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+### 옵션 B: 단일 구성
+
+향후 HA 전환 가능성을 고려하여 단일 구성에서도 `--control-plane-endpoint`을 명시합니다.
+
+```bash
+# Calico 사용 시
+sudo kubeadm init \
+  --control-plane-endpoint "<MASTER_IP>:6443" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.33.7
+
+# Cilium 사용 시
+sudo kubeadm init \
+  --skip-phases=addon/kube-proxy \
+  --control-plane-endpoint "<MASTER_IP>:6443" \
+  --pod-network-cidr=10.0.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.33.7
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+## Phase 5-1: 추가 마스터 노드 조인 (Master-2, 3 — HA 구성 시에만)
+
+Master-1의 `kubeadm init` 출력에서 **`--control-plane`** 조인 명령을 복사하여 실행합니다.
+
+```bash
+# 1. HAProxy 일시 중지
+sudo systemctl stop haproxy
+
+# 2. 컨트롤 플레인 조인
+sudo kubeadm join <VIP>:6443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH> \
+    --control-plane --certificate-key <CERT_KEY>
+
+# 3. bind-address 실제 IP로 수정
+sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+# Master-2: - --bind-address=<MASTER2_IP>
+# Master-3: - --bind-address=<MASTER3_IP>
+
+# 4. API 서버 재기동 확인 후 HAProxy 시작
+sudo crictl pods --namespace kube-system | grep apiserver
+sudo systemctl start haproxy
+
+# 5. kubeconfig
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+## Phase 6: CNI 설치 (Master-1)
+
+### 옵션 A: Calico (Tigera Operator)
+
+Calico v3.31.5 는 Kubernetes v1.33을 지원합니다. 호환성은
+[Calico requirements](https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements) 에서 확인하세요.
+
+#### 기본 CIDR(`192.168.0.0/16`)을 그대로 사용한 경우
+
+```bash
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/manifests/tigera-operator.yaml
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/manifests/custom-resources.yaml
+
+# 파드 Running 대기
+kubectl get pods -n calico-system -w
+```
+
+#### Pod CIDR 을 변경한 경우 (custom-resources.yaml 수정 필수)
+
+`custom-resources.yaml` 의 기본 `cidr` 값은 `192.168.0.0/16` 이므로,
+`--pod-network-cidr` 을 다른 값으로 변경했다면 반드시 매니페스트를 다운로드 후 수정해야 합니다.
+
+```bash
+# 1. operator 먼저 설치
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/manifests/tigera-operator.yaml
+
+# 2. custom-resources.yaml 다운로드 후 cidr 수정
+curl -O https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/manifests/custom-resources.yaml
+
+# spec.calicoNetwork.ipPools[].cidr 항목을 실제 CIDR로 수정
+sed -i 's|cidr: 192.168.0.0/16|cidr: <YOUR_POD_CIDR>|' custom-resources.yaml
+
+# 3. 적용
+kubectl create -f custom-resources.yaml
+
+kubectl get pods -n calico-system -w
+```
+
+### 옵션 B: Cilium (Helm)
+
+```bash
+# Helm 설치가 되어있어야 합니다. (Phase 8 참고)
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+
+# 단일 구성
+helm install cilium cilium/cilium --version 1.19.3 \
+  --namespace kube-system \
+  --set kubeProxyReplacement=true \
+  --set k8sServiceHost=<MASTER_IP> \
+  --set k8sServicePort=6443
+
+# HA 구성 (FQDN)
+helm install cilium cilium/cilium --version 1.19.3 \
+  --namespace kube-system \
+  --set kubeProxyReplacement=true \
+  --set k8sServiceHost=k8s-api.internal \
+  --set k8sServicePort=6443
+```
+
+> Cilium 이 FQDN(`k8s-api.internal`)을 해석하려면 모든 노드의 `/etc/hosts` 또는 내부 DNS에
+> 해당 레코드가 등록되어 있어야 합니다 (Phase 4-A-1 단계에서 수행).
+
+## Phase 7: 워커 조인 및 확인
+
+```bash
+# 컨트롤 플레인(Master-1)에서 조인 명령 출력
+kubeadm token create --print-join-command
+
+# 워커 노드에서 실행 (단일 구성 / HA 구성 모두 endpoint만 달라짐)
+sudo kubeadm join <ENDPOINT>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>
+
+# 확인
+kubectl get nodes
+kubectl get pods -A
+```
+
+## Phase 8: helm / nerdctl 설치 (선택)
+
+```bash
+# helm
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# nerdctl (full)
+NERDCTL_VERSION=2.2.2
+curl -fsSL https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-full-${NERDCTL_VERSION}-linux-amd64.tar.gz \
+    -o /tmp/nerdctl-full.tar.gz
+sudo tar xzf /tmp/nerdctl-full.tar.gz -C /usr/local/
+nerdctl --version
+```
+
+## 재설치 시 초기화
+
+오류 발생 등으로 재설치가 필요한 경우 아래 순서로 초기화합니다.
+
+```bash
+# 1. kubeadm reset
+sudo kubeadm reset -f
+
+# 2. CNI 및 kube 설정 파일 삭제
+sudo rm -rf /etc/cni/net.d
+rm -rf $HOME/.kube
+sudo rm -rf /root/.kube
+
+# 3. etcd, kubelet 데이터 삭제
+sudo rm -rf /var/lib/etcd
+sudo rm -rf /var/lib/kubelet
+
+# 4. iptables 규칙 초기화
+sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sudo iptables -X
+
+# 5. (HA 구성인 경우) HAProxy / Keepalived 중지
+sudo systemctl stop haproxy keepalived 2>/dev/null || true
+
+# 6. containerd 재시작
+sudo systemctl restart containerd
+```
+
+## VIP 변경 시 조치
+
+운영 중 VIP가 변경되는 경우의 절차입니다. 초기 구성 방식(IP 직접 / FQDN)에 따라 케이스를 선택합니다.
+
+### 케이스 0: 운영 중인 클러스터를 IP → FQDN으로 전환
+
+이미 VIP IP로 초기 구성한 클러스터에 FQDN을 사후 적용하는 절차입니다.
+
+#### 1단계: 모든 노드에 FQDN 등록 (마스터 + 워커)
+
+```bash
+echo "<OLD_VIP>  k8s-api.internal" | sudo tee -a /etc/hosts
+```
+
+#### 2단계: API 서버 인증서에 FQDN SAN 추가 (전체 마스터 노드)
+
+```bash
+sudo cp /etc/kubernetes/pki/apiserver.crt ~/apiserver.crt.bak
+sudo cp /etc/kubernetes/pki/apiserver.key ~/apiserver.key.bak
+
+sudo rm /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.key
+sudo kubeadm init phase certs apiserver \
+  --control-plane-endpoint "k8s-api.internal:6443" \
+  --apiserver-cert-extra-sans="k8s-api.internal,<OLD_VIP>,<MASTER1_IP>,<MASTER2_IP>,<MASTER3_IP>,127.0.0.1"
+
+openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -text | grep -A1 "Subject Alternative"
+```
+
+#### 3단계: kube-apiserver 재시작 (전체 마스터 노드)
+
+```bash
+sudo mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/
+sleep 10
+sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
+
+watch sudo crictl pods --namespace kube-system
+```
+
+#### 4단계: kubeconfig / kubelet.conf 업데이트 (전체 마스터)
+
+```bash
+for conf in /etc/kubernetes/admin.conf \
+            /etc/kubernetes/controller-manager.conf \
+            /etc/kubernetes/scheduler.conf \
+            /etc/kubernetes/kubelet.conf; do
+    sudo sed -i "s|https://<OLD_VIP>:6443|https://k8s-api.internal:6443|g" "$conf"
+done
+sudo systemctl restart kubelet
+cp /etc/kubernetes/admin.conf ~/.kube/config
+```
+
+#### 5단계: 워커 노드 kubelet.conf 업데이트
+
+```bash
+sudo sed -i 's|https://<OLD_VIP>:6443|https://k8s-api.internal:6443|g' /etc/kubernetes/kubelet.conf
+sudo systemctl restart kubelet
+```
+
+#### 6단계: 클러스터 내부 ConfigMap 갱신 (Master-1에서 1회)
+
+> CNI = Cilium 인 경우 `kube-proxy` 가 없으므로 `kube-proxy ConfigMap` 단계는 생략하고,
+> `kubeadm-config` 갱신만 수행 후 `kubectl -n kube-system rollout restart ds cilium` 를 실행합니다.
+
+```bash
+# Calico 경로
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed 's|<OLD_VIP>:6443|k8s-api.internal:6443|g' | \
+  kubectl apply -f -
+kubectl rollout restart daemonset kube-proxy -n kube-system
+
+# (공통) kubeadm-config
+kubectl get configmap kubeadm-config -n kube-system -o yaml | \
+  sed 's|<OLD_VIP>:6443|k8s-api.internal:6443|g' | \
+  kubectl apply -f -
+```
+
+#### 7단계: 확인
+
+```bash
+kubectl get nodes
+kubectl cluster-info
+```
+
+---
+
+### 케이스 A: FQDN 방식으로 초기 구성한 경우 (권장 구성)
+
+인증서 SAN에 FQDN이 이미 포함되어 있으므로 **인증서 재발급 없이** 처리 가능합니다.
+
+#### 1단계: 모든 노드의 /etc/hosts 갱신 (마스터 + 워커)
+
+```bash
+# <OLD_VIP> → <NEW_VIP> 로 변경
+sudo sed -i 's/<OLD_VIP>  k8s-api.internal/<NEW_VIP>  k8s-api.internal/' /etc/hosts
+
+# 확인
+grep k8s-api.internal /etc/hosts
+```
+
+#### 2단계: Keepalived VIP 변경 (전체 마스터)
+
+```bash
+sudo sed -i 's/<OLD_VIP>/<NEW_VIP>/' /etc/keepalived/keepalived.conf
+sudo systemctl restart keepalived
+
+# 새 VIP 활성화 확인 (Master-1)
+ip addr show | grep <NEW_VIP>
+```
+
+#### 3단계: HAProxy bind IP 변경 (전체 마스터)
+
+```bash
+sudo sed -i 's/<OLD_VIP>:6443/<NEW_VIP>:6443/' /etc/haproxy/haproxy.cfg
+sudo systemctl restart haproxy
+```
+
+> `backend k8s-masters`의 `server` 항목(마스터 노드 IP)은 변경하지 않습니다.
+
+#### 4단계: API 서버 재시작 확인
+
+```bash
+# kubeconfig의 server 주소는 FQDN이므로 변경 불필요
+kubectl get nodes
+```
+
+---
+
+### 케이스 B: VIP IP를 직접 사용하여 초기 구성한 경우
+
+인증서 SAN에 기존 VIP IP가 고정되어 있으므로 **인증서 재발급이 필수**입니다.
+전체 마스터 노드에서 순서대로 진행합니다.
+
+#### 1단계: Keepalived / HAProxy VIP 변경 (전체 마스터)
+
+```bash
+sudo sed -i 's/<OLD_VIP>/<NEW_VIP>/' /etc/keepalived/keepalived.conf
+sudo systemctl restart keepalived
+
+sudo sed -i 's/<OLD_VIP>:6443/<NEW_VIP>:6443/' /etc/haproxy/haproxy.cfg
+sudo systemctl restart haproxy
+```
+
+#### 2단계: API 서버 인증서 재발급 (전체 마스터)
+
+```bash
+# 기존 인증서 백업
+sudo cp /etc/kubernetes/pki/apiserver.crt ~/apiserver.crt.bak
+sudo cp /etc/kubernetes/pki/apiserver.key ~/apiserver.key.bak
+
+# 삭제 후 재발급 (새 VIP 포함)
+sudo rm /etc/kubernetes/pki/apiserver.crt /etc/kubernetes/pki/apiserver.key
+sudo kubeadm init phase certs apiserver \
+  --control-plane-endpoint "<NEW_VIP>:6443" \
+  --apiserver-cert-extra-sans="<NEW_VIP>,<MASTER1_IP>,<MASTER2_IP>,<MASTER3_IP>,127.0.0.1"
+```
+
+#### 3단계: kube-apiserver 재시작 (전체 마스터)
+
+static pod는 manifest를 잠시 제거했다가 복원하면 자동 재시작됩니다.
+
+```bash
+sudo mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/
+sleep 10
+sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
+
+# Pod가 다시 Running 상태가 될 때까지 대기
+watch sudo crictl pods --namespace kube-system
+```
+
+#### 4단계: kubeconfig / kubelet.conf 업데이트 (전체 마스터)
+
+```bash
+# 마스터 노드 kubeconfig + kubelet.conf 업데이트
+for conf in /etc/kubernetes/admin.conf \
+            /etc/kubernetes/controller-manager.conf \
+            /etc/kubernetes/scheduler.conf \
+            /etc/kubernetes/kubelet.conf; do
+    sudo sed -i "s|https://<OLD_VIP>:6443|https://<NEW_VIP>:6443|g" "$conf"
+done
+sudo systemctl restart kubelet
+
+# 현재 사용자 kubeconfig 갱신
+cp /etc/kubernetes/admin.conf ~/.kube/config
+```
+
+#### 5단계: 워커 노드 kubelet.conf 업데이트 (전체 워커 노드)
+
+```bash
+sudo sed -i 's|https://<OLD_VIP>:6443|https://<NEW_VIP>:6443|g' /etc/kubernetes/kubelet.conf
+sudo systemctl restart kubelet
+```
+
+#### 6단계: 클러스터 내부 ConfigMap 갱신 (Master-1에서 1회 실행)
+
+로컬 파일 수정과 별개로, 클러스터 내부 etcd에 저장된 엔드포인트도 갱신해야 합니다.
+
+```bash
+# kube-proxy ConfigMap 갱신 (Cilium 사용 시 생략 가능)
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+  sed 's|<OLD_VIP>:6443|<NEW_VIP>:6443|g' | \
+  kubectl apply -f -
+kubectl rollout restart daemonset kube-proxy -n kube-system
+
+# kubeadm-config ConfigMap 갱신 — 추후 kubeadm upgrade 시 필요
+kubectl get configmap kubeadm-config -n kube-system -o yaml | \
+  sed 's|<OLD_VIP>:6443|<NEW_VIP>:6443|g' | \
+  kubectl apply -f -
+```
+
+#### 7단계: 정상 동작 확인
+
+```bash
+kubectl get nodes
+kubectl get pods -n kube-system
+```
+
+---
+
+**주의**: Rocky Linux 8에서는 `nftables`와 `iptables` 간섭이 있을 수 있으므로,
+방화벽 설정 시 주의가 필요합니다. 상기 가이드는 방화벽을 끄는 것을 전제로 합니다.
+`iptables` 명령어는 Rocky 8에서 `iptables-nft` 백엔드로 alias 되어 동작합니다.
