@@ -65,6 +65,14 @@ sudo sysctl --system
 sudo swapoff -a
 sudo sed -i '/\sswap\s/s/^/#/' /etc/fstab
 
+# hosts 파일 등록 (환경에 맞게 수정)
+sudo tee -a /etc/hosts <<EOF
+<MASTER1_IP> <MASTER1_HOSTNAME>
+<MASTER2_IP> <MASTER2_HOSTNAME>
+<MASTER3_IP> <MASTER3_HOSTNAME>
+<WORKER1_IP> <WORKER1_HOSTNAME>
+EOF
+
 # AppArmor 확인 (Ubuntu 24.04 기본 활성)
 sudo aa-status | head -5
 ```
@@ -319,7 +327,34 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-### 옵션 B: 단일 구성
+### 옵션 B: HA(3중화) — Localhost LB 방식 (Phase 4 옵션 B 에서 진행한 경우)
+
+각 노드의 HAProxy 가 `127.0.0.1:8443` 만 점유하고, 백엔드는 마스터들의 6443 으로 포워딩합니다.
+**kube-apiserver 의 6443 과 포트가 겹치지 않으므로 HAProxy 중지·재시작 단계가 불필요**하고,
+`bind-address` 수정도 필요 없습니다(기본 `0.0.0.0` 사용).
+
+> 인증서 SAN 에 반드시 `127.0.0.1` 을 포함해야 모든 노드의 kubeconfig(`https://127.0.0.1:8443`)가
+> 동일 인증서로 검증됩니다.
+
+```bash
+sudo kubeadm init \
+  --control-plane-endpoint "127.0.0.1:8443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="127.0.0.1,<MASTER1_IP>,<MASTER2_IP>,<MASTER3_IP>" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.33.11
+
+# kubeconfig 설정
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# HAProxy 백엔드 헬스체크 확인 — Master-1 만 UP 으로 보여야 정상
+ss -tlnp | grep 8443
+```
+
+### 옵션 C: 단일 구성
 
 ```bash
 # Calico
@@ -342,7 +377,10 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 ## Phase 5-1: 추가 마스터 노드 조인 (Master-2, 3 — HA 구성 시에만)
 
-Master-1의 `kubeadm init` 출력에서 **`--control-plane`** 조인 명령을 복사하여 실행합니다.
+Master-1 초기화 출력에서 **`--control-plane`** 조인 명령을 복사하여 실행합니다.
+Phase 4 에서 선택한 LB 방식에 따라 절차가 달라집니다.
+
+### VIP 방식 (Phase 4 옵션 A)
 
 ```bash
 # 1. HAProxy 일시 중지
@@ -359,7 +397,7 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
 # Master-3: - --bind-address=<MASTER3_IP>
 
 # 4. API 서버 재기동 확인 후 HAProxy 시작
-sudo crictl pods --namespace kube-system | grep apiserver
+sudo crictl pods --namespace kube-system | grep apiserver   # Running 확인
 sudo systemctl start haproxy
 
 # 5. kubeconfig
@@ -368,17 +406,49 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
+### Localhost LB 방식 (Phase 4 옵션 B)
+
+각 마스터의 HAProxy 가 `127.0.0.1:8443` 만 점유하므로 **HAProxy 중지 / bind-address 수정 단계 모두 불필요**합니다.
+Master-1 의 `kubeadm init` 출력에 표시된 join 명령은 endpoint 가 `127.0.0.1:8443` 으로 이미 지정되어 있습니다.
+
+```bash
+# 1. 컨트롤 플레인 조인 (endpoint = 127.0.0.1:8443)
+sudo kubeadm join 127.0.0.1:8443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH> \
+    --control-plane --certificate-key <CERT_KEY>
+
+# 2. kubeconfig
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# 3. (선택) HAProxy 백엔드 상태 — 모든 마스터가 합류하면 3대 모두 UP
+sudo journalctl -u haproxy -n 20 --no-pager
+```
+
 ## Phase 6: CNI 설치
 
 ### 옵션 A: Calico
 
+환경에 따라 **엔터프라이즈용(Operator)** 또는 **경량용(Manifest)** 방식 중 하나를 선택하여 설치합니다.
+
+#### 방식 1: Tigera Operator 방식 (엔터프라이즈 권장)
 ```bash
 kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.0/manifests/tigera-operator.yaml
-kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.0/manifests/custom-resources.yaml
 
-# 파드 Running 대기
-kubectl get pods -n calico-system -w
+# Operator 준비 대기 (CRD 등록 시간 확보)
+kubectl wait --for=condition=Available deployment/tigera-operator -n tigera-operator --timeout=60s
+
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.0/manifests/custom-resources.yaml
 ```
+
+#### 방식 2: Manifest 방식 (경량/학습용 권장)
+```bash
+# 단일 파일로 즉시 설치
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.0/manifests/calico.yaml
+```
+
+> **Pod CIDR을 변경한 경우 (방식 2)**: `calico.yaml`의 `CALICO_IPV4POOL_CIDR` 항목 수정이 필요합니다.
 
 ### 옵션 B: Cilium (Helm)
 
@@ -401,21 +471,37 @@ helm install cilium cilium/cilium --version 1.19.3 \
   --set k8sServicePort=6443
 ```
 
-## Phase 7: 워커 조인 및 확인
+## Phase 7: 워커 노드 조인
+
+Master-1의 `kubeadm init` 출력에서 워커 조인 명령을 복사하여 실행합니다.
+Phase 5(또는 4)에서 선택한 구성 방식에 맞춰 아래 옵션을 선택하세요.
+
+위 출력의 `<ENDPOINT>` 는 Phase 4 에서 선택한 LB 방식에 따라 달라집니다:
+
+| Phase 4 옵션 | 워커가 사용할 endpoint | 사전 작업 |
+| --- | --- | --- |
+| A (HA — VIP IP) | `<VIP>:6443` | 워커 노드에는 추가 작업 불필요 |
+| A (HA — FQDN) | `k8s-api.internal:6443` | **워커 노드 `/etc/hosts` 에 FQDN 등록 필요** (Phase 4-A-1) |
+| B (HA — Localhost LB) | `127.0.0.1:8443` | **워커 노드에도 HAProxy 설치·설정 완료되어 있어야 함** (Phase 4 옵션 B) |
+| C (단일 구성) | `<MASTER_IP>:6443` | 추가 작업 불필요 |
 
 ```bash
-# 컨트롤 플레인에서 조인 명령 출력
-kubeadm token create --print-join-command
+sudo kubeadm join <ENDPOINT> --token <TOKEN> \
+  --discovery-token-ca-cert-hash sha256:<HASH>
+```
 
-# 워커 노드에서 실행 (단일 구성 / HA 구성 모두 endpoint만 달라짐)
-sudo kubeadm join <ENDPOINT>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>
+## Phase 8: 설치 확인
 
-# 확인
+```bash
 kubectl get nodes
 kubectl get pods -A
 ```
 
-## Phase 8: helm / nerdctl 설치 (선택)
+모든 노드가 `Ready`, 전 네임스페이스 파드가 `Running`이면 완료입니다.
+
+
+
+## Phase 9: helm / nerdctl 설치 (선택)
 
 ```bash
 # helm
