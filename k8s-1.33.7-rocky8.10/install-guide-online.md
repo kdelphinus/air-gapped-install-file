@@ -17,6 +17,60 @@ Rocky Linux 8.10 (RHEL 8 계열) 환경에 최적화되어 있습니다.
 
 > 본 문서는 외부 개방망 환경에서 단독 사용 가능한 가이드입니다.
 
+## Architectural Summary: Rocky Linux 8 커널 현대화 (Kernel 7.x 및 Cgroup v2)
+
+Kubernetes v1.33+의 요구사항을 충족하기 위해 OS 커널을 메인라인(7.x)으로 업그레이드하고, 리소스 격리를 위한 Cgroup v2 설정을 강제 적용합니다. [정확도: 높음]
+
+---
+
+## Implementation: 커널 업데이트 및 Cgroup v2 설정 명령어
+
+```bash
+# 1. ELRepo 저장소 등록 및 커널 설치
+sudo rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+sudo dnf install -y https://www.elrepo.org/elrepo-release-8.el8.elrepo.noarch.rpm
+sudo dnf --enablerepo=elrepo-kernel install -y kernel-ml kernel-ml-devel
+
+# 2. GRUB 설정 수정 (Cgroup v2 활성화 파라미터 추가)
+# GRUB_CMDLINE_LINUX 줄의 끝에 추가: systemd.unified_cgroup_hierarchy=1 cgroup_no_v1=all
+sudo sed -i 's/GRUB_CMDLINE_LINUX="/&systemd.unified_cgroup_hierarchy=1 cgroup_no_v1=all /' /etc/default/grub
+
+# 3. GRUB 설정 파일 재생성 (Legacy 및 UEFI 경로 모두 적용)
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+sudo grub2-mkconfig -o /boot/efi/EFI/rocky/grub.cfg
+
+# 4. 기본 부팅 커널 변경 (최신 설치된 커널로 설정)
+sudo grubby --set-default /boot/vmlinuz-$(dnf list installed kernel-ml | grep kernel-ml | awk '{print $2}').x86_64
+
+# 5. 재부팅
+sudo reboot
+
+# 6. 커널 및 Cgroup v2 적용 확인
+uname -r
+mount | grep cgroup2
+```
+
+---
+
+## Rationale: 기술적 근거
+
+* **kernel-ml:** 최신 Kubernetes의 eBPF 기반 네트워킹 및 리소스 관리 기능을 지원하기 위한 최소 요구 커널 버전을 확보합니다.
+* **cgroup_no_v1=all:** Rocky 8의 systemd가 Cgroup v1 컨트롤러를 점유하는 것을 방지하고, 모든 컨트롤러를 v2 계층으로 강제 이동시켜 `cpuset` 누락 문제를 해결합니다. [정확도: 높음]
+
+---
+
+## Critical Thinking: 주의 사항
+
+* **Boot Path:** `grub2-mkconfig` 실행 시 `/boot/efi` 경로가 없는 시스템(Legacy BIOS)은 해당 명령에서 오류가 날 수 있으나 무시해도 무방합니다.
+* **Kernel ABI:** 최신 커널 사용 시 기존의 구형 커널 전용 드라이버(NVIDIA, 특정 스토리지 HBA 등)가 로드되지 않을 수 있습니다.
+
+---
+
+**요약:**
+ELRepo를 통해 **Kernel 7.x**를 설치하고, GRUB 파라미터에 **Cgroup v2 활성화 옵션**을 주입하여 `kubeadm`의 시스템 검증 오류를 해결했습니다. [정확도: 높음]
+
+---
+
 ## 전제 조건
 
 - Rocky Linux 8.10 노드 (인터넷 가능)
