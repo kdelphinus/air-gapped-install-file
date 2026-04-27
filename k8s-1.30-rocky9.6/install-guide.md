@@ -397,7 +397,34 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
-### 옵션 B: 단일 구성
+### 옵션 B: HA(3중화) — Localhost LB 방식 (Phase 5 옵션 B 에서 진행한 경우)
+
+각 노드의 HAProxy 가 `127.0.0.1:8443` 만 점유하고, 백엔드는 마스터들의 6443 으로 포워딩합니다.
+**kube-apiserver 의 6443 과 포트가 겹치지 않으므로 HAProxy 중지·재시작 단계가 불필요**하고,
+`bind-address` 수정도 필요 없습니다(기본 `0.0.0.0` 사용).
+
+> 인증서 SAN 에 반드시 `127.0.0.1` 을 포함해야 모든 노드의 kubeconfig(`https://127.0.0.1:8443`)가
+> 동일 인증서로 검증됩니다.
+
+```bash
+sudo kubeadm init \
+  --control-plane-endpoint "127.0.0.1:8443" \
+  --upload-certs \
+  --apiserver-cert-extra-sans="127.0.0.1,<MASTER1_IP>,<MASTER2_IP>,<MASTER3_IP>" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --service-cidr=10.96.0.0/12 \
+  --kubernetes-version v1.30.0
+
+# kubeconfig 설정
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# HAProxy 백엔드 헬스체크 확인 — Master-1 만 UP 으로 보여야 정상
+ss -tlnp | grep 8443
+```
+
+### 옵션 C: 단일 구성
 
 ```bash
 sudo kubeadm init \
@@ -415,7 +442,9 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ## Phase 6-1: 추가 마스터 노드 조인 (Master-2, 3 — HA 구성 시에만)
 
 Master-1 초기화 출력에서 **`--control-plane`** 조인 명령을 복사하여 실행합니다.
-Master-2, 3에도 HAProxy가 VIP:6443을 점유하고 있으므로 조인 전에 중지합니다.
+Phase 5 에서 선택한 LB 방식에 따라 절차가 달라집니다.
+
+### VIP 방식 (Phase 5 옵션 A)
 
 ```bash
 # 1. HAProxy 일시 중지
@@ -434,14 +463,31 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
 # 4. API 서버 재기동 확인 후 HAProxy 시작
 sudo crictl pods --namespace kube-system | grep apiserver   # Running 확인
 sudo systemctl start haproxy
-```
 
-kubeconfig도 각 노드에 설정합니다.
-
-```bash
+# 5. kubeconfig
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+### Localhost LB 방식 (Phase 5 옵션 B)
+
+각 마스터의 HAProxy 가 `127.0.0.1:8443` 만 점유하므로 **HAProxy 중지 / bind-address 수정 단계 모두 불필요**합니다.
+Master-1 의 `kubeadm init` 출력에 표시된 join 명령은 endpoint 가 `127.0.0.1:8443` 으로 이미 지정되어 있습니다.
+
+```bash
+# 1. 컨트롤 플레인 조인 (endpoint = 127.0.0.1:8443)
+sudo kubeadm join 127.0.0.1:8443 --token <TOKEN> \
+    --discovery-token-ca-cert-hash sha256:<HASH> \
+    --control-plane --certificate-key <CERT_KEY>
+
+# 2. kubeconfig
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# 3. (선택) HAProxy 백엔드 상태 — 모든 마스터가 합류하면 3대 모두 UP
+sudo journalctl -u haproxy -n 20 --no-pager
 ```
 
 ## Phase 7: Calico CNI 설치 (Master-1)
@@ -499,27 +545,40 @@ sudo chmod +x /usr/local/bin/nerdctl /usr/local/bin/rootlesskit /usr/local/bin/s
 nerdctl --version
 ```
 
+> **Rocky/RHEL `sudo` PATH 주의:** `nerdctl` 은 `/usr/local/bin/nerdctl` 에 설치되며,
+> Rocky/RHEL 기본 `sudo secure_path` 에는 `/usr/local/bin` 이 없어 `sudo nerdctl` 호출 시
+> "command not found" 가 발생합니다. 셋 중 하나로 해결:
+>
+> - 전체 경로: `sudo /usr/local/bin/nerdctl ...`
+> - `sudo visudo` 의 `Defaults secure_path` 끝에 `:/usr/local/bin` 추가
+> - 심볼릭 링크: `sudo ln -sf /usr/local/bin/nerdctl /usr/bin/nerdctl`
+
 ### Rootless 모드 활성화 절차 (일반 사용자 계정)
 
 바이너리 설치 후, `sudo` 없이 `nerdctl`을 사용하려면 아래 절차를 **일반 사용자 계정**으로 진행해야 합니다.
 
 1. **필수 패키지 확인**: `shadow-utils` 패키지가 설치되어 있어야 합니다.
+
    ```bash
    sudo dnf install -y shadow-utils
    ```
 
 2. **사용자 환경 설정 도구 실행**: (root가 아닌 일반 계정으로 실행)
+
    ```bash
    containerd-rootless-setuptool.sh install
    ```
+
    *성공 시 `~/.config/systemd/user/containerd.service`가 등록됩니다.*
 
 3. **환경 변수 등록**: `~/.bashrc` 또는 `~/.zshrc` 하단에 아래 내용을 추가하고 적용(`source`)합니다.
+
    ```bash
    export CONTAINERD_ADDRESS="unix://$XDG_RUNTIME_DIR/containerd/containerd.sock"
    ```
 
 4. **Linger 설정 (권장)**: 로그아웃 후에도 서비스가 유지되도록 설정합니다.
+
    ```bash
    sudo loginctl enable-linger $(id -un)
    ```
@@ -571,41 +630,20 @@ skopeo inspect --tls-verify=false docker://<NODE_IP>:30002/library/myapp:1.0.0
 ## Phase 9: 워커 노드 조인
 
 Master-1의 `kubeadm init` 출력에서 워커 조인 명령을 복사하여 실행합니다.
-Phase 6에서 선택한 구성 방식에 맞춰 아래 옵션을 선택하세요.
+Phase 5(또는 6)에서 선택한 구성 방식에 맞춰 아래 옵션을 선택하세요.
 
-### 옵션 A: HA 구성 — VIP 사용
+위 출력의 `<ENDPOINT>` 는 Phase 5 에서 선택한 LB 방식에 따라 달라집니다:
 
-```bash
-sudo kubeadm join <VIP>:6443 --token <TOKEN> \
-    --discovery-token-ca-cert-hash sha256:<HASH>
-```
-
-### 옵션 B: HA 구성 — Localhost LB 사용
-
-각 워커 노드에도 HAProxy가 `127.0.0.1:8443`으로 떠 있어야 합니다.
+| Phase 5 옵션 | 워커가 사용할 endpoint | 사전 작업 |
+| --- | --- | --- |
+| A (HA — VIP IP) | `<VIP>:6443` | 워커 노드에는 추가 작업 불필요 |
+| A (HA — FQDN) | `k8s-api.internal:6443` | **워커 노드 `/etc/hosts` 에 FQDN 등록 필요** (Phase 5-A-1) |
+| B (HA — Localhost LB) | `127.0.0.1:8443` | **워커 노드에도 HAProxy 설치·설정 완료되어 있어야 함** (Phase 5 옵션 B) |
+| C (단일 구성) | `<MASTER_IP>:6443` | 추가 작업 불필요 |
 
 ```bash
-sudo kubeadm join 127.0.0.1:8443 --token <TOKEN> \
-    --discovery-token-ca-cert-hash sha256:<HASH>
-```
-
-### 옵션 C: 단일 구성
-
-```bash
-sudo kubeadm join <MASTER_IP>:6443 --token <TOKEN> \
-    --discovery-token-ca-cert-hash sha256:<HASH>
-```
-
-### 트러블슈팅: hostname 오류
-
-조인 시 `[WARNING Hostname]: hostname "..." could not be reached` 오류가 발생하면
-`/etc/hosts`에 해당 hostname을 등록합니다.
-
-```bash
-# /etc/hosts 예시
-<MASTER1_IP>  <MASTER1_HOSTNAME>
-<WORKER1_IP>  <WORKER1_HOSTNAME> <WORKER1_HOSTNAME>.novalocal
-<WORKER2_IP>  <WORKER2_HOSTNAME> <WORKER2_HOSTNAME>.novalocal
+sudo kubeadm join <ENDPOINT> --token <TOKEN> \
+  --discovery-token-ca-cert-hash sha256:<HASH>
 ```
 
 ## Phase 10: 설치 확인
