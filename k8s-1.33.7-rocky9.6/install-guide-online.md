@@ -1,79 +1,18 @@
-# Kubernetes v1.33.7 온라인 설치 가이드 (Rocky Linux 8.10)
+# Kubernetes v1.33.7 온라인 설치 가이드 (Rocky Linux 9.6)
 
 인터넷이 가능한 환경에서 kubeadm 기반 Kubernetes v1.33.7 클러스터를 구성하는 절차입니다.
-컨테이너 런타임은 containerd v1.7.x (공식 GitHub 바이너리), CNI는 Calico 또는 Cilium 중 선택하며,
-Rocky Linux 8.10 (RHEL 8 계열) 환경에 최적화되어 있습니다.
-
-> **왜 docker-ce 저장소를 쓰지 않는가:**
-> Rocky/RHEL 8 의 `docker-ce` stable 저장소는 `containerd.io` 가 1.6.32 에서 갱신이 멈춰있어,
-> K8s 1.33 공식 호환 매트릭스(`1.6.36+ / 1.7.24+ / 2.0.4+ / 2.1.0+`)의 어떤 항목도 충족하지 못합니다.
-> 따라서 본 가이드는 containerd 공식 GitHub 릴리스의 바이너리 tarball 을 직접 설치합니다.
->
-> **왜 v1.7.x 라인인가:**
-> Rocky 8.10 의 glibc 는 2.28 입니다. containerd 공식 바이너리 중 **v2.1.x 이상은 GLIBC_2.34 를 요구**해
-> Rocky 8 에서 실행 시 `version GLIBC_2.34 not found` 오류가 발생합니다.
-> v1.7.x / v2.0.x 는 GLIBC_2.4 만 요구해 Rocky 8 에서 정상 동작하며, v1.7.x 가 K8s 1.33 매트릭스(`1.7.24+`)
-> 와 LTS 지원 측면에서 가장 안정적입니다.
+컨테이너 런타임은 containerd v2.1.x (Docker CE 저장소의 `containerd.io`), CNI는 Calico 또는
+Cilium 중 선택하며, Rocky Linux 9.6 (RHEL 9 계열) 환경에 최적화되어 있습니다.
 
 > 본 문서는 외부 개방망 환경에서 단독 사용 가능한 가이드입니다.
-
-## Architectural Summary: Rocky Linux 8 커널 현대화 (Kernel 7.x 및 Cgroup v2)
-
-Kubernetes v1.33+의 요구사항을 충족하기 위해 OS 커널을 메인라인(7.x)으로 업그레이드하고, 리소스 격리를 위한 Cgroup v2 설정을 강제 적용합니다. [정확도: 높음]
-
----
-
-## Implementation: 커널 업데이트 및 Cgroup v2 설정 명령어
-
-```bash
-# 1. ELRepo 저장소 등록 및 커널 설치
-sudo rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
-sudo dnf install -y https://www.elrepo.org/elrepo-release-8.el8.elrepo.noarch.rpm
-sudo dnf --enablerepo=elrepo-kernel install -y kernel-ml kernel-ml-devel
-
-# 2. GRUB 설정 수정 (Cgroup v2 활성화 파라미터 추가)
-# GRUB_CMDLINE_LINUX 줄의 끝에 추가: systemd.unified_cgroup_hierarchy=1 cgroup_no_v1=all
-sudo sed -i 's/GRUB_CMDLINE_LINUX="/&systemd.unified_cgroup_hierarchy=1 cgroup_no_v1=all /' /etc/default/grub
-
-# 3. GRUB 설정 파일 재생성 (Legacy 및 UEFI 경로 모두 적용)
-sudo grub2-mkconfig -o /boot/grub2/grub.cfg
-sudo grub2-mkconfig -o /boot/efi/EFI/rocky/grub.cfg
-
-# 4. 기본 부팅 커널 변경 (최신 설치된 커널로 설정)
-sudo grubby --set-default /boot/vmlinuz-$(dnf list installed kernel-ml | grep kernel-ml | awk '{print $2}').x86_64
-
-# 5. 재부팅
-sudo reboot
-
-# 6. 커널 및 Cgroup v2 적용 확인
-uname -r
-mount | grep cgroup2
-```
-
----
-
-## Rationale: 기술적 근거
-
-* **kernel-ml:** 최신 Kubernetes의 eBPF 기반 네트워킹 및 리소스 관리 기능을 지원하기 위한 최소 요구 커널 버전을 확보합니다.
-* **cgroup_no_v1=all:** Rocky 8의 systemd가 Cgroup v1 컨트롤러를 점유하는 것을 방지하고, 모든 컨트롤러를 v2 계층으로 강제 이동시켜 `cpuset` 누락 문제를 해결합니다. [정확도: 높음]
-
----
-
-## Critical Thinking: 주의 사항
-
-* **Boot Path:** `grub2-mkconfig` 실행 시 `/boot/efi` 경로가 없는 시스템(Legacy BIOS)은 해당 명령에서 오류가 날 수 있으나 무시해도 무방합니다.
-* **Kernel ABI:** 최신 커널 사용 시 기존의 구형 커널 전용 드라이버(NVIDIA, 특정 스토리지 HBA 등)가 로드되지 않을 수 있습니다.
-
----
-
-**요약:**
-ELRepo를 통해 **Kernel 7.x**를 설치하고, GRUB 파라미터에 **Cgroup v2 활성화 옵션**을 주입하여 `kubeadm`의 시스템 검증 오류를 해결했습니다. [정확도: 높음]
-
----
+>
+> Rocky 8 에서 운영해야 하는 경우의 커널 업그레이드(ELRepo `kernel-ml`) 및 Cgroup v2 강제 활성화
+> 절차는 `archive/rocky8.10-kernel-modernization.md` 에 보존되어 있습니다 — Rocky 9.6 은 기본 커널이
+> 5.14+ 이고 systemd 가 unified cgroup(v2) 으로 부팅하므로 본 가이드 본문에서는 다루지 않습니다.
 
 ## 전제 조건
 
-- Rocky Linux 8.10 노드 (인터넷 가능)
+- Rocky Linux 9.6 노드 (인터넷 가능)
   - **단일 구성**: 컨트롤 플레인 1대 + 워커 1대 이상
   - **HA(3중화) 구성**: 컨트롤 플레인 3대 + 워커 1대 이상 + VIP 1개
 - swap 비활성화 완료 (`swapoff -a` 및 `/etc/fstab` 주석 처리)
@@ -108,9 +47,13 @@ sudo dnf install -y epel-release
 
 # 2. 시스템 업데이트 및 필수 선행 패키지
 sudo dnf update -y
-sudo dnf install -y socat conntrack-tools iproute-tc libseccomp curl tar jq chrony
+sudo dnf install -y socat conntrack-tools iproute-tc libseccomp curl tar jq chrony \
+    yum-utils
 
-# 3. Kubernetes 저장소 (v1.33)
+# 3. Docker CE 저장소 (containerd.io 획득용)
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
+# 4. Kubernetes 저장소 (v1.33)
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
@@ -121,68 +64,27 @@ gpgkey=https://pkgs.k8s.io/core:/stable:/v1.33/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
 
-# 4. kubeadm/kubelet/kubectl 설치 (containerd 는 Phase 1-1 에서 별도 설치)
-#    - 빌드 suffix(`-150500.x.x` 등)가 붙으므로 와일드카드(`-*`)로 매칭
+# 5. containerd + kubeadm/kubelet/kubectl 설치
+#    - containerd.io: K8s 1.33 공식 매트릭스(2.1.0+) 라인으로 핀닝 — v2.2.x 는 K8s 1.35+ 권장
+#    - kubelet/kubeadm/kubectl: 빌드 suffix(`-150500.x.x` 등)가 붙으므로 와일드카드(`-*`)로 매칭
+sudo dnf install -y containerd.io-2.1.*
 sudo dnf install -y --disableexcludes=kubernetes \
     kubelet-1.33.7-* kubeadm-1.33.7-* kubectl-1.33.7-*
 ```
 
 > Kubernetes repo는 v1.24부터 `pkgs.k8s.io`로 이전되었으며 버전별 경로(`/v1.33/`)가 구분됩니다.
+> [containerd 공식 호환 매트릭스](https://containerd.io/releases/)에 따라 K8s 1.33 은
+> `2.1.0+ / 2.0.4+ / 1.7.24+ / 1.6.36+` 를 권장하며, 본 가이드는 `2.1.x` 라인으로 핀닝합니다.
+> docker-ce el9 저장소(2026-04 기준)는 1.7.21 ~ 2.2.3 까지 제공하므로 dnf 만으로 매트릭스 준수 가능합니다.
+>
 > kubelet 은 containerd 가 먼저 가동되어야 정상 동작하므로, `enable --now kubelet` 은
 > Phase 3 (containerd 설정 완료) 이후로 미룹니다.
 
-## Phase 1-1: containerd / runc / CNI 바이너리 설치 (전체 노드)
-
-K8s 1.33 공식 호환 매트릭스(`2.1.0+ / 2.0.4+ / 1.7.24+ / 1.6.36+`)를 충족하기 위해
-containerd 공식 GitHub 릴리스 바이너리를 직접 설치합니다.
-
-| 컴포넌트 | 버전 | 설치 경로 | 비고 |
-| --- | --- | --- | --- |
-| containerd | v1.7.31 (1.7.x LTS 최신) | `/usr/local/bin` | GLIBC_2.4 요구 — Rocky 8 호환 |
-| runc | v1.4.2 | `/usr/local/sbin/runc` | 정적 바이너리 |
-| CNI plugins | v1.9.1 | `/opt/cni/bin` | |
-
-```bash
-# 1. containerd 본체 설치 (/usr/local 하위로 압축 해제)
-CONTAINERD_VER=1.7.31
-curl -fsSL "https://github.com/containerd/containerd/releases/download/v${CONTAINERD_VER}/containerd-${CONTAINERD_VER}-linux-amd64.tar.gz" \
-    -o /tmp/containerd.tar.gz
-sudo tar Cxzf /usr/local /tmp/containerd.tar.gz
-
-# 2. systemd 유닛 설치
-sudo curl -fsSL "https://raw.githubusercontent.com/containerd/containerd/v${CONTAINERD_VER}/containerd.service" \
-    -o /etc/systemd/system/containerd.service
-sudo systemctl daemon-reload
-
-# 3. runc 설치
-RUNC_VER=1.4.2
-curl -fsSL "https://github.com/opencontainers/runc/releases/download/v${RUNC_VER}/runc.amd64" \
-    -o /tmp/runc
-sudo install -m 755 /tmp/runc /usr/local/sbin/runc
-
-# 4. CNI plugins 설치
-CNI_VER=1.9.1
-sudo mkdir -p /opt/cni/bin
-curl -fsSL "https://github.com/containernetworking/plugins/releases/download/v${CNI_VER}/cni-plugins-linux-amd64-v${CNI_VER}.tgz" \
-    -o /tmp/cni.tgz
-sudo tar Cxzf /opt/cni/bin /tmp/cni.tgz
-
-# 5. 설치 확인
-containerd --version
-runc --version
-ls /opt/cni/bin
-```
-
 > **CVE 패치 시 업그레이드 절차**
 >
-> 새 CVE 가 공지되면 [containerd releases](https://github.com/containerd/containerd/releases) /
-> [runc releases](https://github.com/opencontainers/runc/releases) 에서 패치 버전을 확인 후
-> 위 절차의 `*_VER` 변수만 갱신해 동일한 명령으로 재설치합니다 (containerd 는 같은 minor 라인 내
-> patch 업그레이드는 무중단 가능: `tar` 덮어쓰기 → `sudo systemctl restart containerd`).
->
-> **주의 — Rocky 8 의 glibc 제약:** containerd v2.1.x 이상은 GLIBC_2.34 를 요구하므로
-> Rocky 8 에서는 **반드시 v1.7.x 또는 v2.0.x 라인 안에서만 patch 업그레이드**해야 합니다.
-> Major/minor 업그레이드 시 매트릭스 + glibc 호환성 재확인 필수.
+> 새 CVE 가 공지되면 `sudo dnf update containerd.io --disablerepo='*' --enablerepo=docker-ce-stable`
+> 로 동일 라인 내 최신 patch 만 적용합니다. minor 업그레이드(예: 2.1 → 2.2)는 K8s 호환 매트릭스를
+> 먼저 재확인하세요.
 
 ## Phase 2: OS 사전 설정 (전체 노드)
 
@@ -227,13 +129,13 @@ EOF
 
 ## Phase 3: containerd 설정 및 kubelet 기동 (전체 노드)
 
-containerd 바이너리는 `/usr/local/bin/containerd` 에 설치되어 있으며, 기본 CRI 소켓은
-`/run/containerd/containerd.sock` 입니다. kubeadm 은 이 소켓을 자동 감지합니다.
+`containerd.io` (dnf) 설치 시 바이너리는 `/usr/bin/containerd`, `/usr/bin/ctr` 에 위치하며
+기본 CRI 소켓은 `/run/containerd/containerd.sock` 입니다. kubeadm 은 이 소켓을 자동 감지합니다.
 
 ```bash
 # 1. 기본 설정 생성
 sudo mkdir -p /etc/containerd
-sudo /usr/local/bin/containerd config default | sudo tee /etc/containerd/config.toml
+sudo containerd config default | sudo tee /etc/containerd/config.toml
 
 # 2. SystemdCgroup 활성화
 sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
@@ -246,21 +148,15 @@ sudo systemctl enable --now containerd
 sudo systemctl restart containerd
 
 # 5. CRI 정상 동작 확인
-sudo /usr/local/bin/ctr version
+sudo ctr version
 sudo crictl --runtime-endpoint=unix:///run/containerd/containerd.sock info | head -20
 
 # 6. 이제 kubelet 활성화 (containerd 가동 후)
 sudo systemctl enable --now kubelet
 ```
 
-> `ctr` 은 `/usr/local/bin/ctr` 에 설치됩니다. Rocky/RHEL 의 `sudo` 는 `secure_path` 에
-> `/usr/local/bin` 이 없으므로 `sudo ctr ...` 은 "command not found" 가 발생합니다.
-> 셋 중 하나로 해결: (a) 전체 경로 사용 `sudo /usr/local/bin/ctr ...`,
-> (b) `sudo visudo` 로 `secure_path` 에 `:/usr/local/bin` 추가,
-> (c) `sudo ln -sf /usr/local/bin/ctr /usr/bin/ctr` 심볼릭 링크.
->
 > `crictl` 은 `cri-tools` 패키지(Phase 1 에서 kubeadm 의존성으로 설치됨)에 포함되어 `/usr/bin/crictl` 에
-> 있으므로 PATH 문제가 없습니다. `/etc/crictl.yaml` 이 없으면 매 호출마다 경고가 뜨므로 아래로 생성:
+> 있습니다. `/etc/crictl.yaml` 이 없으면 매 호출마다 경고가 뜨므로 아래로 생성:
 >
 > ```bash
 > cat <<EOF | sudo tee /etc/crictl.yaml
