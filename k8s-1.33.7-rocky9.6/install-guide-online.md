@@ -89,7 +89,7 @@ sudo dnf install -y --disableexcludes=kubernetes \
 ## Phase 2: OS 사전 설정 (전체 노드)
 
 ```bash
-# 1. SELinux 설정 (Permissive)
+# 1. SEL인ux 설정 (Permissive)
 sudo setenforce 0
 sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 
@@ -508,7 +508,21 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 sudo journalctl -u haproxy -n 20 --no-pager
 ```
 
-## Phase 6: CNI 설치 (Master-1)
+## Phase 6: helm / nerdctl 설치 (선택)
+
+```bash
+# helm
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# nerdctl (full)
+NERDCTL_VERSION=2.2.2
+curl -fsSL https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-full-${NERDCTL_VERSION}-linux-amd64.tar.gz \
+    -o /tmp/nerdctl-full.tar.gz
+sudo tar xzf /tmp/nerdctl-full.tar.gz -C /usr/local/
+nerdctl --version
+```
+
+## Phase 7: CNI 설치 (Master-1)
 
 ### 옵션 A: Calico
 
@@ -545,7 +559,7 @@ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/
 ### 옵션 B: Cilium (Helm)
 
 ```bash
-# Helm 설치가 되어있어야 합니다. (Phase 8 참고)
+# Helm 설치가 되어있어야 합니다. (Phase 6 참고)
 helm repo add cilium https://helm.cilium.io/
 helm repo update
 
@@ -567,7 +581,7 @@ helm install cilium cilium/cilium --version 1.19.3 \
 > Cilium 이 FQDN(`k8s-api.internal`)을 해석하려면 모든 노드의 `/etc/hosts` 또는 내부 DNS에
 > 해당 레코드가 등록되어 있어야 합니다 (Phase 4-A-1 단계에서 수행).
 
-## Phase 7: 워커 조인 및 확인
+## Phase 8: 워커 조인 및 확인
 
 ```bash
 # 컨트롤 플레인(Master-1)에서 조인 명령 출력
@@ -592,21 +606,7 @@ kubectl get nodes
 kubectl get pods -A
 ```
 
-## Phase 8: helm / nerdctl 설치 (선택)
-
-```bash
-# helm
-curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-# nerdctl (full)
-NERDCTL_VERSION=2.2.2
-curl -fsSL https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-full-${NERDCTL_VERSION}-linux-amd64.tar.gz \
-    -o /tmp/nerdctl-full.tar.gz
-sudo tar xzf /tmp/nerdctl-full.tar.gz -C /usr/local/
-nerdctl --version
-```
-
-## 재설치 시 초기화
+## Phase 9: 재설치 시 초기화
 
 오류 발생 등으로 재설치가 필요한 경우 아래 순서로 초기화합니다.
 

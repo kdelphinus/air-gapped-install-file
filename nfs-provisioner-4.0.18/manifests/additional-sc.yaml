@@ -1,0 +1,37 @@
+# -----------------------------------------------------------
+# 추가 StorageClass 구성 (NetApp 논리적 분리 예시)
+# -----------------------------------------------------------
+
+# 1. 백업용 StorageClass
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-backup
+provisioner: k8s-sigs.io/nfs-subdir-external-provisioner # values.yaml의 provisionerName과 일치해야 함
+parameters:
+  archiveOnDelete: "true"
+  onDelete: "retain" # 삭제 시 실제 데이터는 유지하고 디렉토리만 백업 폴더로 이동
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+mountOptions:
+  - vers=4.1
+  - proto=tcp
+  - hard
+  - timeo=600
+  - retrans=2
+
+---
+# 2. 테스트용 StorageClass
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-test
+provisioner: k8s-sigs.io/nfs-subdir-external-provisioner
+parameters:
+  archiveOnDelete: "false" # 테스트용은 삭제 시 바로 데이터 삭제
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+mountOptions:
+  - vers=4.1
+  - proto=tcp
+  - hard
