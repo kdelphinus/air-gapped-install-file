@@ -158,6 +158,23 @@ chmod +x scripts/create_self-signed_tls.sh
 ./scripts/create_self-signed_tls.sh
 ```
 
+## 6단계: (선택) Harbor CA 인증서 시스템 등록 (HTTPS 사용 시)
+
+Self-Signed 또는 사설 CA를 통해 HTTPS Harbor를 구성한 경우, **모든 K8s 노드 및 클라이언트**에서 해당 인증서를 신뢰하도록 등록해야 합니다.
+
+```bash
+# 1. Harbor 서버에서 생성된 ca.crt 파일을 가져옵니다.
+# (임시로 /tmp/ca.crt에 있다고 가정)
+
+# 2. 신뢰할 수 있는 인증서 앵커 디렉토리로 복사 (Rocky/RHEL 계열)
+sudo cp /tmp/ca.crt /etc/pki/ca-trust/source/anchors/harbor-ca.crt
+
+# 3. 시스템 인증서 저장소 업데이트
+sudo update-ca-trust
+```
+
+> **참고**: Ubuntu/Debian 계열의 경우 `/usr/local/share/ca-certificates/harbor-ca.crt`로 복사 후 `sudo update-ca-certificates` 명령어를 사용합니다.
+
 ## 7단계: (선택) Trivy 취약점 DB 수동 반입
 
 에어갭 환경에서는 Trivy가 인터넷을 통해 취약점 DB를 업데이트할 수 없습니다. 보안 스캔 기능을 사용하려면 수동으로 DB를 반입해야 합니다.
