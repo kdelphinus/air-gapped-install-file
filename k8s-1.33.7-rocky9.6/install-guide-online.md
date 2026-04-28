@@ -581,7 +581,29 @@ helm install cilium cilium/cilium --version 1.19.3 \
 > Cilium 이 FQDN(`k8s-api.internal`)을 해석하려면 모든 노드의 `/etc/hosts` 또는 내부 DNS에
 > 해당 레코드가 등록되어 있어야 합니다 (Phase 4-A-1 단계에서 수행).
 
-## Phase 8: 워커 조인 및 확인
+## Phase 8: Metrics Server 설치 (선택)
+
+`kubectl top nodes` 및 `kubectl top pods` 명령어를 사용하기 위해 필요합니다.
+
+```bash
+# 1. Helm 저장소 추가
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+helm repo update
+
+# 2. Metrics Server 설치 (kubeadm 환경을 위한 insecure tls 설정 포함)
+helm upgrade --install metrics-server metrics-server/metrics-server \
+  --namespace kube-system \
+  --set args={--kubelet-insecure-tls}
+
+# 3. 설치 확인 (약 1~2분 소요)
+kubectl get apiservices | grep metrics.k8s.io
+kubectl top nodes
+```
+
+> **주의**: kubeadm 기본 인증서를 사용하는 클러스터에서는 `--set args={--kubelet-insecure-tls}` 옵션이
+> 없으면 Metrics Server 가 노드 데이터를 가져오지 못합니다.
+
+## Phase 9: 워커 조인 및 확인
 
 ```bash
 # 컨트롤 플레인(Master-1)에서 조인 명령 출력
@@ -606,7 +628,7 @@ kubectl get nodes
 kubectl get pods -A
 ```
 
-## Phase 9: 재설치 시 초기화
+## Phase 10: 재설치 시 초기화
 
 오류 발생 등으로 재설치가 필요한 경우 아래 순서로 초기화합니다.
 
