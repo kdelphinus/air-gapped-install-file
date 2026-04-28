@@ -171,6 +171,9 @@ sudo systemctl enable --now kubelet
 
 ### (선택) Harbor insecure registry 등록
 
+> ⚠️ **수동 적용 단계** — Harbor 주소·포트가 환경마다 달라 자동화하지 않았습니다.
+> Harbor 를 사용하는 노드에서 직접 실행하세요.
+
 Harbor 를 HTTP(insecure)로 운영하는 경우 각 노드에 아래 설정을 추가합니다.
 
 ```bash
@@ -211,6 +214,11 @@ sudo systemctl restart containerd
 > ```
 
 ### (선택) containerd 데이터 경로 변경 — 소프트링크 방식
+
+> ⚠️ **수동 적용 단계** — 디스크 레이아웃이 환경마다 다르고 잘못 적용하면
+> 컨테이너 데이터가 유실될 수 있어 자동화 대상에서 제외했습니다.
+> Phase 3 본문(containerd 시작) **전에** 진행하거나, 이미 가동 중이라면
+> 아래 "서비스 중지" 부터 시작하세요.
 
 OS 루트 디스크 용량이 작고 별도 데이터 디스크(예: `/app`)가 마운트되어 있는 경우에 적용합니다.
 **containerd 시작 전** 또는 **서비스를 중지한 상태**에서 진행해야 합니다.

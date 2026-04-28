@@ -118,6 +118,12 @@ sudo systemctl enable containerd
 
 ### (선택) Harbor insecure registry 등록
 
+> ⚠️ **`scripts/install.sh` 자동화 범위 밖 — 수동 적용 필요**
+>
+> `install.sh` 는 SystemdCgroup / sandbox_image / config_path 단일화까지만 처리합니다.
+> 아래 hosts.toml 등록은 환경별로 Harbor 주소가 다르므로 의도적으로 수동 단계로 남겨둔 것이며,
+> **`install.sh` 실행 후 Harbor 를 사용하는 노드에서 별도로 실행**해야 합니다.
+
 Harbor 를 HTTP(insecure)로 운영하는 경우 각 노드에 아래 설정을 추가합니다.
 
 ```bash
@@ -158,6 +164,13 @@ sudo systemctl restart containerd
 > ```
 
 ### (선택) containerd 데이터 경로 변경 — 소프트링크 방식
+
+> ⚠️ **`scripts/install.sh` 자동화 범위 밖 — 수동 적용 필요**
+>
+> 디스크 레이아웃은 환경마다 다르고 잘못 적용하면 컨테이너 데이터가 유실될 수 있어
+> 자동화 대상에서 제외했습니다. **반드시 수동으로**, 그리고 `install.sh` 가
+> containerd 를 가동시키기 **전에** 적용해야 합니다 (이미 가동된 뒤라면 아래 절차의
+> "서비스 중지" 부터 따라가야 함).
 
 OS 루트 디스크 용량이 작고 별도 데이터 디스크(예: `/app`)가 마운트되어 있는 경우에 적용합니다.
 **containerd 시작 전** 또는 **서비스를 중지한 상태**에서 진행해야 합니다.
