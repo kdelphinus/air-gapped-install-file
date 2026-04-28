@@ -96,11 +96,100 @@ sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 ```bash
 sudo mkdir -p /etc/containerd
 sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+# cgroup driver 를 systemd 로 변경 (필수)
 sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+
+# v1.33 호환 pause 이미지
 sudo sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
+
+# Harbor(또는 사설 레지스트리) insecure registry 사용 시 config_path 단일화
+sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+
 sudo systemctl restart containerd
 sudo systemctl enable containerd
 ```
+
+> containerd 재시작 후 `SystemdCgroup = true` 적용 여부 확인:
+>
+> ```bash
+> grep SystemdCgroup /etc/containerd/config.toml
+> ```
+
+### (선택) Harbor insecure registry 등록
+
+Harbor 를 HTTP(insecure)로 운영하는 경우 각 노드에 아래 설정을 추가합니다.
+
+```bash
+# Harbor 레지스트리 주소 (예: 192.168.1.10:30002)
+HARBOR_HOST="<NODE_IP>:30002"
+
+sudo mkdir -p /etc/containerd/certs.d/${HARBOR_HOST}
+sudo tee /etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml <<EOF
+server = "http://${HARBOR_HOST}"
+
+[host."http://${HARBOR_HOST}"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true
+EOF
+
+sudo systemctl restart containerd
+```
+
+> **containerd v1.x vs v2.x 플러그인 키 차이**
+>
+> `containerd config default` 로 생성한 `config.toml` 에 `config_path` 가 비어 있다면
+> containerd 버전에 따라 추가해야 할 플러그인 키 이름이 다릅니다. 본 가이드는
+> containerd 2.2.x 라인이므로 **v2 키** 가 기본입니다.
+>
+> ```bash
+> # containerd 버전 확인
+> containerd --version
+> ```
+>
+> ```toml
+> # containerd v1.x (io.containerd.grpc.v1.cri)
+> [plugins."io.containerd.grpc.v1.cri".registry]
+>   config_path = "/etc/containerd/certs.d"
+>
+> # containerd v2.x (io.containerd.cri.v1.images) — 본 가이드 (2.2.x) 해당
+> [plugins."io.containerd.cri.v1.images".registry]
+>   config_path = "/etc/containerd/certs.d"
+> ```
+
+### (선택) containerd 데이터 경로 변경 — 소프트링크 방식
+
+OS 루트 디스크 용량이 작고 별도 데이터 디스크(예: `/app`)가 마운트되어 있는 경우에 적용합니다.
+**containerd 시작 전** 또는 **서비스를 중지한 상태**에서 진행해야 합니다.
+
+```bash
+# 서비스 중지 (이미 실행 중인 경우)
+sudo systemctl stop kubelet
+sudo systemctl stop containerd
+
+# 1. 실제 데이터를 저장할 디렉토리 생성 (경로는 환경에 맞게 수정)
+sudo mkdir -p /app/containerd_data
+
+# 2. 기존 데이터가 있으면 이동 (처음 설치라면 /var/lib/containerd 자체가 없으므로 자동 skip)
+if [ -d "/var/lib/containerd" ]; then
+    sudo mv /var/lib/containerd/* /app/containerd_data/
+    sudo rmdir /var/lib/containerd
+fi
+
+# 3. 소프트링크 생성: /var/lib/containerd -> /app/containerd_data
+sudo ln -s /app/containerd_data /var/lib/containerd
+
+# 4. 링크 확인 (화살표가 표시되어야 함)
+ls -ld /var/lib/containerd
+# 결과 예시: lrwxrwxrwx ... /var/lib/containerd -> /app/containerd_data
+
+# 5. 서비스 재시작
+sudo systemctl start containerd
+sudo systemctl start kubelet
+```
+
+> `config.toml` 의 `root` 값을 직접 변경하는 방법도 있지만, 소프트링크 방식은
+> 기존 경로를 그대로 유지하므로 다른 툴과의 호환성을 더 쉽게 확보할 수 있습니다.
 
 ## Phase 4: 로드밸런서 (HA 3중화 시에만 / 단일 구성이면 Phase 5로)
 
