@@ -644,15 +644,27 @@ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/
 
 ### 옵션 B: Cilium (Helm)
 
+> **L4 vs L7 책임 분리 — 먼저 결정**
+>
+> `kubeProxyReplacement=true` 는 **L4 (Service ClusterIP/NodePort)** 라우팅만 대체합니다.
+> L7 (HTTPRoute / Ingress 같은 path·host 기반 라우팅) 은 별도 Gateway 컨트롤러가 담당해야 하며,
+> 두 가지 선택지가 있습니다.
+>
+> | 방식 | 설치 옵션 | 비고 |
+> | :--- | :--- | :--- |
+> | **별도 Gateway 컨트롤러 사용** (이 레포 표준 — `envoy-1.37.2`) | `--set gatewayAPI.enabled=false` | Cilium 은 CNI + kpr 만, L7 은 Envoy Gateway. **권장** |
+> | **Cilium 내장 Gateway 사용** | `--set gatewayAPI.enabled=true` + Gateway API CRD 별도 설치 | 단일 컴포넌트로 끝낼 때만. Envoy Gateway 와 동시 활성화 시 GatewayClass/HTTPRoute 충돌 |
+
 ```bash
 # Helm 설치가 되어있어야 합니다. (Phase 6 참고)
 helm repo add cilium https://helm.cilium.io/
 helm repo update
 
-# 단일 구성
+# 단일 구성 (Envoy Gateway 와 병행 — 권장)
 helm install cilium cilium/cilium --version 1.19.3 \
   --namespace kube-system \
   --set kubeProxyReplacement=true \
+  --set gatewayAPI.enabled=false \
   --set k8sServiceHost=<MASTER_IP> \
   --set k8sServicePort=6443
 
@@ -660,12 +672,41 @@ helm install cilium cilium/cilium --version 1.19.3 \
 helm install cilium cilium/cilium --version 1.19.3 \
   --namespace kube-system \
   --set kubeProxyReplacement=true \
+  --set gatewayAPI.enabled=false \
   --set k8sServiceHost=k8s-api.internal \
   --set k8sServicePort=6443
 ```
 
 > Cilium 이 FQDN(`k8s-api.internal`)을 해석하려면 모든 노드의 `/etc/hosts` 또는 내부 DNS에
 > 해당 레코드가 등록되어 있어야 합니다 (Phase 4-A-1 단계에서 수행).
+
+#### Cilium 내장 Gateway API 사용 시
+
+Envoy Gateway 를 별도로 설치하지 않고 Cilium 만으로 HTTPRoute 를 운영하려면:
+
+```bash
+# 1. Gateway API CRD 먼저 설치 (Cilium 이 자동 설치하지 않음)
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+
+# 2. Cilium Helm upgrade — gatewayAPI 활성화
+helm upgrade cilium cilium/cilium --version 1.19.3 -n kube-system \
+  --reuse-values \
+  --set gatewayAPI.enabled=true
+```
+
+→ HTTPRoute 작성 시 `parentRefs` 가 가리키는 Gateway 의 `gatewayClassName: cilium` 으로 지정.
+
+> ⚠️ Envoy Gateway (`envoy-1.37.2`) 와 **둘 다 활성화된 상태로 운영하지 마세요**. 두 컨트롤러가 같은
+> HTTPRoute 를 가져가려고 경쟁하며, GatewayClass 가 다르더라도 운영 복잡도가 크게 올라갑니다.
+
+#### LoadBalancer IP 발급기 충돌 주의
+
+`kubeProxyReplacement=true` + Envoy Gateway 조합에서 LoadBalancer Service IP 는 다음 중 **하나만**:
+
+- MetalLB (`metallb-0.14.8`) — 본 레포 기본
+- Cilium LB IPAM (`--set loadBalancer.l2.enabled=true` 등)
+
+둘 다 켜면 같은 IP 풀을 두고 경쟁합니다.
 
 ## Phase 8: Metrics Server 설치 (선택)
 
