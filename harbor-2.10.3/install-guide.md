@@ -162,6 +162,8 @@ chmod +x scripts/create_self-signed_tls.sh
 
 Self-Signed 또는 사설 CA를 통해 HTTPS Harbor를 구성한 경우, **모든 K8s 노드 및 클라이언트**에서 해당 인증서를 신뢰하도록 등록해야 합니다.
 
+### 1. OS 시스템 신뢰 등록 (전체 노드)
+
 ```bash
 # 1. Harbor 서버에서 생성된 ca.crt 파일을 가져옵니다.
 # (임시로 /tmp/ca.crt에 있다고 가정)
@@ -172,6 +174,24 @@ sudo cp /tmp/ca.crt /etc/pki/ca-trust/source/anchors/harbor-ca.crt
 # 3. 시스템 인증서 저장소 업데이트
 sudo update-ca-trust
 ```
+
+### 2. containerd 전용 인증서 위치 지정 (전체 노드)
+
+OS 신뢰 등록 외에도 `containerd`가 해당 도메인에 대해 이 인증서를 명확히 참조하도록 설정해야 합니다. (4단계의 `config_path` 설정이 완료된 상태여야 합니다.)
+
+```bash
+# Harbor 도메인 변수 설정 (예: harbor.internal 또는 IP:Port)
+HARBOR_DOMAIN="<EXTERNAL_HOSTNAME>"
+
+# 인증서 디렉토리 생성 및 복사
+sudo mkdir -p /etc/containerd/certs.d/$HARBOR_DOMAIN
+sudo cp /etc/pki/ca-trust/source/anchors/harbor-ca.crt /etc/containerd/certs.d/$HARBOR_DOMAIN/ca.crt
+
+# (필요 시) containerd 재시작
+sudo systemctl restart containerd
+```
+
+> **주의**: 4단계에서 설명한 `/etc/containerd/config.toml` 내 `config_path` 설정이 `/etc/containerd/certs.d`를 바라보고 있는지 반드시 확인하세요.
 
 > **참고**: Ubuntu/Debian 계열의 경우 `/usr/local/share/ca-certificates/harbor-ca.crt`로 복사 후 `sudo update-ca-certificates` 명령어를 사용합니다.
 
