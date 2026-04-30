@@ -39,6 +39,22 @@ wsl --shutdown
 
 재진입 후 `systemctl is-system-running` 으로 systemd 정상 동작 여부를 확인합니다.
 
+## Phase 1~3 자동화 스크립트 (선택)
+
+Phase 1(저장소·패키지 설치) → Phase 2(OS 사전 설정) → Phase 3(containerd·kubelet 기동) 까지는
+`scripts/prepare-online.sh` 로 일괄 실행할 수 있습니다. **스크립트 실행과 아래 수동 단계 중
+하나만 선택해서 진행하면 됩니다.**
+
+```bash
+cd k8s-1.33.7-rocky9.6
+sudo ./scripts/prepare-online.sh
+```
+
+> 스크립트는 VM/베어메탈 전용입니다. WSL2 환경이라면 먼저 Phase 0 을 수행하고,
+> `/etc/hosts` 등록·Harbor insecure registry·containerd 데이터 경로 변경 같은
+> 환경 의존 단계는 스크립트가 다루지 않으므로 본 가이드의 해당 절을 참고해 수동 적용하세요.
+> 스크립트 완료 후에는 곧바로 Phase 4(HA 구성 시) 또는 Phase 5(`kubeadm init`)로 진행할 수 있습니다.
+
 ## Phase 1: 저장소 등록 및 패키지 설치 (전체 노드)
 
 ```bash
