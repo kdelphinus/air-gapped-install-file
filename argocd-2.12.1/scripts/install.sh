@@ -67,8 +67,16 @@ case "${STORAGE_CHOICE}" in
         ;;
     3)
         STORAGE_TYPE="nfs-dynamic"
+        echo ""
+        echo "현재 클러스터의 StorageClass 목록:"
+        kubectl get sc 2>/dev/null || echo "  (StorageClass 조회 실패 — kubectl 설정을 확인하세요)"
+        echo ""
         read -p "  사용할 StorageClass 이름 [기본: nfs-client]: " STORAGE_CLASS
         STORAGE_CLASS="${STORAGE_CLASS:-nfs-client}"
+        
+        if ! kubectl get sc "${STORAGE_CLASS}" > /dev/null 2>&1; then
+            echo "[오류] StorageClass '${STORAGE_CLASS}'를 찾을 수 없습니다."; exit 1
+        fi
         ;;
     4)
         STORAGE_TYPE="none"

@@ -268,8 +268,16 @@ STORAGE_SIZE="${USER_STORAGE_SIZE:-$STORAGE_SIZE}"
 
 if [[ "$STORAGE_CHOICE" == "3" ]]; then
     # --- NFS Dynamic ---
+    echo ""
+    echo "현재 클러스터의 StorageClass 목록:"
+    kubectl get sc 2>/dev/null || echo "  (StorageClass 조회 실패 — kubectl 설정을 확인하세요)"
+    echo ""
     read -p "사용할 StorageClass 이름을 입력하세요 [nfs-client]: " USER_STORAGE_CLASS
     STORAGE_CLASS="${USER_STORAGE_CLASS:-nfs-client}"
+    
+    if ! kubectl get sc "${STORAGE_CLASS}" > /dev/null 2>&1; then
+        echo "[오류] StorageClass '${STORAGE_CLASS}'를 찾을 수 없습니다."; exit 1
+    fi
     echo "NFS 동적 할당 모드를 사용합니다. (StorageClass: ${STORAGE_CLASS})"
 elif [[ "$STORAGE_CHOICE" == "2" ]]; then
     # --- NFS ---
