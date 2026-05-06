@@ -38,18 +38,44 @@ else
     echo "[오류] 1 또는 2를 선택하세요."; exit 1
 fi
 
-# Storage: "none" | "nas" | "hostpath" | "nfs-dynamic"
-STORAGE_TYPE="hostpath"
-STORAGE_CLASS="nfs-client"  # STORAGE_TYPE="nfs-dynamic" 일 때 사용
+# ── 스토리지 설정 ──────────────────────────────────────────────
+echo ""
+echo "스토리지 유형을 선택하세요:"
+echo "  1) hostpath (로컬 노드 경로 사용)"
+echo "  2) nas (NFS 정적 할당 - manifests/nas-pv.yaml 수정 필요)"
+echo "  3) nfs-dynamic (StorageClass를 통한 동적 할당)"
+echo "  4) none (영구 저장소 없음)"
+read -p "선택 [1/2/3/4, 기본값: 1]: " STORAGE_CHOICE
+STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
 
-# NAS (NFS) Settings - STORAGE_TYPE="nas" 일 때 사용
-NAS_SERVER="192.168.1.50"
-NAS_REDIS_PATH="/nas/argocd/redis"
-NAS_REPO_PATH="/nas/argocd/repo"
-
-# hostPath Settings - STORAGE_TYPE="hostpath" 일 때 사용
-HOSTPATH_REDIS="/data/argocd/redis"
-HOSTPATH_REPO="/data/argocd/repo-cache"
+case "${STORAGE_CHOICE}" in
+    1)
+        STORAGE_TYPE="hostpath"
+        read -p "  Redis용 hostPath 경로 [기본: /data/argocd/redis]: " HOSTPATH_REDIS
+        HOSTPATH_REDIS="${HOSTPATH_REDIS:-/data/argocd/redis}"
+        read -p "  Repo-server용 hostPath 경로 [기본: /data/argocd/repo-cache]: " HOSTPATH_REPO
+        HOSTPATH_REPO="${HOSTPATH_REPO:-/data/argocd/repo-cache}"
+        ;;
+    2)
+        STORAGE_TYPE="nas"
+        read -p "  NAS 서버 IP 주소: " NAS_SERVER
+        if [ -z "${NAS_SERVER}" ]; then echo "[오류] NAS 서버 IP가 필요합니다."; exit 1; fi
+        read -p "  Redis용 NAS 경로 [기본: /nas/argocd/redis]: " NAS_REDIS_PATH
+        NAS_REDIS_PATH="${NAS_REDIS_PATH:-/nas/argocd/redis}"
+        read -p "  Repo-server용 NAS 경로 [기본: /nas/argocd/repo]: " NAS_REPO_PATH
+        NAS_REPO_PATH="${NAS_REPO_PATH:-/nas/argocd/repo}"
+        ;;
+    3)
+        STORAGE_TYPE="nfs-dynamic"
+        read -p "  사용할 StorageClass 이름 [기본: nfs-client]: " STORAGE_CLASS
+        STORAGE_CLASS="${STORAGE_CLASS:-nfs-client}"
+        ;;
+    4)
+        STORAGE_TYPE="none"
+        ;;
+    *)
+        echo "[오류] 올바른 옵션을 선택하세요."; exit 1 ;;
+esac
 
 # Networking
 NODEPORT="30001"

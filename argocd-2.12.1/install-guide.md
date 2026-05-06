@@ -24,61 +24,25 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 ./images/upload_images_to_harbor_v3-lite.sh
 ```
 
-## 2단계: 설치 스크립트 설정
+## 2단계: 설치 실행 (대화형)
 
-`scripts/install.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
-
-```bash
-# ==================== Config ====================
-# Harbor Registry
-HARBOR_REGISTRY="<NODE_IP>:30002"
-HARBOR_PROJECT="library"
-
-# Storage: "none" | "nas" | "hostpath" | "nfs-dynamic"
-STORAGE_TYPE="hostpath"
-STORAGE_CLASS="nfs-client"  # STORAGE_TYPE="nfs-dynamic" 시 사용
-
-# hostPath Settings
-HOSTPATH_REDIS="/data/argocd/redis"
-HOSTPATH_REPO="/data/argocd/repo-cache"
-
-# NAS Settings (STORAGE_TYPE="nas" 시 사용)
-NAS_SERVER="192.168.1.50"
-NAS_REDIS_PATH="/nas/argocd/redis"
-NAS_REPO_PATH="/nas/argocd/repo"
-
-# Networking
-NODEPORT="30001"
-DOMAIN="argocd.devops.internal"
-GATEWAY_NAME="cluster-gateway"
-GATEWAY_NAMESPACE="envoy-gateway-system"
-# ================================================
-```
-
-## 3단계: (NAS 사용 시) PV/PVC 설정
-
-NAS(NFS) 정적(static) 스토리지를 사용하는 경우 `manifests/nas-pv.yaml`의 NFS 서버 주소와 경로를 수정합니다. (동적 할당 사용 시 이 단계는 건너뜁니다.)
-
-```bash
-# NAS(정적) 사용 시 매니페스트 적용
-kubectl apply -f manifests/nas-pv.yaml
-```
-
-## 4단계: 설치 실행
+설치 스크립트는 실행 시 필요한 설정값(이미지 소스, 스토리지 유형 등)을 대화형 프롬프트로 입력받습니다.
 
 ```bash
 chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-스크립트 자동 처리 항목:
+### 주요 입력 항목 안내
 
-- Namespace 생성 및 스토리지 설정 적용
-- Helm 설치 (Harbor 이미지 경로 기반)
-- NodePort 및 HTTPRoute 생성 (`DOMAIN` 설정 시)
-- CoreDNS 도메인 자동 등록 (`DOMAIN` 설정 시)
+1. **이미지 소스**: Harbor 레지스트리를 사용할지, 로컬에 이미 로드된 이미지를 사용할지 선택합니다.
+2. **스토리지 유형**: 
+   - `hostpath`: 워커 노드의 로컬 디스크 경로를 사용합니다.
+   - `nas`: NFS 서버의 특정 경로를 직접 매핑합니다 (정적 할당).
+   - `nfs-dynamic`: 사전에 정의된 `StorageClass`를 통해 볼륨을 자동 할당받습니다.
+   - `none`: 별도의 영구 저장소를 사용하지 않습니다.
 
-## 5단계: 설치 확인
+## 3단계: 설치 확인
 
 ```bash
 kubectl get pods -n argocd

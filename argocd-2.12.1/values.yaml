@@ -2,19 +2,19 @@
 global:
   # Local Harbor Registry Details
   image:
-    repository: harbor.local:30002/goe/argocd
+    repository: ghcr.io/argoproj/argo-cd/argocd
     tag: v2.12.1
     imagePullPolicy: IfNotPresent
 
 # Core Components
 server:
   image:
-    repository: harbor.local:30002/goe/argocd
+    repository: ghcr.io/argoproj/argo-cd/argocd
     tag: v2.12.1
 
 repoServer:
   image:
-    repository: harbor.local:30002/goe/argocd
+    repository: ghcr.io/argoproj/argo-cd/argocd
     tag: v2.12.1
   # ---------------------------------------------------------------------------
   # Persistence for Repo Server (Cache)
@@ -40,12 +40,12 @@ repoServer:
 
 controller:
   image:
-    repository: harbor.local:30002/goe/argocd
+    repository: ghcr.io/argoproj/argo-cd/argocd
     tag: v2.12.1
 
 applicationSet:
   image:
-    repository: harbor.local:30002/goe/argocd
+    repository: ghcr.io/argoproj/argo-cd/argocd
     tag: v2.12.1
 
 dex:
@@ -54,7 +54,7 @@ dex:
 # Redis dependency (Standalone)
 redis:
   image:
-    repository: harbor.local:30002/goe/redis
+    repository: public.ecr.aws/docker/library/redis
     tag: 7.2.4-alpine
   # ---------------------------------------------------------------------------
   # Persistence for Redis
@@ -81,14 +81,14 @@ redis:
 # HA Proxy (if HA is enabled via redis-ha)
 haproxy:
   image:
-    repository: harbor.local:30002/goe/haproxy
+    repository: public.ecr.aws/docker/library/haproxy
     tag: 2.9.7-alpine
 
 # Notifications
 notifications:
   enabled: true
   image:
-    repository: harbor.local:30002/goe/argocd
+    repository: ghcr.io/argoproj/argo-cd/argocd
     tag: v2.12.1
 
 # Disable checking for newer versions
