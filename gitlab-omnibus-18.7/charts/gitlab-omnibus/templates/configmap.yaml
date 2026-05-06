@@ -25,7 +25,6 @@ data:
     redis_exporter['enable'] = false
     postgres_exporter['enable'] = false
     gitlab_exporter['enable'] = false
-    grafana['enable'] = false
 
     # 로그: stdout (kubectl logs로 확인 가능)
     logging['svlogd_size'] = 200 * 1024 * 1024
