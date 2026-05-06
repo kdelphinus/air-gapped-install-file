@@ -254,3 +254,4 @@ tmp/
 **/*-temp.yaml
 # 압축 해제된 velero 바이너리 디렉토리
 velero-*/velero-v*/
+.claude/
