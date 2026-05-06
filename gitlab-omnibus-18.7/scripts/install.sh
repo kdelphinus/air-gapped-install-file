@@ -7,7 +7,8 @@ CHART_PATH="./charts/gitlab-omnibus"
 VALUES_FILE="./values.yaml"
 PV_TEMPLATE="./manifests/gitlab-omnibus-pv.yaml"
 PV_FILE="./manifests/gitlab-omnibus-pv-temp.yaml"
-HTTPROUTE_FILE="./manifests/gitlab-omnibus-httproute.yaml"
+HTTPROUTE_TEMPLATE="./manifests/gitlab-omnibus-httproute.yaml"
+HTTPROUTE_FILE="./manifests/gitlab-omnibus-httproute-temp.yaml"
 CONF_FILE="./install.conf"
 GITLAB_VERSION="18.7.0-ce.0"
 
@@ -31,6 +32,7 @@ CONFIG_SIZE="${CONFIG_SIZE}"
 STORAGE_SIZE="${STORAGE_SIZE}"
 USE_NGINX="${USE_NGINX}"
 TARGET_NODE="${TARGET_NODE}"
+DOMAIN_NAME="${DOMAIN_NAME}"
 INSTALLED_VERSION="${GITLAB_VERSION}"
 EOF
     echo "  ✅ 설정이 ${CONF_FILE} 에 저장되었습니다."
@@ -53,9 +55,10 @@ _cleanup_resources() {
         helm uninstall $RELEASE_NAME -n $NAMESPACE --wait=false 2>/dev/null || true
     fi
 
-    if [ -f "$HTTPROUTE_FILE" ]; then
-        kubectl delete -f "$HTTPROUTE_FILE" --ignore-not-found=true 2>/dev/null || true
-    fi
+    # HTTPRoute는 네임스페이스 삭제로 함께 정리되지만 명시적으로 시도
+    kubectl delete httproute -n "$NAMESPACE" gitlab-omnibus --ignore-not-found=true 2>/dev/null || true
+    # 구버전 호환: 과거 envoy-gateway-system에 생성된 HTTPRoute도 정리
+    kubectl delete httproute -n envoy-gateway-system gitlab-omnibus --ignore-not-found=true 2>/dev/null || true
 
     kubectl delete pv gitlab-omnibus-data-pv gitlab-omnibus-config-pv --ignore-not-found=true 2>/dev/null || true
 
@@ -70,7 +73,7 @@ _cleanup_resources() {
     kubectl delete ns $NAMESPACE --ignore-not-found=true --wait=false 2>/dev/null || true
     kubectl wait --for=delete namespace/$NAMESPACE --timeout=120s 2>/dev/null || true
 
-    rm -f "$PV_FILE" 2>/dev/null || true
+    rm -f "$PV_FILE" "$HTTPROUTE_FILE" 2>/dev/null || true
 
     if [[ "$delete_data" =~ ^[Yy]$ ]] && [ -n "${HOSTPATH_DIR}" ]; then
         echo "  - 데이터 디렉토리 초기화 중..."
@@ -96,6 +99,7 @@ if [ "$EXIST_HELM" = "yes" ] || [ "$EXIST_K8S" = "yes" ] || [ "$EXIST_NS" = "yes
         [ "${STORAGE_TYPE}" = "hostpath" ] && echo "     HostPath     : ${HOSTPATH_DIR}"
         [ "${STORAGE_TYPE}" = "nfs"      ] && echo "     NFS          : ${NFS_SERVER}:${NFS_PATH}"
         [ "${STORAGE_TYPE}" = "dynamic"  ] && echo "     StorageClass : ${STORAGE_CLASS}"
+        echo "     도메인       : ${DOMAIN_NAME:-미설정}"
         echo "     설치 버전    : ${INSTALLED_VERSION:-미설정}"
     fi
 
@@ -121,7 +125,7 @@ if [ "$EXIST_HELM" = "yes" ] || [ "$EXIST_K8S" = "yes" ] || [ "$EXIST_NS" = "yes
             echo "✅ 삭제 완료. 설정을 다시 입력합니다."
             IMAGE_SOURCE="" HARBOR_REGISTRY="" HARBOR_PROJECT=""
             STORAGE_TYPE="" HOSTPATH_DIR="" NFS_SERVER="" NFS_PATH="" STORAGE_CLASS="" CONFIG_SIZE="" STORAGE_SIZE=""
-            USE_NGINX="" TARGET_NODE=""
+            USE_NGINX="" TARGET_NODE="" DOMAIN_NAME=""
             ;;
         3)
             echo "🗑️  초기화: 모든 리소스를 삭제하고 재설치합니다..."
@@ -130,7 +134,7 @@ if [ "$EXIST_HELM" = "yes" ] || [ "$EXIST_K8S" = "yes" ] || [ "$EXIST_NS" = "yes
             echo "✅ 초기화 완료. 설정을 처음부터 입력합니다."
             IMAGE_SOURCE="" HARBOR_REGISTRY="" HARBOR_PROJECT=""
             STORAGE_TYPE="" HOSTPATH_DIR="" NFS_SERVER="" NFS_PATH="" STORAGE_CLASS="" CONFIG_SIZE="" STORAGE_SIZE=""
-            USE_NGINX="" TARGET_NODE=""
+            USE_NGINX="" TARGET_NODE="" DOMAIN_NAME=""
             ;;
         *)
             echo "❌ 설치가 취소되었습니다."
@@ -254,6 +258,14 @@ if [ -z "${USE_NGINX}" ] && [ "${DO_UPGRADE}" != "true" ]; then
     USE_NGINX="${USE_NGINX:-n}"
 fi
 
+# ── 도메인 입력 ───────────────────────────────────────────
+if [ -z "${DOMAIN_NAME}" ]; then
+    echo ""
+    read -p "GitLab 도메인 (기본값: gitlab.devops.internal): " DOMAIN_NAME
+    DOMAIN_NAME="${DOMAIN_NAME:-gitlab.devops.internal}"
+fi
+echo "  ✅ 도메인: ${DOMAIN_NAME}"
+
 # ── 노드 고정 설정 ────────────────────────────────────────
 NODE_SELECTOR_ARG=""
 if [ "${DO_UPGRADE}" = "true" ] && [ -n "${TARGET_NODE}" ]; then
@@ -345,6 +357,16 @@ fi
 
 echo "  ✅ PV 매니페스트 생성 완료"
 
+# ── HTTPRoute 매니페스트 생성 ─────────────────────────────
+if [[ "${USE_NGINX}" =~ ^[Nn]$ ]]; then
+    echo "🔧 HTTPRoute 매니페스트 생성 중..."
+    sed \
+        -e "s|<NAMESPACE>|${NAMESPACE}|g" \
+        -e "s|<DOMAIN_NAME>|${DOMAIN_NAME}|g" \
+        "$HTTPROUTE_TEMPLATE" > "$HTTPROUTE_FILE"
+    echo "  ✅ HTTPRoute 매니페스트 생성 완료 (네임스페이스: ${NAMESPACE}, 호스트: ${DOMAIN_NAME})"
+fi
+
 # ── 설치/업그레이드 실행 ──────────────────────────────────
 echo ""
 echo "========================================================"
@@ -386,6 +408,7 @@ helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f "$VALUES_FILE" \
     --set image.registry="${IMAGE_REGISTRY}" \
     --set image.repository="${IMAGE_REPOSITORY}" \
+    --set externalUrl="http://${DOMAIN_NAME}" \
     "${HELM_STORAGE_ARGS[@]}" \
     --wait \
     --timeout 600s \
@@ -397,7 +420,7 @@ echo ""
 echo "==========================================="
 echo " ✅ GitLab Omnibus ${GITLAB_VERSION} 설치/업그레이드 완료"
 echo "==========================================="
-echo " GitLab URL  : http://gitlab.devops.internal"
+echo " GitLab URL  : http://${DOMAIN_NAME}"
 echo " SSH         : ssh://git@<NODE_IP>:${sshPort:-30022}"
 echo " 설정 파일   : ${CONF_FILE}"
 echo "==========================================="
