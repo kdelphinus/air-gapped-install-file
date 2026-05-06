@@ -59,7 +59,11 @@ chmod +x scripts/install.sh
    - **`1` 로컬 tar 직접 import (권장)**: 하버가 아직 설치되지 않은 경우 선택합니다. (1단계에서 `load_images.sh`를 이미 실행했다면 이미 로드되어 있으므로 금방 넘어갑니다.)
    - **`2` Harbor 레지스트리 사용**: 하버가 이미 설치되어 있고 재설치하거나 이미지가 이미 로드된 경우 선택합니다.
 2. **노출 방식 선택**: `1` NodePort + Envoy Gateway (기본) / `2` nginx Ingress
-3. **Harbor 관리자(`admin`) 비밀번호**: 최소 8자 이상의 비밀번호를 입력합니다.
+3. **스토리지 타입 선택**:
+   - **`1` HostPath**: 단일 노드 테스트 환경용. 특정 노드 경로에 데이터를 저장합니다.
+   - **`2` NFS (정적 할당)**: 미리 생성된 NFS 서버/경로 정보를 입력하여 정적 PV/PVC를 생성합니다.
+   - **`3` NFS (동적 할당)**: `nfs-client` 등 클러스터에 설치된 StorageClass를 통해 볼륨을 자동 할당받습니다.
+4. **Harbor 관리자(`admin`) 비밀번호**: 최소 8자 이상의 비밀번호를 입력합니다.
 
 ## 4단계: Envoy HTTPRoute 적용 (NodePort + Envoy 선택 시)
 

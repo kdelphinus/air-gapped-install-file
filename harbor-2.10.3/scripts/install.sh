@@ -251,18 +251,27 @@ if [[ "$STORAGE_MODE" == "hostpath" ]]; then
 elif [[ "$STORAGE_MODE" == "nfs" ]]; then
     STORAGE_CHOICE="2"
     echo "스토리지 모드: NFS (STORAGE_MODE 사전 설정)"
+elif [[ "$STORAGE_MODE" == "nfs-dynamic" ]]; then
+    STORAGE_CHOICE="3"
+    echo "스토리지 모드: NFS 동적 할당 (STORAGE_MODE 사전 설정)"
 else
     echo "스토리지 타입을 선택하세요:"
     echo "  1) HostPath (노드 고정, 단일 노드 환경 권장)"
-    echo "  2) NFS"
-    read -p "선택 [1/2, 기본값 1]: " STORAGE_CHOICE
+    echo "  2) NFS (정적 할당)"
+    echo "  3) NFS (동적 할당 - StorageClass 사용)"
+    read -p "선택 [1/2/3, 기본값 1]: " STORAGE_CHOICE
     STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
 fi
 
 read -p "전체 저장 공간의 크기를 입력하세요 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
 STORAGE_SIZE="${USER_STORAGE_SIZE:-$STORAGE_SIZE}"
 
-if [[ "$STORAGE_CHOICE" == "2" ]]; then
+if [[ "$STORAGE_CHOICE" == "3" ]]; then
+    # --- NFS Dynamic ---
+    read -p "사용할 StorageClass 이름을 입력하세요 [nfs-client]: " USER_STORAGE_CLASS
+    STORAGE_CLASS="${USER_STORAGE_CLASS:-nfs-client}"
+    echo "NFS 동적 할당 모드를 사용합니다. (StorageClass: ${STORAGE_CLASS})"
+elif [[ "$STORAGE_CHOICE" == "2" ]]; then
     # --- NFS ---
     if [ -z "$NFS_SERVER" ]; then
         read -p "NFS 서버 주소를 입력하세요 (예: 192.168.1.100): " NFS_SERVER
@@ -353,7 +362,9 @@ spec:
 EOF
 fi
 
-kubectl apply -f "$PV_PVC_FILE"
+if [[ "$STORAGE_CHOICE" != "3" ]]; then
+    kubectl apply -f "$PV_PVC_FILE"
+fi
 
 # externalURL 계산
 # - Envoy(nodePort): 도메인만 사용 (Envoy가 포트 처리)
@@ -370,6 +381,66 @@ fi
 # 7. Harbor 설치
 echo "Helm을 사용하여 Harbor를 배포합니다. 이 작업은 몇 분 정도 소요될 수 있습니다..."
 VALUES_FILE="harbor-generated-values.yaml"
+
+# Persistence 설정 분기
+if [[ "$STORAGE_CHOICE" == "3" ]]; then
+    # 동적 할당
+    PERSISTENCE_CONFIG=$(cat <<EOF
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      existingClaim: ""
+      storageClass: "${STORAGE_CLASS}"
+      subPath: registry
+      size: ${STORAGE_SIZE}
+    database:
+      existingClaim: ""
+      storageClass: "${STORAGE_CLASS}"
+      subPath: database
+    jobservice:
+      jobLog:
+        existingClaim: ""
+        storageClass: "${STORAGE_CLASS}"
+        subPath: jobservice-logs
+    redis:
+      existingClaim: ""
+      storageClass: "${STORAGE_CLASS}"
+      subPath: redis
+    trivy:
+      existingClaim: ""
+      storageClass: "${STORAGE_CLASS}"
+      subPath: trivy
+EOF
+)
+else
+    # 정적 할당 (HostPath/NFS)
+    PERSISTENCE_CONFIG=$(cat <<EOF
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      existingClaim: "harbor-pvc"
+      subPath: registry
+    database:
+      existingClaim: "harbor-pvc"
+      subPath: database
+    jobservice:
+      jobLog:
+        existingClaim: "harbor-pvc"
+        subPath: jobservice-logs
+    redis:
+      existingClaim: "harbor-pvc"
+      subPath: redis
+    trivy:
+      existingClaim: "harbor-pvc"
+      subPath: trivy
+EOF
+)
+fi
+
 # values.yaml 생성
 cat > "$VALUES_FILE" <<EOF
 externalURL: ${EXTERNAL_URL}
@@ -400,26 +471,8 @@ expose:
       nginx.ingress.kubernetes.io/proxy-body-size: "0"
       $([[ "$TLS_ENABLED" == "true" ]] && echo 'nginx.ingress.kubernetes.io/ssl-redirect: "true"' || echo "")
 
-persistence:
-  enabled: true
-  resourcePolicy: "keep"
-  persistentVolumeClaim:
-    registry:
-      existingClaim: "harbor-pvc"
-      subPath: registry
-    database:
-      existingClaim: "harbor-pvc"
-      subPath: database
-    jobservice:
-      jobLog:
-        existingClaim: "harbor-pvc"
-        subPath: jobservice-logs
-    redis:
-      existingClaim: "harbor-pvc"
-      subPath: redis
-    trivy:
-      existingClaim: "harbor-pvc"
-      subPath: trivy
+${PERSISTENCE_CONFIG}
+
   imageChartStorage:
     type: filesystem
 EOF
