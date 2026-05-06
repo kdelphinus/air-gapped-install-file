@@ -38,8 +38,9 @@ else
     echo "[오류] 1 또는 2를 선택하세요."; exit 1
 fi
 
-# Storage: "none" | "nas" | "hostpath"
+# Storage: "none" | "nas" | "hostpath" | "nfs-dynamic"
 STORAGE_TYPE="hostpath"
+STORAGE_CLASS="nfs-client"  # STORAGE_TYPE="nfs-dynamic" 일 때 사용
 
 # NAS (NFS) Settings - STORAGE_TYPE="nas" 일 때 사용
 NAS_SERVER="192.168.1.50"
@@ -87,6 +88,7 @@ echo " Installing ArgoCD 2.12.1 (Offline)"
 echo "==========================================="
 echo " Image Source: ${IMAGE_SOURCE} (Harbor: ${HARBOR_REGISTRY}/${HARBOR_PROJECT})"
 echo " Storage: ${STORAGE_TYPE}"
+[ "$STORAGE_TYPE" = "nfs-dynamic" ] && echo " StorageClass: ${STORAGE_CLASS}"
 echo "==========================================="
 
 # Create namespace if it doesn't exist
@@ -101,6 +103,34 @@ if [ "$STORAGE_TYPE" = "nas" ]; then
         -e "s|/nas/argocd/redis|${NAS_REDIS_PATH}|g" \
         -e "s|/nas/argocd/repo|${NAS_REPO_PATH}|g" \
         "$NAS_PV_FILE" | kubectl apply -f -
+elif [ "$STORAGE_TYPE" = "nfs-dynamic" ]; then
+    echo ""
+    echo ">>> Creating Dynamic PVCs (StorageClass: ${STORAGE_CLASS})"
+    kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argocd-redis-pvc
+  namespace: ${NAMESPACE}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argocd-repo-pvc
+  namespace: ${NAMESPACE}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: "${STORAGE_CLASS}"
+  resources:
+    requests:
+      storage: 20Gi
+EOF
 fi
 
 # ---- Build helm --set args for Harbor image paths ----
@@ -131,7 +161,7 @@ HELM_SET_ARGS=(
 )
 
 # ---- Build helm --set args for Storage ----
-if [ "$STORAGE_TYPE" = "nas" ]; then
+if [ "$STORAGE_TYPE" = "nas" ] || [ "$STORAGE_TYPE" = "nfs-dynamic" ]; then
     HELM_SET_ARGS+=(
         --set "repoServer.volumes[0].name=argocd-repo-cache"
         --set "repoServer.volumes[0].persistentVolumeClaim.claimName=argocd-repo-pvc"

@@ -24,7 +24,8 @@
 | :--- | :--- |
 | `none` | 영구 저장소 없음 (재시작 시 캐시 초기화) |
 | `hostpath` | 노드 호스트 경로 기반 저장 (기본값) |
-| `nas` | NFS 기반 NAS 저장 (NFS 클라이언트 설치 필요) |
+| `nas` | NFS 기반 NAS 저장 (정적 PV/PVC 할당) |
+| `nfs-dynamic` | NFS 기반 동적 할당 (StorageClass 필요) |
 
 ## 네트워크 접속 정보
 

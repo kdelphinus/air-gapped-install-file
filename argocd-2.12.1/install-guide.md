@@ -34,8 +34,9 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 HARBOR_REGISTRY="<NODE_IP>:30002"
 HARBOR_PROJECT="library"
 
-# Storage: "none" | "nas" | "hostpath"
+# Storage: "none" | "nas" | "hostpath" | "nfs-dynamic"
 STORAGE_TYPE="hostpath"
+STORAGE_CLASS="nfs-client"  # STORAGE_TYPE="nfs-dynamic" 시 사용
 
 # hostPath Settings
 HOSTPATH_REDIS="/data/argocd/redis"
@@ -56,10 +57,10 @@ GATEWAY_NAMESPACE="envoy-gateway-system"
 
 ## 3단계: (NAS 사용 시) PV/PVC 설정
 
-NAS(NFS) 스토리지를 사용하는 경우 `manifests/nas-pv.yaml`의 NFS 서버 주소와 경로를 수정합니다.
+NAS(NFS) 정적(static) 스토리지를 사용하는 경우 `manifests/nas-pv.yaml`의 NFS 서버 주소와 경로를 수정합니다. (동적 할당 사용 시 이 단계는 건너뜁니다.)
 
 ```bash
-# NAS 사용 시 매니페스트 적용
+# NAS(정적) 사용 시 매니페스트 적용
 kubectl apply -f manifests/nas-pv.yaml
 ```
 
