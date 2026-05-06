@@ -1,0 +1,6 @@
+# Envoy Gateway v1.7.2 공식 차트 배포용 설정
+global:
+  images:
+    envoyGateway:
+      image: "docker.io/envoyproxy/gateway:v1.7.2"
+      pullPolicy: IfNotPresent

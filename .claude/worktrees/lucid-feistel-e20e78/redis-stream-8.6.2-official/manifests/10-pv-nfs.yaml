@@ -1,0 +1,63 @@
+# 10-pv-nfs.yaml
+# install.sh 에서 sed 치환 후 적용한다:
+#   __NFS_SERVER__    → NFS 서버 IP (예: 192.168.1.100)
+#   __NFS_BASE_PATH__ → NFS 기본 경로 (예: /nfs/redis-official)
+#   __STORAGE_SIZE__  → PV 크기 (예: 10Gi)
+#
+# NFS 서버에서 사전 생성 필요:
+#   mkdir -p /nfs/redis-official/{node-0,node-1,node-2}
+#   chmod 777 /nfs/redis-official/{node-0,node-1,node-2}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-official-node-0-pv
+spec:
+  capacity:
+    storage: __STORAGE_SIZE__
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_BASE_PATH__/node-0
+  claimRef:
+    name: redis-data-redis-node-0
+    namespace: redis-stream-official
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-official-node-1-pv
+spec:
+  capacity:
+    storage: __STORAGE_SIZE__
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_BASE_PATH__/node-1
+  claimRef:
+    name: redis-data-redis-node-1
+    namespace: redis-stream-official
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-official-node-2-pv
+spec:
+  capacity:
+    storage: __STORAGE_SIZE__
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: __NFS_SERVER__
+    path: __NFS_BASE_PATH__/node-2
+  claimRef:
+    name: redis-data-redis-node-2
+    namespace: redis-stream-official

@@ -2,19 +2,19 @@
 global:
   # Local Harbor Registry Details
   image:
-    repository: ghcr.io/argoproj/argo-cd/argocd
+    repository: quay.io/argoproj/argocd
     tag: v2.12.1
     imagePullPolicy: IfNotPresent
 
 # Core Components
 server:
   image:
-    repository: ghcr.io/argoproj/argo-cd/argocd
+    repository: quay.io/argoproj/argocd
     tag: v2.12.1
 
 repoServer:
   image:
-    repository: ghcr.io/argoproj/argo-cd/argocd
+    repository: quay.io/argoproj/argocd
     tag: v2.12.1
   # ---------------------------------------------------------------------------
   # Persistence for Repo Server (Cache)
@@ -40,12 +40,12 @@ repoServer:
 
 controller:
   image:
-    repository: ghcr.io/argoproj/argo-cd/argocd
+    repository: quay.io/argoproj/argocd
     tag: v2.12.1
 
 applicationSet:
   image:
-    repository: ghcr.io/argoproj/argo-cd/argocd
+    repository: quay.io/argoproj/argocd
     tag: v2.12.1
 
 dex:
@@ -82,13 +82,13 @@ redis:
 haproxy:
   image:
     repository: public.ecr.aws/docker/library/haproxy
-    tag: 2.9.7-alpine
+    tag: 2.9-alpine
 
 # Notifications
 notifications:
   enabled: true
   image:
-    repository: ghcr.io/argoproj/argo-cd/argocd
+    repository: quay.io/argoproj/argocd
     tag: v2.12.1
 
 # Disable checking for newer versions

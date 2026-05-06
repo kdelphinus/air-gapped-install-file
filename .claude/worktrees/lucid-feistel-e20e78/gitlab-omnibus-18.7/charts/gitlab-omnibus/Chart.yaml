@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gitlab-omnibus
+description: GitLab CE 18.7 Omnibus — 단일 파드 올인원 배포 (폐쇄망)
+type: application
+version: 1.0.0
+appVersion: "18.7.0"

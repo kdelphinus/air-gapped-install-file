@@ -1,0 +1,25 @@
+# =============================================================
+# Redis Sentinel HA — Local / Dev environment overrides
+# =============================================================
+
+global:
+  # Local registry example
+  imageRegistry: "localhost:30002"
+
+redis:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+sentinel:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

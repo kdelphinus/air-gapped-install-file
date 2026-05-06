@@ -1,0 +1,105 @@
+# Cilium 1.19.3 Air-Gapped Standard Values
+# ---------------------------------------------------------
+# [필독] 폐쇄망 환경 설치 시 아래 설정들을 반드시 검토하십시오.
+# ---------------------------------------------------------
+
+# 1. 이미지 설정 (Harbor 레지스트리 대응)
+image:
+  repository: "<NODE_IP>/<PROJECT>/cilium"
+  tag: "v1.19.3"
+  pullPolicy: "IfNotPresent"
+  useDigest: false 
+
+# -- Roll out cilium agent pods automatically when configmap is updated.
+rollOutCiliumPods: true
+
+operator:
+  replicas: 1 # 표준 K8s 가용성을 위해 2로 복구 -> 싱글 노드 테스트를 위해 1로 변경
+  hostNetwork: true
+  # -- Roll out cilium-operator pods automatically when configmap is updated.
+  rollOutPods: true
+  # -- Disable unmanaged pod watcher to stop CoreDNS restart loop
+  unmanagedPodWatcher:
+    restart: false
+  image:
+    repository: "<NODE_IP>/<PROJECT>/operator"
+    tag: "v1.19.3"
+    pullPolicy: "IfNotPresent"
+    useDigest: false
+
+# 노드 간 라우팅 자동 설정 (no route to host 방지)
+routingMode: "native"
+autoDirectNodeRoutes: true
+ipv4NativeRoutingCIDR: "<POD_CIDR>"
+
+hubble:
+  enabled: true
+  tls:
+    auto:
+      method: cronJob
+  # -- Roll out hubble-relay pods automatically when configmap is updated.
+  relay:
+    rollOutPods: true
+    enabled: false # install.sh --set 에 의해 관리됨
+    image:
+      repository: "<NODE_IP>/<PROJECT>/hubble-relay"
+      tag: "v1.19.3"
+      useDigest: false
+  ui:
+    # -- Roll out hubble-ui pods automatically when configmap is updated.
+    rollOutPods: true
+    enabled: false # install.sh --set 에 의해 관리됨
+    backend:
+      image:
+        repository: "<NODE_IP>/<PROJECT>/hubble-ui-backend"
+        tag: "v0.13.3"
+        useDigest: false
+    frontend:
+      image:
+        repository: "<NODE_IP>/<PROJECT>/hubble-ui"
+        tag: "v0.13.3"
+        useDigest: false
+
+# Cilium Envoy (L7 Proxy 및 Hubble UI 의존성)
+envoy:
+  # -- Roll out cilium-envoy pods automatically when configmap is updated.
+  rollOutPods: true
+  image:
+    repository: "<NODE_IP>/<PROJECT>/cilium-envoy"
+    tag: "v1.36.6-1776000132-2437d2edeaf4d9b56ef279bd0d71127440c067aa"
+    useDigest: false
+
+# 2. 네트워크 및 커널 설정 (환경별 가변값)
+kubeProxyReplacement: true
+k8sServiceHost: "<K8S_SERVICE_HOST>"
+k8sServicePort: "<K8S_SERVICE_PORT>"
+
+# CoreDNS 및 개별 엔드포인트 간 통신 가속화 (Restart Loop 방지)
+endpointRoutes:
+  enabled: true
+
+# IPAM 및 CIDR 설정
+ipam:
+  mode: "cluster-pool"
+  operator:
+    clusterPoolIPv4PodCIDRList: ["<POD_CIDR>"]
+    clusterPoolIPv4MaskSize: 24
+
+# MTU 설정
+mtu: <MTU_VALUE>
+
+# 3. 모니터링
+prometheus:
+  enabled: true
+  port: 9962
+operatorPrometheus:
+  enabled: true
+  port: 9963
+hubblePrometheus:
+  enabled: true
+  port: 9965
+
+
+# 터널링 모드
+tunnelProtocol: "vxlan"
+

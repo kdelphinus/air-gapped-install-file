@@ -1,0 +1,37 @@
+# Tetragon TracingPolicy: 민감 파일(/etc/shadow) 읽기 시도 시 프로세스 Kill
+# 작성: Gemini CLI
+
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: block-sensitive-read
+spec:
+  kprobes:
+  - call: "fd_install"   # 커널 버전에 따라 "security_file_open"으로 변경 필요할 수 있음
+    syscall: false
+    args:
+    - index: 0
+      type: int
+    - index: 1
+      type: "file"
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: "Equal"
+        values:
+        - "/etc/shadow"
+      matchBinaries:
+      - operator: "NotIn"
+        values:
+        # 시스템 인증 바이너리 제외 — /etc/shadow를 정상적으로 읽는 프로세스
+        - "/usr/bin/sudo"
+        - "/bin/sudo"
+        - "/usr/bin/su"
+        - "/bin/su"
+        - "/usr/bin/passwd"
+        - "/usr/sbin/login"
+        - "/usr/lib/systemd/systemd"   # systemd PAM 인증
+        - "/sbin/unix_chkpwd"          # PAM 패스워드 검증 헬퍼 (sudo 인증 시 별도 프로세스로 실행)
+        - "/usr/sbin/unix_chkpwd"
+      matchActions:
+      - action: Sigkill   # 즉시 프로세스 종료

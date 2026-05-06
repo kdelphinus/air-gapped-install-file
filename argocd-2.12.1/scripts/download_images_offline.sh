@@ -14,9 +14,9 @@ IMAGE_DIR="${SCRIPT_DIR}/../images"
 mkdir -p "$IMAGE_DIR"
 
 IMAGES=(
-    "ghcr.io/argoproj/argo-cd/argocd:v2.12.1"
+    "quay.io/argoproj/argocd:v2.12.1"
     "public.ecr.aws/docker/library/redis:7.2.4-alpine"
-    "public.ecr.aws/docker/library/haproxy:2.9.7-alpine"
+    "public.ecr.aws/docker/library/haproxy:2.9-alpine"
 )
 
 echo "===================================================="

@@ -1,0 +1,52 @@
+# Harbor NetworkPolicy — 선택 사항
+# NetworkPolicy 컨트롤러(Calico 등)가 설치된 클러스터에서만 적용됩니다.
+# 적용: kubectl apply -f manifests/networkpolicy-harbor.yaml
+---
+# 1. 기본 정책: Harbor 네임스페이스로의 모든 인바운드 트래픽 차단
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: harbor-deny-all-ingress
+  namespace: harbor
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# 2. Harbor 컴포넌트 간 내부 통신 허용
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: harbor-allow-internal
+  namespace: harbor
+spec:
+  podSelector:
+    matchLabels:
+      release: harbor
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              release: harbor
+---
+# 3. NodePort(30002) 외부 접근 허용 — Harbor nginx 프록시
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: harbor-allow-external
+  namespace: harbor
+spec:
+  podSelector:
+    matchLabels:
+      app: harbor
+      component: nginx
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443

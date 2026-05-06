@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "redis-sentinel.sentinelConfigName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "redis-sentinel.labels" . | nindent 4 }}
+data:
+  base-sentinel.conf: |
+    # Sentinel 기본 설정
+    # sentinel monitor / auth-pass 는 init container에서 동적 주입
+
+    port 26379
+    bind 0.0.0.0
+    protected-mode no
+
+    sentinel down-after-milliseconds {{ .Values.sentinel.masterSet }} {{ .Values.sentinel.config.downAfterMilliseconds }}
+    sentinel failover-timeout {{ .Values.sentinel.masterSet }} {{ .Values.sentinel.config.failoverTimeout }}
+    sentinel parallel-syncs {{ .Values.sentinel.masterSet }} {{ .Values.sentinel.config.parallelSyncs }}
+
+    dir /sentinel-data
+    logfile ""
+    loglevel notice
+
+    # Redis 7.0+ — hostname으로 master 등록 시 DNS 조회 허용
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes

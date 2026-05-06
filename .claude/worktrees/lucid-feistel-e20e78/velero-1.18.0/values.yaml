@@ -1,0 +1,50 @@
+# Velero v1.18.0 Values for Air-gapped
+
+# 1. 이미지 설정 (Harbor) — nodeAgent 도 이 image 를 공유
+image:
+  repository: <NODE_IP>/<PROJECT>/velero
+  tag: v1.18.0
+  pullPolicy: IfNotPresent
+
+# CRD는 install.sh에서 kubectl apply로 직접 관리 (Helm hook 우회)
+upgradeCRDs: false
+
+# 2. 플러그인 및 스토리지 설정
+configuration:
+  backupStorageLocation:
+  - name: default
+    provider: aws
+    bucket: velero
+    config:
+      region: minio
+      s3ForcePathStyle: "true"
+      s3Url: http://minio:9000
+      credentialsFile: /credentials/cloud
+
+# Helm이 secretContents로 credentials secret을 직접 생성/관리
+credentials:
+  useSecret: true
+  secretContents:
+    cloud: |
+      [default]
+      aws_access_key_id=minioadmin
+      aws_secret_access_key=minioadmin
+
+initContainers:
+  - name: velero-plugin-for-aws
+    image: <NODE_IP>/<PROJECT>/velero-plugin-for-aws:v1.14.0
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# PVC 데이터 백업 (Kopia 사용)
+snapshotsEnabled: false
+deployNodeAgent: true
+
+# 스케줄 백업 설정
+schedules:
+  daily-backup:
+    schedule: "0 1 * * *"
+    template:
+      includedNamespaces: ["*"]
+      ttl: 720h

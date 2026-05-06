@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: falcosidekick
+  namespace: monitoring
+  labels:
+    release: prometheus   # Prometheus serviceMonitorSelector 필수 라벨
+spec:
+  namespaceSelector:
+    matchNames:
+      - falco
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: falcosidekick
+  endpoints:
+    - port: http       # 2801 포트 (이벤트 수신 + metrics 겸용)
+      path: /metrics
+      interval: 30s

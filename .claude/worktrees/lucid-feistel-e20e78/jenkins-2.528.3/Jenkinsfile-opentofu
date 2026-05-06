@@ -1,0 +1,207 @@
+// ==============================================================================
+// Jenkins Pipeline Template — OpenTofu IaC (폐쇄망)
+//
+// [사용 전 필수 수정 항목]
+//   1. <HARBOR_IP>:<PORT>   — Harbor 레지스트리 주소 (예: 172.30.235.20:30002)
+//   2. <GITLAB_IP>:<PORT>   — GitLab NodePort 주소
+//   3. GIT_URL defaultValue — OpenTofu 코드가 있는 GitLab 저장소 URL
+//   4. WORKING_DIR          — main.tf가 위치한 저장소 내 상대 경로 (루트면 '.')
+//   5. credentialsId 값     — Jenkins Credentials 에 등록한 ID 와 일치해야 함
+//
+// [사전 조건 — Jenkins Credentials 등록]
+//   - <GITLAB_IP>:<PORT>         : Kind = Username with password (GitLab 계정)
+//   - 클라우드 인증 정보           : 사용하는 Provider에 맞게 아래 주석 참조
+//
+// [번들된 Provider 목록 — 인터넷 없이 사용 가능]
+//   - hashicorp/aws         v5.30.0  (source: registry.opentofu.org/hashicorp/aws)
+//   - hashicorp/azurerm              (source: registry.opentofu.org/hashicorp/azurerm)
+//   - hashicorp/vsphere              (source: registry.opentofu.org/hashicorp/vsphere)
+//   - openstack/openstack            (source: registry.opentofu.org/terraform-provider-openstack/openstack)
+//
+// [흐름]
+//   Checkout → tofu init → tofu plan → [수동 승인] → tofu apply
+//   destroy 파라미터 선택 시: Checkout → tofu init → tofu plan -destroy → [수동 승인] → tofu destroy
+// ==============================================================================
+
+pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: tofu-runner
+spec:
+  containers:
+  - name: tofu
+    image: '<HARBOR_IP>:<PORT>/jenkins/cmp-jenkins-full:2.528.3'
+    command: ['/bin/sh', '-c', 'sleep 86400']
+    tty: true
+    env:
+    - name: TF_CLI_CONFIG_FILE
+      value: /etc/tofurc
+    volumeMounts:
+      - mountPath: "/home/jenkins/agent"
+        name: "workspace-volume"
+
+  - name: jnlp
+    image: '<HARBOR_IP>:<PORT>/jenkins/inbound-agent:latest'
+    volumeMounts:
+      - mountPath: "/home/jenkins/agent"
+        name: "workspace-volume"
+
+  volumes:
+    - name: workspace-volume
+      emptyDir: {}
+"""
+        }
+    }
+
+    parameters {
+        string(
+            name: 'GIT_URL',
+            defaultValue: 'http://<GITLAB_IP>:<PORT>/<GROUP>/<REPO>.git',
+            description: 'OpenTofu 코드 저장소 URL'
+        )
+        string(
+            name: 'GIT_BRANCH',
+            defaultValue: 'main',
+            description: '브랜치'
+        )
+        string(
+            name: 'WORKING_DIR',
+            defaultValue: '.',
+            description: 'main.tf가 위치한 경로 (저장소 루트 기준 상대 경로)'
+        )
+        booleanParam(
+            name: 'DESTROY',
+            defaultValue: false,
+            description: '체크 시 tofu destroy 실행 (주의: 리소스 삭제됨)'
+        )
+        booleanParam(
+            name: 'AUTO_APPROVE',
+            defaultValue: false,
+            description: '체크 시 수동 승인 없이 apply/destroy 자동 실행'
+        )
+    }
+
+    environment {
+        GITLAB_CRED_ID = '<GITLAB_IP>:<PORT>'
+        TF_IN_AUTOMATION = 'true'
+        // Provider 인증 정보는 아래 stages의 withCredentials 주석 참조
+    }
+
+    stages {
+        stage('1. Checkout') {
+            steps {
+                container('tofu') {
+                    script {
+                        withCredentials([usernamePassword(
+                            credentialsId: env.GITLAB_CRED_ID,
+                            passwordVariable: 'GIT_PASS',
+                            usernameVariable: 'GIT_USER'
+                        )]) {
+                            def authUrl = params.GIT_URL.replaceFirst('://', "://${GIT_USER}:${GIT_PASS}@")
+                            sh "git clone -b ${params.GIT_BRANCH} ${authUrl} ."
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('2. tofu init') {
+            steps {
+                container('tofu') {
+                    sh """
+                        cd ${params.WORKING_DIR}
+                        tofu init -input=false
+                    """
+                }
+            }
+        }
+
+        stage('3. tofu plan') {
+            steps {
+                container('tofu') {
+                    script {
+                        // ----------------------------------------------------------------
+                        // [Provider별 인증 정보 설정]
+                        // 사용하는 Provider에 맞게 withCredentials 블록을 활성화하세요.
+                        // Jenkins Credentials에 등록 후 credentialsId를 맞춰야 합니다.
+                        //
+                        // [AWS]
+                        //   withCredentials([usernamePassword(
+                        //       credentialsId: 'aws-credentials',
+                        //       usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        //       passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                        //   )]) { ... }
+                        //
+                        // [OpenStack]
+                        //   withCredentials([usernamePassword(
+                        //       credentialsId: 'openstack-credentials',
+                        //       usernameVariable: 'OS_USERNAME',
+                        //       passwordVariable: 'OS_PASSWORD'
+                        //   )]) { ... }
+                        //   // OS_AUTH_URL 등 나머지는 main.tf provider 블록에 직접 설정
+                        //
+                        // [VMware vSphere]
+                        //   withCredentials([usernamePassword(
+                        //       credentialsId: 'vsphere-credentials',
+                        //       usernameVariable: 'VSPHERE_USER',
+                        //       passwordVariable: 'VSPHERE_PASSWORD'
+                        //   )]) { ... }
+                        // ----------------------------------------------------------------
+
+                        def planCmd = params.DESTROY ? 'tofu plan -destroy -out=tfplan' : 'tofu plan -out=tfplan'
+                        sh """
+                            cd ${params.WORKING_DIR}
+                            ${planCmd}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('4. 승인') {
+            when {
+                expression { !params.AUTO_APPROVE }
+            }
+            steps {
+                script {
+                    def action = params.DESTROY ? '⚠️  DESTROY (리소스 삭제)' : 'Apply'
+                    input message: "${action} 를 실행합니다. 계속하시겠습니까?", ok: '승인'
+                }
+            }
+        }
+
+        stage('5. tofu apply / destroy') {
+            steps {
+                container('tofu') {
+                    sh """
+                        cd ${params.WORKING_DIR}
+                        tofu apply -input=false tfplan
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            container('tofu') {
+                sh """
+                    cd ${params.WORKING_DIR}
+                    # plan 파일 정리 (credentials 노출 방지)
+                    rm -f tfplan
+                """
+            }
+        }
+        success {
+            echo "OpenTofu ${params.DESTROY ? 'destroy' : 'apply'} 완료 (Build #${env.BUILD_NUMBER})"
+        }
+        failure {
+            echo "실패. 위 로그에서 오류 내용을 확인하세요."
+        }
+    }
+}

@@ -1,0 +1,50 @@
+# NFS Subdir External Provisioner v4.0.18 Standard Values
+# ---------------------------------------------------------
+# [필독] NetApp NFS v4.1 최적화 및 다중 StorageClass 대응 설정
+# ---------------------------------------------------------
+
+replicaCount: 1
+
+image:
+  repository: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner
+  tag: v4.0.2
+  pullPolicy: IfNotPresent
+
+nfs:
+  # 중요: install.sh 실행 시 입력받은 값으로 자동 치환됩니다.
+  server: "<NFS_SERVER_IP>"
+  path: "<NFS_SHARE_PATH>"
+  mountOptions:
+    - vers=4.1
+    - proto=tcp
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - noresvport
+
+storageClass:
+  create: true
+  defaultClass: false
+  name: nfs-app
+  # 삭제 시 데이터 보존 여부 (true: 보존 및 디렉토리명 변경, false: 실제 삭제)
+  archiveOnDelete: true
+  reclaimPolicy: Delete
+  volumeBindingMode: Immediate
+  allowVolumeExpansion: true
+
+# 추가적인 StorageClass 생성이 필요한 경우 manifests/additional-sc.yaml 참고
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations:
+  - operator: Exists

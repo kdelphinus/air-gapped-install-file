@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- appprotect.f5.com_aplogconfs.yaml
+- appprotect.f5.com_appolicies.yaml
+- appprotect.f5.com_apusersigs.yaml
+- appprotectdos.f5.com_apdoslogconfs.yaml
+- appprotectdos.f5.com_apdospolicy.yaml
+- appprotectdos.f5.com_dosprotectedresources.yaml
+- externaldns.nginx.org_dnsendpoints.yaml
+- k8s.nginx.org_globalconfigurations.yaml
+- k8s.nginx.org_policies.yaml
+- k8s.nginx.org_transportservers.yaml
+- k8s.nginx.org_virtualserverroutes.yaml
+- k8s.nginx.org_virtualservers.yaml

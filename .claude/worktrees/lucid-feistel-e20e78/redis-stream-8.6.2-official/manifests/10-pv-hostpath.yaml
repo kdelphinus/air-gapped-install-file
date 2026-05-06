@@ -1,0 +1,83 @@
+# 10-pv-hostpath.yaml
+# install.sh 에서 sed 치환 후 적용한다:
+#   __NODE_NAME__  → 선택된 Kubernetes 노드 이름
+#   __BASE_PATH__  → 호스트 데이터 기본 경로 (예: /data/redis-official)
+#   __STORAGE_SIZE__ → PV 크기 (예: 10Gi)
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-official-node-0-pv
+spec:
+  capacity:
+    storage: __STORAGE_SIZE__
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: __BASE_PATH__/node-0
+    type: DirectoryOrCreate
+  claimRef:
+    name: redis-data-redis-node-0
+    namespace: redis-stream-official
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - __NODE_NAME__
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-official-node-1-pv
+spec:
+  capacity:
+    storage: __STORAGE_SIZE__
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: __BASE_PATH__/node-1
+    type: DirectoryOrCreate
+  claimRef:
+    name: redis-data-redis-node-1
+    namespace: redis-stream-official
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - __NODE_NAME__
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-official-node-2-pv
+spec:
+  capacity:
+    storage: __STORAGE_SIZE__
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: __BASE_PATH__/node-2
+    type: DirectoryOrCreate
+  claimRef:
+    name: redis-data-redis-node-2
+    namespace: redis-stream-official
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - __NODE_NAME__

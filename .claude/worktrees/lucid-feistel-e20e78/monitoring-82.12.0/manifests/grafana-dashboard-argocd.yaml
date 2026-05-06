@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-argocd
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  argocd.json: |
+    {
+      "title": "ArgoCD / Overview",
+      "uid": "argocd-overview",
+      "schemaVersion": 36,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1, "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "type": "stat", "title": "전체 Application",
+          "targets": [{ "expr": "count(argocd_app_info)", "legendFormat": "Apps" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+        },
+        {
+          "id": 2, "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "type": "stat", "title": "Synced",
+          "targets": [{ "expr": "count(argocd_app_info{sync_status=\"Synced\"})", "legendFormat": "Synced" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "color": { "fixedColor": "green", "mode": "fixed" } } }
+        },
+        {
+          "id": 3, "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+          "type": "stat", "title": "OutOfSync",
+          "targets": [{ "expr": "count(argocd_app_info{sync_status=\"OutOfSync\"}) or vector(0)", "legendFormat": "OutOfSync" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "color": { "fixedColor": "red", "mode": "fixed" } } }
+        },
+        {
+          "id": 4, "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+          "type": "stat", "title": "Healthy",
+          "targets": [{ "expr": "count(argocd_app_info{health_status=\"Healthy\"})", "legendFormat": "Healthy" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "color": { "fixedColor": "green", "mode": "fixed" } } }
+        },
+        {
+          "id": 5, "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+          "type": "stat", "title": "Degraded",
+          "targets": [{ "expr": "count(argocd_app_info{health_status=\"Degraded\"}) or vector(0)", "legendFormat": "Degraded" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "fieldConfig": { "defaults": { "color": { "fixedColor": "red", "mode": "fixed" } } }
+        },
+        {
+          "id": 6, "gridPos": { "x": 0, "y": 4, "w": 24, "h": 6 },
+          "type": "table", "title": "Application 상태 목록",
+          "targets": [{
+            "expr": "argocd_app_info",
+            "legendFormat": "",
+            "instant": true,
+            "format": "table"
+          }],
+          "transformations": [
+            { "id": "filterFieldsByName", "options": { "include": { "names": ["name", "namespace", "sync_status", "health_status", "dest_server", "repo"] } } }
+          ]
+        },
+        {
+          "id": 7, "gridPos": { "x": 0, "y": 10, "w": 12, "h": 7 },
+          "type": "timeseries", "title": "Sync 작업 횟수 (1m)",
+          "targets": [{ "expr": "sum(rate(argocd_app_sync_total[1m])) by (name, phase)", "legendFormat": "{{name}} ({{phase}})" }]
+        },
+        {
+          "id": 8, "gridPos": { "x": 12, "y": 10, "w": 12, "h": 7 },
+          "type": "timeseries", "title": "Reconciliation 큐 지연 (p99)",
+          "targets": [{ "expr": "histogram_quantile(0.99, sum(rate(argocd_app_reconcile_bucket[5m])) by (le))", "legendFormat": "p99" }],
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        }
+      ]
+    }

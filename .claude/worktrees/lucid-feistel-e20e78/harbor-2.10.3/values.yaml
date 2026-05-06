@@ -1,0 +1,106 @@
+# Harbor v2.10.3 — 에어갭 기본 설정
+#
+# [이미지 공급 방법]
+# 이미지는 ctr import 로 노드에 직접 로드합니다.
+# imagePullPolicy: IfNotPresent 로 containerd 캐시를 사용하므로
+# 각 컴포넌트의 image.repository 를 별도로 덮어쓰지 않아도 됩니다.
+#
+# [동적 설정] TLS, 관리자 비밀번호, 스토리지 경로, 노드명은
+# scripts/install.sh 상단 변수에서 설정합니다.
+
+# 이미지를 외부에서 당기지 않고 로컬 캐시 사용
+imagePullPolicy: IfNotPresent
+
+# NodePort 고정 (Harbor: 30002, HTTPS: 30003)
+expose:
+  type: nodePort
+  tls:
+    enabled: false
+  nodePort:
+    ports:
+      http:
+        nodePort: 30002
+      https:
+        nodePort: 30003
+
+# 폐쇄망: trivy 비활성화 (DB 업데이트 인터넷 필요)
+# [폐쇄망 Trivy DB 적용 방법]
+# 1. 외부망에서 oras pull ghcr.io/aquasecurity/trivy-db
+# 2. 폐쇄망 Harbor에 OCI artifact로 push
+# 3. enabled: true 전환 후 Harbor 재배포
+trivy:
+  enabled: true
+  skipUpdate: false
+  offlineScan: false
+
+# 내부 컴포넌트 간 TLS (auto-generated certificates)
+internalTLS:
+  enabled: true
+  strong_ssl_ciphers: true
+  certSource: "auto"
+
+# 컴포넌트별 리소스 제한
+nginx:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+core:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+registry:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+jobservice:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+portal:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+database:
+  internal:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+redis:
+  internal:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
