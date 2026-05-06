@@ -26,6 +26,8 @@ STORAGE_TYPE="${STORAGE_TYPE}"
 HOSTPATH_DIR="${HOSTPATH_DIR}"
 NFS_SERVER="${NFS_SERVER}"
 NFS_PATH="${NFS_PATH}"
+STORAGE_CLASS="${STORAGE_CLASS}"
+CONFIG_SIZE="${CONFIG_SIZE}"
 STORAGE_SIZE="${STORAGE_SIZE}"
 USE_NGINX="${USE_NGINX}"
 TARGET_NODE="${TARGET_NODE}"
@@ -57,6 +59,13 @@ _cleanup_resources() {
 
     kubectl delete pv gitlab-omnibus-data-pv gitlab-omnibus-config-pv --ignore-not-found=true 2>/dev/null || true
 
+    if [ "${STORAGE_TYPE}" = "dynamic" ]; then
+        kubectl delete pvc -n "$NAMESPACE" "${RELEASE_NAME}-data" "${RELEASE_NAME}-config" --ignore-not-found=true 2>/dev/null || true
+        if [[ "$delete_data" =~ ^[Yy]$ ]]; then
+            echo "  ℹ  동적 모드: 백엔드 볼륨 삭제 여부는 StorageClass의 reclaimPolicy를 따릅니다."
+        fi
+    fi
+
     echo "  - Namespace '$NAMESPACE' 삭제 중 (완전 삭제까지 대기)..."
     kubectl delete ns $NAMESPACE --ignore-not-found=true --wait=false 2>/dev/null || true
     kubectl wait --for=delete namespace/$NAMESPACE --timeout=120s 2>/dev/null || true
@@ -86,6 +95,7 @@ if [ "$EXIST_HELM" = "yes" ] || [ "$EXIST_K8S" = "yes" ] || [ "$EXIST_NS" = "yes
         echo "     스토리지     : ${STORAGE_TYPE:-미설정}"
         [ "${STORAGE_TYPE}" = "hostpath" ] && echo "     HostPath     : ${HOSTPATH_DIR}"
         [ "${STORAGE_TYPE}" = "nfs"      ] && echo "     NFS          : ${NFS_SERVER}:${NFS_PATH}"
+        [ "${STORAGE_TYPE}" = "dynamic"  ] && echo "     StorageClass : ${STORAGE_CLASS}"
         echo "     설치 버전    : ${INSTALLED_VERSION:-미설정}"
     fi
 
@@ -110,7 +120,7 @@ if [ "$EXIST_HELM" = "yes" ] || [ "$EXIST_K8S" = "yes" ] || [ "$EXIST_NS" = "yes
             _cleanup_resources "$DELETE_DATA"
             echo "✅ 삭제 완료. 설정을 다시 입력합니다."
             IMAGE_SOURCE="" HARBOR_REGISTRY="" HARBOR_PROJECT=""
-            STORAGE_TYPE="" HOSTPATH_DIR="" NFS_SERVER="" NFS_PATH="" STORAGE_SIZE=""
+            STORAGE_TYPE="" HOSTPATH_DIR="" NFS_SERVER="" NFS_PATH="" STORAGE_CLASS="" CONFIG_SIZE="" STORAGE_SIZE=""
             USE_NGINX="" TARGET_NODE=""
             ;;
         3)
@@ -119,7 +129,7 @@ if [ "$EXIST_HELM" = "yes" ] || [ "$EXIST_K8S" = "yes" ] || [ "$EXIST_NS" = "yes
             [ -f "$CONF_FILE" ] && rm -f "$CONF_FILE" && echo "  - install.conf 삭제됨"
             echo "✅ 초기화 완료. 설정을 처음부터 입력합니다."
             IMAGE_SOURCE="" HARBOR_REGISTRY="" HARBOR_PROJECT=""
-            STORAGE_TYPE="" HOSTPATH_DIR="" NFS_SERVER="" NFS_PATH="" STORAGE_SIZE=""
+            STORAGE_TYPE="" HOSTPATH_DIR="" NFS_SERVER="" NFS_PATH="" STORAGE_CLASS="" CONFIG_SIZE="" STORAGE_SIZE=""
             USE_NGINX="" TARGET_NODE=""
             ;;
         *)
@@ -134,7 +144,7 @@ if [ -z "${IMAGE_SOURCE}" ]; then
     echo ""
     echo "이미지 소스를 선택하세요:"
     echo "  1) Harbor 레지스트리 사용 (사전에 images/upload_images_to_harbor_v3-lite.sh 실행 필요)"
-    echo "  2) 로컬 tar 직접 import (이미 이미지가 로드된 경우 건너뜀)"
+    echo "  2) 로컬 tar import + 미적재 시 docker.io 직접 풀 (인터넷 연결 시)"
     read -p "선택 [1/2, 기본값: 1]: " _IMG_SRC
     _IMG_SRC="${_IMG_SRC:-1}"
     if [ "$_IMG_SRC" = "1" ]; then
@@ -164,24 +174,30 @@ elif [ "${IMAGE_SOURCE}" = "local" ] && [ "${DO_UPGRADE}" != "true" ]; then
         sudo ctr -n k8s.io images import "${tar_file}"
         IMPORT_COUNT=$((IMPORT_COUNT + 1))
     done
-    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
-    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    if [ "${IMPORT_COUNT}" -eq 0 ]; then
+        echo "  ℹ  ./images/ 에 tar 파일이 없습니다 — 인터넷 연결망이라면 docker.io에서 직접 풀합니다."
+    else
+        echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+    fi
 fi
 
 # ── 스토리지 타입 선택 ────────────────────────────────────
 if [ -z "${STORAGE_TYPE}" ]; then
     echo ""
     echo "스토리지 타입을 선택하세요:"
-    echo "  1) HostPath  — 로컬 노드 디렉토리 (단일 노드 환경 권장)"
-    echo "  2) NAS/NFS   — 네트워크 공유 스토리지"
-    read -p "선택 [1/2, 기본값: 1]: " _STOR
+    echo "  1) HostPath  — 로컬 노드 디렉토리 (단일 노드 환경 권장, 정적 PV)"
+    echo "  2) NAS/NFS   — 네트워크 공유 스토리지 (정적 PV)"
+    echo "  3) Dynamic   — StorageClass 기반 동적 프로비저닝 (Trident, NFS-CSI 등)"
+    read -p "선택 [1/2/3, 기본값: 1]: " _STOR
     _STOR="${_STOR:-1}"
     if [ "$_STOR" = "1" ]; then
         STORAGE_TYPE="hostpath"
     elif [ "$_STOR" = "2" ]; then
         STORAGE_TYPE="nfs"
+    elif [ "$_STOR" = "3" ]; then
+        STORAGE_TYPE="dynamic"
     else
-        echo "[오류] 1 또는 2를 선택하세요."; exit 1
+        echo "[오류] 1, 2, 또는 3을 선택하세요."; exit 1
     fi
 fi
 
@@ -206,6 +222,26 @@ elif [ "${STORAGE_TYPE}" = "nfs" ]; then
     if [ -z "${STORAGE_SIZE}" ]; then
         read -p "스토리지 용량 (기본값: 50Gi): " STORAGE_SIZE
         STORAGE_SIZE="${STORAGE_SIZE:-50Gi}"
+    fi
+elif [ "${STORAGE_TYPE}" = "dynamic" ]; then
+    if [ -z "${STORAGE_CLASS}" ]; then
+        echo ""
+        echo "현재 클러스터의 StorageClass 목록:"
+        kubectl get sc 2>/dev/null || echo "  (StorageClass 조회 실패 — kubectl 설정을 확인하세요)"
+        echo ""
+        read -p "사용할 StorageClass 이름 (예: trident-csi, nfs-csi): " STORAGE_CLASS
+        [ -z "${STORAGE_CLASS}" ] && echo "[오류] StorageClass 이름이 필요합니다." && exit 1
+    fi
+    if ! kubectl get sc "${STORAGE_CLASS}" > /dev/null 2>&1; then
+        echo "[오류] StorageClass '${STORAGE_CLASS}'를 찾을 수 없습니다."; exit 1
+    fi
+    if [ -z "${STORAGE_SIZE}" ]; then
+        read -p "데이터 볼륨 용량 (기본값: 50Gi): " STORAGE_SIZE
+        STORAGE_SIZE="${STORAGE_SIZE:-50Gi}"
+    fi
+    if [ -z "${CONFIG_SIZE}" ]; then
+        read -p "Config 볼륨 용량 (기본값: 1Gi): " CONFIG_SIZE
+        CONFIG_SIZE="${CONFIG_SIZE:-1Gi}"
     fi
 fi
 
@@ -247,7 +283,9 @@ if [ "${IMAGE_SOURCE}" = "harbor" ]; then
     IMAGE_REGISTRY="${HARBOR_REGISTRY}"
     IMAGE_REPOSITORY="${HARBOR_PROJECT}/gitlab-ce"
 else
-    IMAGE_REGISTRY=""
+    # 로컬 모드: 사전 import된 이미지가 있으면 IfNotPresent로 그대로 사용,
+    # 없으면 공식 업스트림(docker.io)에서 풀 (인터넷 연결망 시나리오)
+    IMAGE_REGISTRY="docker.io"
     IMAGE_REPOSITORY="gitlab/gitlab-ce"
 fi
 
@@ -255,7 +293,10 @@ fi
 echo ""
 echo "🔧 PV 매니페스트 생성 중..."
 
-if [ "${STORAGE_TYPE}" = "nfs" ]; then
+if [ "${STORAGE_TYPE}" = "dynamic" ]; then
+    echo "  ⏭  동적 프로비저닝 모드 — 정적 PV 매니페스트는 생성하지 않습니다."
+    rm -f "$PV_FILE" 2>/dev/null || true
+elif [ "${STORAGE_TYPE}" = "nfs" ]; then
     cat > "$PV_FILE" <<EOF
 apiVersion: v1
 kind: PersistentVolume
@@ -314,13 +355,29 @@ if [ "${DO_UPGRADE}" != "true" ]; then
     echo "🚀 Namespace 생성 중..."
     kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-    echo "📄 PV 생성 중..."
-    kubectl apply -f "$PV_FILE"
+    if [ "${STORAGE_TYPE}" != "dynamic" ]; then
+        echo "📄 PV 생성 중..."
+        kubectl apply -f "$PV_FILE"
+    fi
 
     if [[ "${USE_NGINX}" == "n" || "${USE_NGINX}" == "N" ]]; then
         echo "📄 HTTPRoute 적용 중..."
         kubectl apply -f "$HTTPROUTE_FILE"
     fi
+fi
+
+HELM_STORAGE_ARGS=( --set storage.data.size="${STORAGE_SIZE}" )
+if [ "${STORAGE_TYPE}" = "dynamic" ]; then
+    HELM_STORAGE_ARGS+=(
+        --set storage.data.storageClass="${STORAGE_CLASS}"
+        --set storage.config.storageClass="${STORAGE_CLASS}"
+        --set storage.config.size="${CONFIG_SIZE:-1Gi}"
+    )
+else
+    HELM_STORAGE_ARGS+=(
+        --set storage.data.storageClass=manual
+        --set storage.config.storageClass=manual
+    )
 fi
 
 echo "🚀 Helm upgrade --install 실행 중..."
@@ -329,7 +386,7 @@ helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     -f "$VALUES_FILE" \
     --set image.registry="${IMAGE_REGISTRY}" \
     --set image.repository="${IMAGE_REPOSITORY}" \
-    --set storage.data.size="${STORAGE_SIZE}" \
+    "${HELM_STORAGE_ARGS[@]}" \
     --wait \
     --timeout 600s \
     $NODE_SELECTOR_ARG
