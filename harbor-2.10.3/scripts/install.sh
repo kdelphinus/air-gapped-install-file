@@ -263,11 +263,21 @@ else
     STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
 fi
 
-read -p "전체 저장 공간의 크기를 입력하세요 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
+read -p "Registry 이미지 저장소 크기 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
 STORAGE_SIZE="${USER_STORAGE_SIZE:-$STORAGE_SIZE}"
 
 if [[ "$STORAGE_CHOICE" == "3" ]]; then
-    # --- NFS Dynamic ---
+    # --- NFS Dynamic: 컴포넌트별 PVC 크기 (subPath 분리되므로 각각 입력) ---
+    : "${DATABASE_SIZE:=5Gi}"
+    : "${REDIS_SIZE:=1Gi}"
+    : "${JOBLOG_SIZE:=1Gi}"
+    : "${TRIVY_SIZE:=5Gi}"
+    read -p "Database PVC 크기      [${DATABASE_SIZE}]: " _IN; DATABASE_SIZE="${_IN:-$DATABASE_SIZE}"
+    read -p "Redis PVC 크기         [${REDIS_SIZE}]: "    _IN; REDIS_SIZE="${_IN:-$REDIS_SIZE}"
+    read -p "JobService 로그 크기   [${JOBLOG_SIZE}]: "   _IN; JOBLOG_SIZE="${_IN:-$JOBLOG_SIZE}"
+    read -p "Trivy 데이터 크기      [${TRIVY_SIZE}]: "    _IN; TRIVY_SIZE="${_IN:-$TRIVY_SIZE}"
+    unset _IN
+    echo "  ⚠  주의: database·redis는 StatefulSet volumeClaimTemplates 기반 — 최초 생성 후 size 변경 불가"
     echo ""
     echo "현재 클러스터의 StorageClass 목록:"
     kubectl get sc 2>/dev/null || echo "  (StorageClass 조회 실패 — kubectl 설정을 확인하세요)"
@@ -407,19 +417,23 @@ persistence:
       existingClaim: ""
       storageClass: "${STORAGE_CLASS}"
       subPath: database
+      size: ${DATABASE_SIZE}
     jobservice:
       jobLog:
         existingClaim: ""
         storageClass: "${STORAGE_CLASS}"
         subPath: jobservice-logs
+        size: ${JOBLOG_SIZE}
     redis:
       existingClaim: ""
       storageClass: "${STORAGE_CLASS}"
       subPath: redis
+      size: ${REDIS_SIZE}
     trivy:
       existingClaim: ""
       storageClass: "${STORAGE_CLASS}"
       subPath: trivy
+      size: ${TRIVY_SIZE}
 EOF
 )
 else
