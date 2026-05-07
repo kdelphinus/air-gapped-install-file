@@ -8,7 +8,7 @@ metadata:
   name: argocd-redis-pv
 spec:
   capacity:
-    storage: 10Gi
+    storage: <REDIS_SIZE>
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
@@ -27,7 +27,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      storage: <REDIS_SIZE>
   volumeName: argocd-redis-pv
   storageClassName: "" # Static binding
 
@@ -38,7 +38,7 @@ metadata:
   name: argocd-repo-pv
 spec:
   capacity:
-    storage: 20Gi
+    storage: <REPO_SIZE>
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
@@ -57,6 +57,6 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 20Gi
+      storage: <REPO_SIZE>
   volumeName: argocd-repo-pv
   storageClassName: "" # Static binding

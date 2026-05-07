@@ -73,7 +73,7 @@ case "${STORAGE_CHOICE}" in
         echo ""
         read -p "  사용할 StorageClass 이름 [기본: nfs-client]: " STORAGE_CLASS
         STORAGE_CLASS="${STORAGE_CLASS:-nfs-client}"
-        
+
         if ! kubectl get sc "${STORAGE_CLASS}" > /dev/null 2>&1; then
             echo "[오류] StorageClass '${STORAGE_CLASS}'를 찾을 수 없습니다."; exit 1
         fi
@@ -84,6 +84,17 @@ case "${STORAGE_CHOICE}" in
     *)
         echo "[오류] 올바른 옵션을 선택하세요."; exit 1 ;;
 esac
+
+# ── 볼륨 크기 입력 (정적/동적 PVC 모두 적용) ──────────────
+if [ "$STORAGE_TYPE" = "nas" ] || [ "$STORAGE_TYPE" = "nfs-dynamic" ]; then
+    : "${REDIS_SIZE:=10Gi}"
+    : "${REPO_SIZE:=20Gi}"
+    read -p "  Redis 캐시 볼륨 크기 [기본: ${REDIS_SIZE}]: " _IN
+    REDIS_SIZE="${_IN:-$REDIS_SIZE}"
+    read -p "  Repo 캐시 볼륨 크기  [기본: ${REPO_SIZE}]: " _IN
+    REPO_SIZE="${_IN:-$REPO_SIZE}"
+    unset _IN
+fi
 
 # Networking
 NODEPORT="30001"
@@ -123,6 +134,9 @@ echo "==========================================="
 echo " Image Source: ${IMAGE_SOURCE} (Harbor: ${HARBOR_REGISTRY}/${HARBOR_PROJECT})"
 echo " Storage: ${STORAGE_TYPE}"
 [ "$STORAGE_TYPE" = "nfs-dynamic" ] && echo " StorageClass: ${STORAGE_CLASS}"
+if [ "$STORAGE_TYPE" = "nas" ] || [ "$STORAGE_TYPE" = "nfs-dynamic" ]; then
+    echo " Volume Size: redis=${REDIS_SIZE}, repo=${REPO_SIZE}"
+fi
 echo "==========================================="
 
 # Create namespace if it doesn't exist
@@ -136,6 +150,8 @@ if [ "$STORAGE_TYPE" = "nas" ]; then
         -e "s|192.168.1.100|${NAS_SERVER}|g" \
         -e "s|/nas/argocd/redis|${NAS_REDIS_PATH}|g" \
         -e "s|/nas/argocd/repo|${NAS_REPO_PATH}|g" \
+        -e "s|<REDIS_SIZE>|${REDIS_SIZE}|g" \
+        -e "s|<REPO_SIZE>|${REPO_SIZE}|g" \
         "$NAS_PV_FILE" | kubectl apply -f -
 elif [ "$STORAGE_TYPE" = "nfs-dynamic" ]; then
     echo ""
@@ -151,7 +167,7 @@ spec:
   storageClassName: "${STORAGE_CLASS}"
   resources:
     requests:
-      storage: 10Gi
+      storage: ${REDIS_SIZE}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -163,7 +179,7 @@ spec:
   storageClassName: "${STORAGE_CLASS}"
   resources:
     requests:
-      storage: 20Gi
+      storage: ${REPO_SIZE}
 EOF
 fi
 
