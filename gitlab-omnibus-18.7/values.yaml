@@ -9,6 +9,7 @@ image:
   pullPolicy: IfNotPresent
 
 externalUrl: http://gitlab.devops.internal
+httpNodePort: 32135
 sshPort: 30022
 timezone: Asia/Seoul
 
@@ -25,9 +26,9 @@ storage:
 resources:
   requests:
     cpu: 500m
-    memory: 2Gi
+    memory: 4Gi
   limits:
     cpu: 4
-    memory: 6Gi
+    memory: 10Gi
 
 nodeSelector: {}

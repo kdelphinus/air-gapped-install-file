@@ -373,6 +373,41 @@ echo "========================================================"
 echo "🚀 GitLab Omnibus ${DO_UPGRADE:+업그레이드}${DO_UPGRADE:-설치} 시작"
 echo "========================================================"
 
+# IP/도메인 형식에 따른 URL 처리 (중복 http:// 방지)
+if [[ "$DOMAIN_NAME" == http* ]]; then
+    FINAL_URL="$DOMAIN_NAME"
+else
+    FINAL_URL="http://$DOMAIN_NAME"
+fi
+
+# IP 주소인 경우 HTTPRoute에서 hostnames를 제거하기 위한 처리
+IS_IP=false
+if [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    IS_IP=true
+fi
+
+# values.yaml 파일 업데이트 (Single Source of Truth 준수)
+sed -i "s|registry:.*|registry: ${IMAGE_REGISTRY}|" "$VALUES_FILE"
+sed -i "s|repository:.*|repository: ${IMAGE_REPOSITORY}|" "$VALUES_FILE"
+sed -i "s|externalUrl:.*|externalUrl: ${FINAL_URL}|" "$VALUES_FILE"
+
+# 도메인명에서 포트 추출 및 values.yaml 반영 (IP:Port 형식일 경우)
+EXTRACTED_PORT=$(echo $DOMAIN_NAME | grep -oP '(?<=:)[0-9]+' || echo "")
+if [ -n "$EXTRACTED_PORT" ]; then
+    sed -i "s|httpNodePort:.*|httpNodePort: ${EXTRACTED_PORT}|" "$VALUES_FILE"
+fi
+
+# 스토리지 설정 values.yaml 반영
+sed -i "/data:/,/size:/s|size:.*|size: ${STORAGE_SIZE}|" "$VALUES_FILE"
+if [ "${STORAGE_TYPE}" = "dynamic" ]; then
+    sed -i "/data:/,/storageClass:/s|storageClass:.*|storageClass: ${STORAGE_CLASS}|" "$VALUES_FILE"
+    sed -i "/config:/,/storageClass:/s|storageClass:.*|storageClass: ${STORAGE_CLASS}|" "$VALUES_FILE"
+    sed -i "/config:/,/size:/s|size:.*|size: ${CONFIG_SIZE:-1Gi}|" "$VALUES_FILE"
+else
+    sed -i "/data:/,/storageClass:/s|storageClass:.*|storageClass: manual|" "$VALUES_FILE"
+    sed -i "/config:/,/storageClass:/s|storageClass:.*|storageClass: manual|" "$VALUES_FILE"
+fi
+
 if [ "${DO_UPGRADE}" != "true" ]; then
     echo "🚀 Namespace 생성 중..."
     kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
@@ -384,32 +419,18 @@ if [ "${DO_UPGRADE}" != "true" ]; then
 
     if [[ "${USE_NGINX}" == "n" || "${USE_NGINX}" == "N" ]]; then
         echo "📄 HTTPRoute 적용 중..."
+        # IP 주소인 경우 hostnames 필드를 삭제한 임시 매니페스트 생성 (Catch-all 모드)
+        if [ "$IS_IP" = true ]; then
+            sed -i '/hostnames:/d;/- <DOMAIN_NAME>/d' "$HTTPROUTE_FILE"
+        fi
         kubectl apply -f "$HTTPROUTE_FILE"
     fi
-fi
-
-HELM_STORAGE_ARGS=( --set storage.data.size="${STORAGE_SIZE}" )
-if [ "${STORAGE_TYPE}" = "dynamic" ]; then
-    HELM_STORAGE_ARGS+=(
-        --set storage.data.storageClass="${STORAGE_CLASS}"
-        --set storage.config.storageClass="${STORAGE_CLASS}"
-        --set storage.config.size="${CONFIG_SIZE:-1Gi}"
-    )
-else
-    HELM_STORAGE_ARGS+=(
-        --set storage.data.storageClass=manual
-        --set storage.config.storageClass=manual
-    )
 fi
 
 echo "🚀 Helm upgrade --install 실행 중..."
 helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
     --namespace $NAMESPACE \
     -f "$VALUES_FILE" \
-    --set image.registry="${IMAGE_REGISTRY}" \
-    --set image.repository="${IMAGE_REPOSITORY}" \
-    --set externalUrl="http://${DOMAIN_NAME}" \
-    "${HELM_STORAGE_ARGS[@]}" \
     --wait \
     --timeout 600s \
     $NODE_SELECTOR_ARG
@@ -420,7 +441,7 @@ echo ""
 echo "==========================================="
 echo " ✅ GitLab Omnibus ${GITLAB_VERSION} 설치/업그레이드 완료"
 echo "==========================================="
-echo " GitLab URL  : http://${DOMAIN_NAME}"
+echo " GitLab URL  : ${FINAL_URL}"
 echo " SSH         : ssh://git@<NODE_IP>:${sshPort:-30022}"
 echo " 설정 파일   : ${CONF_FILE}"
 echo "==========================================="
