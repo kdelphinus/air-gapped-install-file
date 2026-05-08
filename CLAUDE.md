@@ -88,6 +88,14 @@ air-gapped/
 - Cgroup driver: `systemd`
 - Helm: v3.20.2
 
+## Downstream: infra-cheatsheets
+
+이 레포의 마크다운 가이드(`*-install-guide.md`, `*-guide.md`, `INFRA_STANDARD_GUIDE.md` 등)는 다운스트림 MkDocs 사이트 `/home/mjko/infra-cheatsheets/`로 정기적으로 sync됨. 가이드 본문을 손볼 때는 다운스트림 반영이 필요할 수 있음을 인지할 것.
+
+- **소스 오브 트루스**: 항상 air-gapped 우선. infra-cheatsheets는 미러.
+- **Sync 트리거**: 두 레포의 `git log -1 --format="%ci" -- <file>` 비교로 STALE / MISSING / SYNCED 분류 후 staging.
+- **상세 절차**: `infra-cheatsheets/CLAUDE.md`의 `Upstream: air-gapped` 섹션 참조.
+
 ## AI Instructions
 
 - 인터넷 접근 불가 환경 — `curl`, `wget`, `yum install` 등으로 외부에서 받는 코드 생성 금지
