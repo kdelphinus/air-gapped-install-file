@@ -182,10 +182,26 @@ sed -i "s|enabled: .*|enabled: $TLS_ENABLED|g" ./values-infra.yaml
 sed -i "s|http: [0-9]*|http: $NODE_HTTP_PORT|g" ./values-infra.yaml
 sed -i "s|https: [0-9]*|https: $NODE_HTTPS_PORT|g" ./values-infra.yaml
 
+# 1. proxyProtocol 강제 변경 로직 삭제 (사용자 values-infra.yaml 존중)
+# if [ "$SVC_TYPE" == "NodePort" ]; then
+#     sed -i "s|proxyProtocol: .*|proxyProtocol: true|g" ./values-infra.yaml
+# else
+#     sed -i "s|proxyProtocol: .*|proxyProtocol: false|g" ./values-infra.yaml
+# fi
+
+# 2. NodePort 환경에서 proxyProtocol이 false일 경우 경고 메시지 출력
 if [ "$SVC_TYPE" == "NodePort" ]; then
-    sed -i "s|proxyProtocol: .*|proxyProtocol: true|g" ./values-infra.yaml
-else
-    sed -i "s|proxyProtocol: .*|proxyProtocol: false|g" ./values-infra.yaml
+    # values-infra.yaml에서 현재 설정값을 읽어옴
+    PROXY_PROTO_SETTING=$(grep -E '^\s*proxyProtocol:' ./values-infra.yaml | awk '{print $2}')
+    if [ "$PROXY_PROTO_SETTING" == "false" ]; then
+        echo ""
+        echo "⚠️  [경고] NodePort 서비스 타입을 사용 중이나, PROXY Protocol이 비활성화(false) 되어 있습니다."
+        echo "     이 설정으로는 클라이언트의 실제 IP(Real IP)를 보존할 수 없으며,"
+        echo "     Envoy에는 로드밸런서(또는 Node)의 IP만 기록됩니다."
+        echo "     운영 환경 적용 전, 네트워크 담당자와 협의하여 가급적 활성화(true)하는 것을 권장합니다."
+        echo "     활성화 방법: values-infra.yaml에서 proxyProtocol: true 로 변경"
+        echo ""
+    fi
 fi
 
 if [ -n "$TARGET_NODE" ]; then
