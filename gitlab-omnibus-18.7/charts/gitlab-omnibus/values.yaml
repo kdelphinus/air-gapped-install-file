@@ -8,6 +8,9 @@ externalUrl: http://gitlab.devops.internal
 sshPort: 30022
 timezone: Asia/Seoul
 
+terraformState:
+  enabled: true
+
 storage:
   data:
     size: 50Gi
@@ -19,9 +22,9 @@ storage:
 resources:
   requests:
     cpu: 500m
-    memory: 2Gi
+    memory: 6Gi
   limits:
     cpu: 4
-    memory: 6Gi
+    memory: 16Gi
 
 nodeSelector: {}

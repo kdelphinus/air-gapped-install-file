@@ -33,3 +33,6 @@ data:
     # 로그: stdout (kubectl logs로 확인 가능)
     logging['svlogd_size'] = 200 * 1024 * 1024
     logging['svlogd_num'] = 2
+
+    # Terraform State (HTTP backend)
+    gitlab_rails['terraform_state_enabled'] = {{ .Values.terraformState.enabled }}

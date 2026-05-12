@@ -55,3 +55,47 @@ kubectl exec -n gitlab-omnibus deploy/gitlab-omnibus -- cat /etc/gitlab/initial_
 ### 4.2. 서비스 접속
 설정한 `externalUrl` 주소로 브라우저에서 접속합니다.
 - 예: `http://10.185.40.41:32135`
+
+## 5. Terraform State 사용 (HTTP backend)
+
+GitLab Managed Terraform State는 본 차트에서 기본 활성화되어 있습니다
+(`terraformState.enabled: true` → `gitlab_rails['terraform_state_enabled'] = true`).
+저장 위치는 `data` PVC 내부의 `/var/opt/gitlab/gitlab-rails/shared/terraform_state` —
+별도 오브젝트 스토리지 없이 폐쇄망 단일 파드에서 그대로 사용 가능합니다.
+
+### 5.1. 사용 예시
+
+`backend.tf`:
+
+```hcl
+terraform {
+  backend "http" {
+    address        = "http://gitlab.devops.internal/api/v4/projects/<PROJECT_ID>/terraform/state/<STATE_NAME>"
+    lock_address   = "http://gitlab.devops.internal/api/v4/projects/<PROJECT_ID>/terraform/state/<STATE_NAME>/lock"
+    unlock_address = "http://gitlab.devops.internal/api/v4/projects/<PROJECT_ID>/terraform/state/<STATE_NAME>/lock"
+    lock_method    = "POST"
+    unlock_method  = "DELETE"
+    retry_wait_min = 5
+  }
+}
+```
+
+초기화:
+
+```bash
+terraform init \
+  -backend-config="username=<GITLAB_USERNAME>" \
+  -backend-config="password=<PERSONAL_ACCESS_TOKEN>"
+```
+
+- Personal Access Token 권한: `api` scope 필요
+- State 목록 확인: GitLab UI → Project → **Operate → Terraform states**
+
+### 5.2. 비활성화 방법
+
+비활성화가 필요한 경우 `values.yaml`에서 다음과 같이 변경 후 `helm upgrade`:
+
+```yaml
+terraformState:
+  enabled: false
+```

@@ -13,6 +13,11 @@ httpNodePort: 32135
 sshPort: 30022
 timezone: Asia/Seoul
 
+# ── Terraform State (HTTP backend) ─────────────────────────
+# GitLab Managed Terraform State 기본 활성. data PVC 내부에 저장됨.
+terraformState:
+  enabled: true
+
 storage:
   data:
     size: 50Gi
@@ -26,9 +31,9 @@ storage:
 resources:
   requests:
     cpu: 500m
-    memory: 4Gi
+    memory: 6Gi
   limits:
     cpu: 4
-    memory: 10Gi
+    memory: 16Gi
 
 nodeSelector: {}
