@@ -1,0 +1,2 @@
+# NetApp Trident 25.06.3 Default Values
+kubeletDir: "/var/lib/kubelet"
