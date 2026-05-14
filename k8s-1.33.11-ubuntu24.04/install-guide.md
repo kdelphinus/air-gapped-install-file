@@ -329,7 +329,11 @@ sudo ctr -n k8s.io images list | grep kube-apiserver
 
 WSL2 / 단일 구성은 이 단계를 건너뜁니다.
 
-HA 구성을 위해 로드밸런서가 필요합니다. 환경에 따라 아래 두 가지 방식 중 하나를 선택합니다.
+HA 구성을 위해 K8s API Server(6443) 앞단에 로드밸런서가 필요합니다. 환경에 따라 아래 세 가지 방식 중 하나를 선택합니다.
+
+- **옵션 A**: 물리 로드밸런서 (Physical LB) — 기업용 L4/L7 스위치, 클라우드 LB
+- **옵션 B**: 소프트웨어 VIP — `keepalived` + `haproxy` 기반
+- **옵션 C**: Localhost LB — VIP를 사용할 수 없는 환경
 
 > **[사전 결정] VIP 주소를 인증서에 직접 설정할지, FQDN으로 추상화할지 먼저 결정하세요.**
 >
@@ -340,19 +344,66 @@ HA 구성을 위해 로드밸런서가 필요합니다. 환경에 따라 아래 
 > | --- | --- | --- |
 > | **FQDN** (`k8s-api.internal`) ← **권장** | VIP 변경 시 `/etc/hosts`만 수정, 인증서 재발급 불필요 | `/etc/hosts` 관리 필요 |
 > | IP 직접 사용 | 설정 단순 | VIP 변경 시 인증서 재발급 필수 |
->
-> FQDN 방식을 선택하면 **5-A-1**에서 바로 `/etc/hosts` 등록을 먼저 수행합니다.
-> IP 직접 사용 방식이면 5-A-1을 건너뛰고 5-A-2부터 시작합니다.
 
-### 옵션 A: VIP 방식 (표준, 권장)
+### 옵션 A: 물리 로드밸런서 (Physical LB) 방식 (권장)
 
+기업용 L4/L7 스위치나 클라우드 제공업체의 로드밸런서를 사용하는 경우입니다.
+별도의 패키지 설치 없이 노드 OS 설정만으로 구성하므로 오프라인 환경에 가장 적합합니다.
+
+#### 5-A-1. 물리 LB 동작 모드 확인 (관리자 확인 필수)
+
+물리 LB가 트래픽을 백엔드 노드로 전달할 때의 방식을 먼저 확인해야 합니다.
+
+1. **DNAT (NAT) 방식**: LB가 패킷의 목적지 IP를 VIP에서 노드 IP로 변환하여 전달합니다. 별도의 노드 설정이 필요 없습니다.
+2. **DSR (Direct Server Return) 또는 Transparent 방식**: LB가 목적지 IP를 VIP 그대로 둔 채 MAC 주소만 바꿔서 전달합니다. 이 경우 **5-A-3 단계의 루프백 설정이 필수**입니다.
+
+#### 5-A-2. FQDN 등록 및 Hairpin NAT 방지 (전체 노드)
+
+마스터 노드들이 자기 자신을 호출할 때 외부 LB를 거쳐 나갔다 들어오는 현상(Hairpin)을 방지하기 위해 노드별로 `/etc/hosts`를 다르게 설정합니다.
+
+- **마스터 노드 (1, 2, 3)**: `k8s-api.internal`을 **자기 자신의 실제 IP**로 매핑합니다.
+
+    ```bash
+    # 예: Master-1 (39번 IP) 에서 실행 시
+    echo "192.168.1.39  k8s-api.internal" | sudo tee -a /etc/hosts
+    ```
+
+- **워커 노드 및 외부 클라이언트**: `k8s-api.internal`을 **물리 LB VIP**로 매핑합니다.
+
+    ```bash
+    echo "<물리_LB_VIP>  k8s-api.internal" | sudo tee -a /etc/hosts
+    ```
+
+#### 5-A-3. (DSR/Transparent 모드인 경우만) VIP 루프백 설정
+
+물리 LB가 목적지 IP를 VIP로 유지하여 패킷을 던질 때, 커널이 이를 "내 것"으로 인식하게 하기 위해 루프백(`lo`)에 VIP를 할당하고 ARP 응답을 끕니다.
+
+```bash
+# 전체 마스터 노드 실행
+# 1. 루프백에 VIP 할당
+sudo ip addr add <물리_LB_VIP>/32 dev lo
+
+# 2. ARP 응답 방지 (물리 LB와 IP 충돌 방지)
+cat <<EOF | sudo tee /etc/sysctl.d/k8s-dsr.conf
+net.ipv4.conf.all.arp_ignore = 1
+net.ipv4.conf.all.arp_announce = 2
+net.ipv4.conf.lo.arp_ignore = 1
+net.ipv4.conf.lo.arp_announce = 2
+EOF
+sudo sysctl --system
+```
+
+---
+
+### 옵션 B: 소프트웨어 VIP 방식 (keepalived + haproxy)
+
+별도의 물리 장비 없이 마스터 노드 3대에 `keepalived`와 `haproxy`를 설치하여 HA를 구현하는 방식입니다.
 Master 3대와 가상 IP(VIP) 환경을 가정합니다.
-VIP를 K8s API Server(6443) 앞단에 두어 마스터 노드 장애 시에도 API 통신이 끊기지 않게 합니다.
 
 > Ubuntu 24.04에서는 `haproxy` / `keepalived` DEB를 `k8s/debs/`에 포함시켜 두었어야 합니다.
 > `scripts/download.sh`가 `apt-get download haproxy keepalived` + 의존성을 함께 수집합니다.
 
-#### 5-A-1. (FQDN 방식 선택 시) FQDN 등록 (전체 노드)
+#### 5-B-1. (FQDN 방식 선택 시) FQDN 등록 (전체 노드)
 
 VIP IP를 직접 사용하는 대신 내부 FQDN(`k8s-api.internal`)으로 추상화합니다.
 나중에 VIP가 변경되어도 **인증서 재발급 없이** DNS 서버 혹은 `/etc/hosts`만 수정하면 됩니다.
@@ -373,7 +424,7 @@ echo "<VIP>  k8s-api.internal" | sudo tee -a /etc/hosts
 > HAProxy의 `bind`는 안정성을 위해 VIP IP(`<VIP>:6443`)를 그대로 사용합니다.
 > FQDN은 kubeconfig의 server 주소와 인증서 SAN에만 적용됩니다.
 
-#### 5-A-2. 커널 파라미터 설정 (전체 마스터 노드)
+#### 5-B-2. 커널 파라미터 설정 (전체 마스터 노드)
 
 VIP가 자신의 인터페이스에 없어도 바인딩할 수 있도록 설정합니다.
 
@@ -385,7 +436,7 @@ EOF
 sudo sysctl --system
 ```
 
-#### 5-A-3. HAProxy 설정 (전체 마스터 노드)
+#### 5-B-3. HAProxy 설정 (전체 마스터 노드)
 
 ```bash
 sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
@@ -426,7 +477,7 @@ EOF
 > 기본 활성화되어 있으며 위 설정은 기본 허용 범위 내입니다. 외부 소켓이나
 > 비표준 경로를 쓰는 경우 `sudo aa-complain /usr/sbin/haproxy` 로 임시 우회.
 
-#### 5-A-4. Keepalived 설정 (전체 마스터 노드)
+#### 5-B-4. Keepalived 설정 (전체 마스터 노드)
 
 각 마스터 노드별로 `state`, `priority`, `interface` 값을 다르게 설정합니다.
 
@@ -481,7 +532,7 @@ EOF
 > DEB(`psmisc_*.deb`)를 `k8s/debs/`에 포함시킵니다. 대안으로 `pgrep -x haproxy` 를
 > `script` 값으로 사용할 수 있습니다.
 
-#### 5-A-5. 서비스 시작 및 VIP 확인
+#### 5-B-5. 서비스 시작 및 VIP 확인
 
 ```bash
 sudo systemctl enable --now haproxy
@@ -493,7 +544,7 @@ ip addr show | grep <VIP>
 
 ---
 
-### 옵션 B: Localhost LB 방식 (VIP 사용 불가 환경)
+### 옵션 C: Localhost LB 방식 (VIP 사용 불가 환경)
 
 VIP를 사용할 수 없는 환경에서 각 노드에 HAProxy를 띄워 Loopback(`127.0.0.1:8443`)으로 통신합니다.
 **전체 마스터 및 워커 노드에 동일하게 설정합니다.**
@@ -650,7 +701,7 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ss -tlnp | grep 8443
 ```
 
-### 옵션 C: 단일 구성
+### 옵션 D: 단일 구성
 
 ```bash
 # Calico 선택 시
