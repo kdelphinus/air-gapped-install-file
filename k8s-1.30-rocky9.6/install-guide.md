@@ -177,14 +177,14 @@ HA 구성을 위해 로드밸런서가 필요합니다. 환경에 따라 아래 
 
 기업용 L4/L7 스위치나 클라우드 제공업체의 로드밸런서를 사용하는 경우입니다.
 
-#### 5-A-1. 물리 LB 동작 모드 확인 (관리자 확인 필수)
+#### 5-B-1. 물리 LB 동작 모드 확인 (관리자 확인 필수)
 
 물리 LB가 트래픽을 백엔드 노드로 전달할 때의 방식을 먼저 확인해야 합니다.
 
 1.  **DNAT (NAT) 방식**: LB가 패킷의 목적지 IP를 VIP에서 노드 IP로 변환하여 전달합니다. 별도의 노드 설정이 필요 없습니다.
 2.  **DSR (Direct Server Return) 또는 Transparent 방식**: LB가 목적지 IP를 VIP 그대로 둔 채 MAC 주소만 바꿔서 전달합니다. 이 경우 **5-A-3 단계의 루프백 설정이 필수**입니다.
 
-#### 5-A-2. FQDN 등록 및 Hairpin NAT 방지 (전체 노드)
+#### 5-B-2. FQDN 등록 및 Hairpin NAT 방지 (전체 노드)
 
 마스터 노드들이 자기 자신을 호출할 때 외부 LB를 거쳐 나갔다 들어오는 현상(Hairpin)을 방지하기 위해 노드별로 `/etc/hosts`를 다르게 설정합니다.
 
@@ -198,7 +198,7 @@ HA 구성을 위해 로드밸런서가 필요합니다. 환경에 따라 아래 
     echo "<물리_LB_VIP>  k8s-api.internal" | sudo tee -a /etc/hosts
     ```
 
-#### 5-A-3. (DSR/Transparent 모드인 경우만) VIP 루프백 설정
+#### 5-B-3. (DSR/Transparent 모드인 경우만) VIP 루프백 설정
 
 물리 LB가 목적지 IP를 VIP로 유지하여 패킷을 던질 때, 커널이 이를 "내 것"으로 인식하게 하기 위해 루프백(`lo`)에 VIP를 할당하고 ARP 응답을 끕니다.
 
@@ -487,7 +487,7 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ss -tlnp | grep 8443
 ```
 
-### 옵션 C: 단일 구성
+### 옵션 D: 단일 구성
 
 ```bash
 sudo kubeadm init \
