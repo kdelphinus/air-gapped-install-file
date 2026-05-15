@@ -3,7 +3,7 @@
 > **대상 환경**: Rocky Linux 9 + MariaDB **10.11.16** Galera Cluster (RPM 직접 설치) + NetApp NFS (NAS)
 > **백업 도구**: `mariadb-dump` (논리 백업)
 > **백업 정책**: 매일 1회 Full Dump + 7일 보관 (PITR 미사용)
-> **작성일**: 2026-05-08
+> **작성일**: 2026-05-08 (v2.0 기준) / **최종 수정**: 2026-05-15 (v2.2)
 
 > **참고**: 본 문서는 증분 백업/Binary Log/월간 아카이브를 모두 사용하는
 > 풀 정책 가이드([galera-backup-guide.md](./galera-backup-guide.md))의 단순화 버전입니다.
@@ -168,6 +168,10 @@ GRANT RELOAD, PROCESS, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER
 
 GRANT SELECT ON *.* TO 'backup_user'@'localhost';
 
+-- Galera 환경에서 wsrep_desync 토글에 필요 (SET GLOBAL 호출)
+-- ERROR 1227 (Access denied; SUPER privilege required) 방지
+GRANT SUPER ON *.* TO 'backup_user'@'localhost';
+
 FLUSH PRIVILEGES;
 SHOW GRANTS FOR 'backup_user'@'localhost';
 EXIT;
@@ -175,6 +179,14 @@ EXIT;
 
 > **참고**: PITR 미사용 정책이므로 `BINLOG MONITOR` / `REPLICA MONITOR` / `REPLICATION CLIENT` 권한은 필요 없습니다.
 > `BACKUP_ADMIN` 은 MySQL 8.0 전용 권한이며 MariaDB 에는 존재하지 않습니다.
+
+> ⚠️ **`SUPER` 권한에 대한 보안 검토 사항**
+>
+> `SUPER` 는 `SET GLOBAL`, `KILL`, `CHANGE MASTER`, read_only 우회 등 광범위한 관리 작업을 허용합니다.
+> CC 인증 환경에서는 다음 두 가지 대안을 검토하세요:
+>
+> 1. **wsrep_desync 없이 운영**: 백업 전담 노드가 트래픽을 받지 않는 구조라면, `wsrep_desync` 토글 없이도 운영 가능합니다. 이 경우 백업 스크립트의 desync 호출과 `SUPER` 권한을 모두 제거합니다.
+> 2. **세분화된 동적 권한 사용**: MariaDB 10.5+ 에서 `SUPER` 의 일부가 `BINLOG ADMIN`, `READ_ONLY ADMIN`, `CONNECTION ADMIN` 등으로 분리됐습니다. 다만 `wsrep_desync` 변경에 매핑되는 정확한 동적 권한은 MariaDB 공식 문서 확인이 필요합니다.
 
 ### 5.2 자격증명 파일 생성
 
@@ -249,23 +261,47 @@ acquire_lock() {
     fi
 }
 
-unset_desync() {
-    log "Setting wsrep_desync=OFF"
-    mysql --defaults-file="${DEFAULTS_FILE}" \
-        -e "SET GLOBAL wsrep_desync=OFF;" || true
+# wsrep 활성화 여부 자동 판별
+# - Galera 클러스터 노드: ON → desync 토글 수행
+# - 단독 인스턴스(검증용/비 Galera): OFF/공백 → desync 건너뜀
+# 같은 스크립트로 테스트 환경과 운영 클러스터 양쪽 모두 동작하도록 분기.
+detect_wsrep() {
+    WSREP_ON=$(mysql --defaults-file="${DEFAULTS_FILE}" -Nse \
+        "SHOW STATUS LIKE 'wsrep_on'" 2>/dev/null | awk '{print $2}' || echo "OFF")
+    if [[ "${WSREP_ON}" == "ON" ]]; then
+        log "wsrep enabled — will toggle wsrep_desync"
+    else
+        log "wsrep disabled — skipping wsrep_desync toggle"
+    fi
+}
+
+set_desync_on() {
+    if [[ "${WSREP_ON:-OFF}" == "ON" ]]; then
+        log "Setting wsrep_desync=ON"
+        mysql --defaults-file="${DEFAULTS_FILE}" \
+            -e "SET GLOBAL wsrep_desync=ON;"
+    fi
+}
+
+set_desync_off() {
+    if [[ "${WSREP_ON:-OFF}" == "ON" ]]; then
+        log "Setting wsrep_desync=OFF"
+        mysql --defaults-file="${DEFAULTS_FILE}" \
+            -e "SET GLOBAL wsrep_desync=OFF;" || true
+    fi
 }
 
 acquire_lock
+detect_wsrep
 # 정상 종료 및 비정상 종료(set -e 트리거, 시그널) 모두 desync 해제 보장
-trap unset_desync EXIT
+trap set_desync_off EXIT
 
 {
     log "=== mysqldump Backup Start (MariaDB 10.11.16) ==="
 
     # Galera 환경에서 대용량 dump 가 flow control 을 유발하지 않도록 desync 처리
-    log "Setting wsrep_desync=ON"
-    mysql --defaults-file="${DEFAULTS_FILE}" \
-        -e "SET GLOBAL wsrep_desync=ON;"
+    # (wsrep 비활성 환경에서는 no-op)
+    set_desync_on
 
     # 주의: PITR 미사용 정책이므로 --source-data / --flush-logs 는 사용하지 않는다
     # (binlog 비활성 환경에서 --source-data 는 mariadb-dump 에러를 유발).
@@ -386,6 +422,31 @@ sudo -u mysql mysql --defaults-file=/etc/mysql/backup.cnf \
 
 ### 8.2 수동 백업 실행
 
+**사전 점검 (스크립트 실행 전 1회)**:
+
+```bash
+# 1) 백업 디렉터리 실제 존재 확인 (가장 흔한 사고: tee 가 logs/ 에 쓰지 못해 실패)
+ls -la /backup/dump/ /backup/logs/
+
+# 2) 자격증명으로 wsrep 상태 조회 가능한지 확인
+sudo -u mysql mysql --defaults-file=/etc/mysql/backup.cnf \
+  -e "SHOW STATUS LIKE 'wsrep_on';"
+
+# 3) Galera 노드라면 desync 토글 권한 단독 검증
+sudo -u mysql mysql --defaults-file=/etc/mysql/backup.cnf \
+  -e "SET GLOBAL wsrep_desync=ON; SET GLOBAL wsrep_desync=OFF;"
+```
+
+기대 결과:
+
+- 1) `dump/`, `logs/` 디렉터리가 모두 존재하고 `mysql:mysql` 소유
+- 2) Galera 노드: `wsrep_on  ON` / 단독 인스턴스: `wsrep_on  OFF` 또는 빈 결과
+- 3) Galera 노드: 에러 없이 통과 / 단독 인스턴스: `ERROR 1210 (WSREP not started)` ← 정상
+
+**`ERROR 1227 (Access denied; SUPER privilege required)` 가 나오면**: 5.1 의 `GRANT SUPER` 누락. 5.1 절차 재확인.
+
+**백업 실행**:
+
 ```bash
 sudo -u mysql /opt/mariadb-backup/backup-dump.sh
 
@@ -397,7 +458,8 @@ sudo bash -c 'tail -n 50 /backup/logs/dump_*.log'
 
 - `/backup/dump/` 에 `mariadb_full_YYYYMMDD_HHMMSS.sql.gz` 생성
 - 로그에 `Gzip integrity OK` 및 `mysqldump Backup End` 출력
-- 백업 종료 후 `wsrep_desync` 가 OFF 로 복구
+- Galera 노드: 백업 종료 후 `wsrep_desync` 가 OFF 로 복구
+- 단독 인스턴스: 로그에 `wsrep disabled — skipping wsrep_desync toggle` 출력
 
 ```bash
 sudo mysql -u root -p -e "SHOW VARIABLES LIKE 'wsrep_desync';"
@@ -419,22 +481,80 @@ sudo journalctl -u mariadb-backup-dump.service -f
 > **논리 덤프는 gzip 무결성 OK 가 곧 복원 가능을 의미하지 않습니다.**
 > 운영 데이터로 실제 복원되는지 별도 노드(또는 별도 스키마)에서 정기 검증해야 합니다.
 
+> ⚠️ **검증 절차의 가장 흔한 사고**
+>
+> "데이터 삭제 → 백업 → 복구" 순서로 진행하면 **삭제된 상태가 백업에 그대로 기록되어 복구 불가능**합니다.
+> 반드시 다음 순서를 지킵니다:
+>
+> 1. 정상 백업 실행
+> 2. 백업 파일을 **검증 외부 경로에 사본 보관** (retention 정책으로 사라지지 않도록)
+> 3. 데이터 삭제 / 환경 초기화
+> 4. **추가 백업 절대 금지** (자동 timer 가 끼어들면 사본까지 덮어쓸 위험)
+> 5. 2번 사본으로 복구
+> 6. 데이터 비교 검증
+>
+> 리허설 진행 중에는 timer 를 일시 정지하세요:
+>
+> ```bash
+> sudo systemctl stop mariadb-backup-dump.timer
+> # 리허설 종료 후 재개
+> sudo systemctl start mariadb-backup-dump.timer
+> ```
+
+**리허설 절차 (별도 노드)**:
+
 ```bash
-# 별도 테스트 노드에서 (운영 클러스터에 import 금지 — 9.1 참고)
+# 0. 백업 파일 사본 보관 (검증 외부 경로)
+LATEST=$(ls -t /backup/dump/mariadb_full_*.sql.gz | head -1)
+sudo cp "${LATEST}" /var/tmp/restore_rehearsal.sql.gz
+sudo ls -lh /var/tmp/restore_rehearsal.sql.gz
+
+# 1. 별도 테스트 노드에서 mariadb 정지 및 데이터 디렉터리 초기화
+#    (운영 클러스터에 import 금지 — 9.1 참고)
 sudo systemctl stop mariadb
 sudo mv /var/lib/mysql /var/lib/mysql.bak
 sudo mkdir -p /var/lib/mysql
 sudo chown mysql:mysql /var/lib/mysql
 sudo systemctl start mariadb
 
-LATEST=$(ls -t /backup/dump/mariadb_full_*.sql.gz | head -1)
-sudo zcat "${LATEST}" | sudo mysql -u root -p
+# 2. 사본으로 복구 (root 자격 필수)
+sudo zcat /var/tmp/restore_rehearsal.sql.gz | sudo mysql -u root -p
 
+# 3. 복원 결과 검증
 sudo mysql -e "SHOW DATABASES;"
 sudo mysql -e "SELECT table_schema, COUNT(*) FROM information_schema.tables GROUP BY table_schema;"
 ```
 
 ✅ **통과 기준**: 모든 사용자 데이터베이스/테이블이 정상 복원됨.
+
+### 8.4.1 일상 검증 (선택, 테스트 DB 환경)
+
+운영 데이터가 없는 테스트 DB에서 백업/복구 매커니즘만 빠르게 점검할 때:
+
+```bash
+# 1. 현재 상태 기록
+sudo mysql -u root -p -e "SHOW DATABASES;" > /tmp/dbs_before.txt
+
+# 2. 백업 실행
+sudo -u mysql /opt/mariadb-backup/backup-dump.sh
+
+# 3. 백업 사본 보관
+LATEST=$(ls -t /backup/dump/mariadb_full_*.sql.gz | head -1)
+sudo cp "${LATEST}" /var/tmp/quick_test.sql.gz
+
+# 4. 테스트 DB drop
+sudo mysql -u root -p -e "DROP DATABASE <테스트DB명>;"
+sudo mysql -u root -p -e "SHOW DATABASES;"   # 사라진 거 확인
+
+# 5. 복구
+sudo zcat /var/tmp/quick_test.sql.gz | sudo mysql -u root -p
+
+# 6. 비교
+sudo mysql -u root -p -e "SHOW DATABASES;" > /tmp/dbs_after.txt
+diff /tmp/dbs_before.txt /tmp/dbs_after.txt   # 차이 없어야 정상
+```
+
+> ⚠️ 이 절차는 **운영 환경 금지**. 운영 클러스터의 한 노드에서 DROP DATABASE 를 수행하면 wsrep 으로 전체 노드에 전파됩니다.
 
 ### 8.5 NAS 저장 상태 확인
 
@@ -546,6 +666,9 @@ sudo rm -f /var/lib/mariadb-backup/backup.lock
 | 증상 | 원인 | 해결 |
 |------|------|------|
 | `Access denied for user 'backup_user'` | 권한 부족 또는 비밀번호 불일치 | `/etc/mysql/backup.cnf` 권한/비밀번호 재확인 |
+| `ERROR 1227 (42000): Access denied; SUPER privilege required` | `SET GLOBAL wsrep_desync` 호출에 SUPER 권한 부족 | 5.1 의 `GRANT SUPER ON *.* TO 'backup_user'@'localhost'` 적용 후 `FLUSH PRIVILEGES` |
+| `ERROR 1210 (HY000): WSREP (galera) not started` | wsrep provider 미시작 (단독 인스턴스 또는 Galera 설정 누락) | 단독 인스턴스라면 스크립트의 자동 판별 로직이 처리(정상). Galera 노드인데 발생하면 `wsrep_provider` 경로/설정 확인 |
+| `tee: /backup/logs/dump_*.log: No such file or directory` | 백업 디렉터리 미생성 (4절 누락 또는 경로 불일치) | `mkdir -p /backup/{dump,logs}` + `chown mysql:mysql /backup` 재실행. 스크립트의 `BACKUP_ROOT` 와 실제 경로 일치 확인 |
 | `Failed to connect to MySQL server` | 소켓 경로 불일치 | `socket=` 경로 확인 |
 | `gzip: invalid magic` 또는 gzip 검증 실패 | 덤프 도중 중단됨 | 로그에서 원인 확인 후 재실행 |
 | 복원 시 `Access denied ... GRANT` | `backup_user` 로 import 시도 | **root 자격으로 import** (9.1/9.2 절차) |
@@ -553,6 +676,7 @@ sudo rm -f /var/lib/mariadb-backup/backup.lock
 | NFS 마운트 끊김 | 네트워크/스토리지 문제 | `mount -a`, NAS 측 확인 |
 | Timer 실행 안 됨 | 시스템 시각/타임존 문제 | `timedatectl` 확인 |
 | `Backup already running (lock held)` | 직전 백업이 아직 실행 중 또는 락 잔존 | 프로세스 확인 후 락 파일 정리 |
+| 검증 후 데이터가 사라진 채로 복구됨 | "삭제 → 백업 → 복구" 순서로 진행 (백업이 빈 상태를 떠감) | 8.4 절차 재확인. 검증 중에는 timer 정지 + 사본 보관 필수 |
 
 ### 10.3 백업 노드 장애 시
 
@@ -578,6 +702,7 @@ sudo rm -f /var/lib/mariadb-backup/backup.lock
 | 2026-04-28 | 1.1 | MariaDB 10.11 정합성 보정 |
 | 2026-05-08 | 2.0 | 단순화 정책(매일 dump + 7일) 분기 |
 | 2026-05-08 | 2.1 | MariaDB **10.11.16** 기준으로 갱신. 리뷰 반영: ① `--source-data`/`--flush-logs` 제거(binlog 비활성과 일관성), ② 스크립트의 line-continuation + 인라인 주석 문법 오류 수정, ③ 복원 명령을 root 자격으로 변경, ④ 9.1 시나리오를 "단일 인스턴스 검증용"으로 한정하고 클러스터 전체 복원은 9.2 로 분리, ⑤ systemd `RequiresMountsFor=/backup` 추가, ⑥ `flock` 동시 실행 가드 복원, ⑦ 분기/월 복원 리허설을 검증 체크리스트에 명시 |
+| 2026-05-15 | 2.2 | 실제 적용 중 발견된 이슈 반영: ① 5.1 에 `GRANT SUPER` 추가 (`SET GLOBAL wsrep_desync` 호출에 필요한 권한 누락 수정, `ERROR 1227` 해결) + SUPER 권한 대체 검토 가이드, ② 백업 스크립트에 wsrep 자동 판별 로직 추가 (`SHOW STATUS LIKE 'wsrep_on'` 결과로 desync 토글 분기 — 동일 스크립트로 Galera 노드와 단독 검증 인스턴스 양쪽 지원), ③ 8.2 에 사전 점검 단계(디렉터리 존재, wsrep 상태 조회, desync 토글 권한 단독 검증) 추가, ④ 8.4 복원 리허설에 "백업 → 사본 보관 → 삭제 → 복구" 순서 명시 및 timer 정지 안내, ⑤ 8.4.1 일상 검증 절차 신설(테스트 DB 한정), ⑥ 트러블슈팅 표에 `ERROR 1227`, `ERROR 1210`, `tee: No such file or directory`, "삭제 후 백업으로 데이터 유실" 케이스 추가 |
 
 ---
 
