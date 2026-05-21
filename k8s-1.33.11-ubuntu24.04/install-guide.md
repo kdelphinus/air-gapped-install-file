@@ -40,7 +40,7 @@ containerd v2.2.x를 컨테이너 런타임으로, CNI는 **Calico(+ Envoy Gatew
 
 #### 단일 구성 (WSL2 / 단일 VM)
 
-```
+```text
 [WSL2만] scripts/wsl2_prep.sh  →  wsl --shutdown 재기동
     ↓
 [Master-1] scripts/install.sh
@@ -55,7 +55,7 @@ containerd v2.2.x를 컨테이너 런타임으로, CNI는 **Calico(+ Envoy Gatew
 
 #### HA 구성 (Master 3대 + Worker N대)
 
-```
+```text
 [전체 노드] 파일 배포 (scp + tar 해제)
 
 [전체 마스터] 🔧 수동: Phase 5 — HAProxy + Keepalived 설치/설정 + VIP 확인
@@ -270,9 +270,38 @@ net.ipv4.ip_forward                 = 1
 EOF
 sudo sysctl --system
 
-# 3. swap 비활성화
+# 3. swap 비활성화 (영구 박멸)
 sudo swapoff -a
-sudo sed -i '/\sswap\s/s/^/#/' /etc/fstab
+
+# /etc/fstab 내 3번째 필드가 swap인 라인을 안전하게 주석 처리 (.bak 백업 생성)
+if [ -f /etc/fstab ]; then
+    sudo sed -i.bak -E '/^[[:space:]]*[^#[:space:]]+[[:space:]]+[^#[:space:]]+[[:space:]]+swap[[:space:]]+/ s/^/#/' /etc/fstab
+fi
+
+# systemd swap 유닛 목록 및 파일 검색 후 마스킹 (부팅 시 부활 방지)
+# 1) systemctl list-units에 잡히는 swap 장치들 마스킹
+for unit in $(sudo systemctl list-units --type=swap --all --no-legend --no-pager | grep -oE '\S+\.swap'); do
+    if [ -n "$unit" ]; then
+        sudo systemctl mask "$unit"
+    fi
+done
+
+# 2) systemctl list-unit-files에 잡히는 swap 파일들 마스킹
+for unit_file in $(sudo systemctl list-unit-files --type=swap --no-legend --no-pager | grep -oE '\S+\.swap'); do
+    if [ -n "$unit_file" ]; then
+        if [ "$(sudo systemctl is-enabled "$unit_file" 2>/dev/null)" != "masked" ]; then
+            sudo systemctl mask "$unit_file"
+        fi
+    fi
+done
+
+# zram (Compressed swap) 비활성화 (사용 중일 경우)
+if sudo systemctl is-active zram-generator >/dev/null 2>&1 || sudo systemctl list-unit-files | grep -q zram; then
+    sudo systemctl disable --now zram-generator 2>/dev/null || true
+    sudo systemctl disable --now zram-config 2>/dev/null || true
+fi
+
+sudo systemctl daemon-reload
 
 # 4. AppArmor 상태 확인 (Ubuntu 24.04 기본 활성)
 sudo aa-status | head -5
@@ -773,7 +802,6 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
 ### Localhost LB 방식 (Phase 5 옵션 C)
-
 
 각 마스터의 HAProxy 가 `127.0.0.1:8443` 만 점유하므로 **HAProxy 중지 / bind-address 수정 단계 모두 불필요**합니다.
 Master-1 의 `kubeadm init` 출력에 표시된 join 명령은 endpoint 가 `127.0.0.1:8443` 으로 이미 지정되어 있습니다.

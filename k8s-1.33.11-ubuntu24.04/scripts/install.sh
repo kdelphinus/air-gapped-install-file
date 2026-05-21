@@ -67,6 +67,52 @@ reset_conf_vars() {
 load_conf
 CRI_SOCKET="${CRI_SOCKET:-unix:///run/containerd/containerd.sock}"
 
+disable_swap_completely() {
+    echo -e "${YELLOW}🛑 Swap 시스템 영구 비활성화 및 검증 시작...${NC}"
+    swapoff -a
+    if [ -f /etc/fstab ]; then
+        # 3번째 필드가 swap인 비주석 라인만 찾아 주석 처리 (백업 .bak 자동 생성)
+        sed -i.bak -E '/^[[:space:]]*[^#[:space:]]+[[:space:]]+[^#[:space:]]+[[:space:]]+swap[[:space:]]+/ s/^/#/' /etc/fstab
+        echo -e "  → /etc/fstab 내 Swap 설정 주석 완료"
+    fi
+    # systemd 활성 swap 유닛 목록 감지 및 마스킹 (list-units)
+    local swap_units
+    swap_units=$(systemctl list-units --type=swap --all --no-legend --no-pager | grep -oE '\S+\.swap')
+    for unit in $swap_units; do
+        if [ -n "$unit" ] && [[ "$unit" == *".swap"* ]]; then
+            echo -e "  → 활성 systemd swap 유닛 감지: ${YELLOW}$unit${NC} (masking...)"
+            systemctl mask "$unit" >/dev/null 2>&1
+        fi
+    done
+    # systemd swap 유닛 파일 감지 및 마스킹 (list-unit-files)
+    local swap_unit_files
+    swap_unit_files=$(systemctl list-unit-files --type=swap --no-legend --no-pager | grep -oE '\S+\.swap')
+    for unit_file in $swap_unit_files; do
+        if [ -n "$unit_file" ] && [[ "$unit_file" == *".swap"* ]]; then
+            local state
+            state=$(systemctl is-enabled "$unit_file" 2>/dev/null || true)
+            if [ "$state" != "masked" ]; then
+                echo -e "  → systemd swap 유닛 파일 감지: ${YELLOW}$unit_file${NC} (masking...)"
+                systemctl mask "$unit_file" >/dev/null 2>&1
+            fi
+        fi
+    done
+    # zram (Compressed swap) 감지 및 비활성화
+    if systemctl is-active zram-generator >/dev/null 2>&1 || systemctl list-unit-files | grep -q zram; then
+        echo -e "  → zram (Compressed Swap) 감지 및 서비스 비활성화"
+        systemctl disable --now zram-generator 2>/dev/null || true
+        systemctl disable --now zram-config 2>/dev/null || true
+    fi
+    systemctl daemon-reload
+    echo -e "  → systemd 데몬 리로드 완료"
+    if swapon --show | grep -q .; then
+        echo -e "  ${RED}❌ [경고] Swap이 아직 활성 상태입니다! 수동 조치를 검토하세요.${NC}"
+    else
+        echo -e "  ${GREEN}✅ Swap 시스템이 완벽하게 영구 폐쇄되었습니다.${NC}"
+    fi
+}
+
+
 # ==========================================
 # 워커/추가 마스터 합류 모드
 # ==========================================
@@ -124,8 +170,7 @@ net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
     sysctl --system >/dev/null
-    swapoff -a
-    sed -i '/\sswap\s/s/^/#/' /etc/fstab
+    disable_swap_completely
 
     mkdir -p /etc/containerd
     containerd config default > /etc/containerd/config.toml
@@ -378,8 +423,7 @@ net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
 sysctl --system >/dev/null
-swapoff -a
-sed -i '/\sswap\s/s/^/#/' /etc/fstab
+disable_swap_completely
 
 if [ "$ENV_TYPE" = "wsl2" ]; then
     update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1 || true
