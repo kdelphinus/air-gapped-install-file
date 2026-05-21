@@ -75,7 +75,56 @@ EOF
 
 sudo sysctl --system
 
-# 4. hosts 파일 등록 (환경에 맞게 수정)
+# 4. swap 비활성화 (영구 박멸 및 LVM 정리)
+sudo swapoff -a
+
+# /etc/fstab 내 3번째 필드가 swap인 라인을 안전하게 주석 처리 (.bak 백업 생성)
+if [ -f /etc/fstab ]; then
+    sudo sed -i.bak -E '/^[[:space:]]*[^#[:space:]]+[[:space:]]+[^#[:space:]]+[[:space:]]+swap[[:space:]]+/ s/^/#/' /etc/fstab
+fi
+
+# systemd swap 유닛 목록 및 파일 검색 후 마스킹 (부팅 시 부활 방지)
+# 1) systemctl list-units에 잡히는 swap 장치들 마스킹
+for unit in $(sudo systemctl list-units --type=swap --all --no-legend --no-pager | grep -oE '\S+\.swap'); do
+    if [ -n "$unit" ]; then
+        sudo systemctl mask "$unit"
+    fi
+done
+
+# 2) systemctl list-unit-files에 잡히는 swap 파일들 마스킹
+for unit_file in $(sudo systemctl list-unit-files --type=swap --no-legend --no-pager | grep -oE '\S+\.swap'); do
+    if [ -n "$unit_file" ]; then
+        if [ "$(sudo systemctl is-enabled "$unit_file" 2>/dev/null)" != "masked" ]; then
+            sudo systemctl mask "$unit_file"
+        fi
+    fi
+done
+
+# zram (Compressed swap) 비활성화 (사용 중일 경우)
+if sudo systemctl is-active zram-generator >/dev/null 2>&1 || sudo systemctl list-unit-files | grep -q zram; then
+    sudo systemctl disable --now zram-generator 2>/dev/null || true
+    sudo systemctl disable --now zram-config 2>/dev/null || true
+fi
+sudo systemctl daemon-reload
+
+# [Rocky/RHEL 전용] LVM 기반 Swap 볼륨 영구 비활성화 및 커널 파라미터(resume=) 정리
+# LVM swap 볼륨이 남아 있으면 부팅 시 systemd-fstab-generator 가 감지하여 에러를 일으키거나 부팅 지연이 발생합니다.
+# ⚠️ 주의: 반드시 데이터 백업 후 숙련된 관리자만 수행하십시오.
+# 1) LVM Swap 볼륨 정보 확인
+#    sudo lvs (예: /dev/mapper/rl-swap 또는 /dev/rl/swap 존재 여부 확인)
+# 2) LVM Swap 볼륨 비활성화 및 영구 삭제
+#    sudo lvremove /dev/rl/swap -y
+# 3) GRUB 커널 명령행에서 'resume=/dev/mapper/rl-swap' 항목 정리
+#    - /etc/default/grub 파일을 열어 GRUB_CMDLINE_LINUX 줄에서 resume=... 부분을 제거합니다.
+#    - 예시: GRUB_CMDLINE_LINUX="crashkernel=1G-4G:192M,4G-64G:256M,64G-:512M resume=/dev/mapper/rl-swap rd.lvm.lv=rl/root..."
+#      → 'resume=/dev/mapper/rl-swap'을 삭제
+# 4) GRUB 설정 재빌드 (부팅 시 90초 타임아웃/행 걸림 원천 차단)
+#    - UEFI 부팅인 경우:
+#      sudo grub2-mkconfig -o /boot/efi/EFI/rocky/grub.cfg
+#    - BIOS(Legacy) 부팅인 경우:
+#      sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+
+# 5. hosts 파일 등록 (환경에 맞게 수정)
 sudo tee -a /etc/hosts <<EOF
 <MASTER1_IP> <MASTER1_HOSTNAME>
 <MASTER2_IP> <MASTER2_HOSTNAME>
@@ -181,22 +230,25 @@ HA 구성을 위해 로드밸런서가 필요합니다. 환경에 따라 아래 
 
 물리 LB가 트래픽을 백엔드 노드로 전달할 때의 방식을 먼저 확인해야 합니다.
 
-1.  **DNAT (NAT) 방식**: LB가 패킷의 목적지 IP를 VIP에서 노드 IP로 변환하여 전달합니다. 별도의 노드 설정이 필요 없습니다.
-2.  **DSR (Direct Server Return) 또는 Transparent 방식**: LB가 목적지 IP를 VIP 그대로 둔 채 MAC 주소만 바꿔서 전달합니다. 이 경우 **5-A-3 단계의 루프백 설정이 필수**입니다.
+1. **DNAT (NAT) 방식**: LB가 패킷의 목적지 IP를 VIP에서 노드 IP로 변환하여 전달합니다. 별도의 노드 설정이 필요 없습니다.
+2. **DSR (Direct Server Return) 또는 Transparent 방식**: LB가 목적지 IP를 VIP 그대로 둔 채 MAC 주소만 바꿔서 전달합니다. 이 경우 **5-A-3 단계의 루프백 설정이 필수**입니다.
 
 #### 5-B-2. FQDN 등록 및 Hairpin NAT 방지 (전체 노드)
 
 마스터 노드들이 자기 자신을 호출할 때 외부 LB를 거쳐 나갔다 들어오는 현상(Hairpin)을 방지하기 위해 노드별로 `/etc/hosts`를 다르게 설정합니다.
 
-*   **마스터 노드 (1, 2, 3)**: `k8s-api.internal`을 **자기 자신의 실제 IP**로 매핑합니다.
-    ```bash
-    # 예: Master-1 (39번 IP) 에서 실행 시
-    echo "192.168.1.39  k8s-api.internal" | sudo tee -a /etc/hosts
-    ```
-*   **워커 노드 및 외부 클라이언트**: `k8s-api.internal`을 **물리 LB VIP**로 매핑합니다.
-    ```bash
-    echo "<물리_LB_VIP>  k8s-api.internal" | sudo tee -a /etc/hosts
-    ```
+- **마스터 노드 (1, 2, 3)**: `k8s-api.internal`을 **자기 자신의 실제 IP**로 매핑합니다.
+
+  ```bash
+  # 예: Master-1 (39번 IP) 에서 실행 시
+  echo "192.168.1.39  k8s-api.internal" | sudo tee -a /etc/hosts
+  ```
+
+- **워커 노드 및 외부 클라이언트**: `k8s-api.internal`을 **물리 LB VIP**로 매핑합니다.
+
+  ```bash
+  echo "<물리_LB_VIP>  k8s-api.internal" | sudo tee -a /etc/hosts
+  ```
 
 #### 5-B-3. (DSR/Transparent 모드인 경우만) VIP 루프백 설정
 
@@ -550,7 +602,6 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 ```
 
 ### Localhost LB 방식 (Phase 5 옵션 C)
-
 
 각 마스터의 HAProxy 가 `127.0.0.1:8443` 만 점유하므로 **HAProxy 중지 / bind-address 수정 단계 모두 불필요**합니다.
 Master-1 의 `kubeadm init` 출력에 표시된 join 명령은 endpoint 가 `127.0.0.1:8443` 으로 이미 지정되어 있습니다.
