@@ -113,6 +113,46 @@ disable_swap_completely() {
 }
 
 
+configure_system_limits() {
+    echo -e "${YELLOW}🛑 파일 디스크립터(FD) 및 시스템 Limits 설정 시작...${NC}"
+
+    # 1. sysctl limits
+    cat > /etc/sysctl.d/99-kubernetes-limits.conf <<EOF
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 8192
+EOF
+    sysctl --system >/dev/null 2>&1
+    echo -e "  → sysctl Limits 설정 완료 (fs.file-max, fs.inotify)"
+
+    # 2. security limits
+    mkdir -p /etc/security/limits.d
+    cat > /etc/security/limits.d/99-kubernetes-limits.conf <<EOF
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+EOF
+    echo -e "  → 프로세스 Limits 설정 완료 (nofile, nproc)"
+
+    # 3. containerd systemd service limits override
+    mkdir -p /etc/systemd/system/containerd.service.d
+    cat > /etc/systemd/system/containerd.service.d/limits.conf <<EOF
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+    systemctl daemon-reload
+    echo -e "  → containerd systemd Limits 오버라이드 완료"
+    echo -e "  ${GREEN}✅ 파일 디스크립터 및 Limits 설정 완료.${NC}"
+}
+
+
+
 # ==========================================
 # 워커/추가 마스터 합류 모드
 # ==========================================
@@ -171,6 +211,7 @@ net.ipv4.ip_forward                 = 1
 EOF
     sysctl --system >/dev/null
     disable_swap_completely
+    configure_system_limits
 
     mkdir -p /etc/containerd
     containerd config default > /etc/containerd/config.toml
@@ -424,6 +465,7 @@ net.ipv4.ip_forward                 = 1
 EOF
 sysctl --system >/dev/null
 disable_swap_completely
+configure_system_limits
 
 if [ "$ENV_TYPE" = "wsl2" ]; then
     update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1 || true

@@ -303,11 +303,32 @@ fi
 
 sudo systemctl daemon-reload
 
-# 4. AppArmor 상태 확인 (Ubuntu 24.04 기본 활성)
+# 4. 파일 디스크립터(FD) 및 시스템 Limits 상향 (정석 설정)
+# K8s 노드의 안정성과 대규모 Pod 구동 시 'Too many open files' 방지를 위해 필수적으로 설정합니다.
+
+# 1) sysctl Limits 설정
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-limits.conf
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 8192
+EOF
+sudo sysctl --system
+
+# 2) security limits 설정
+cat <<EOF | sudo tee /etc/security/limits.d/99-kubernetes-limits.conf
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+EOF
+
+# 5. AppArmor 상태 확인 (Ubuntu 24.04 기본 활성)
 sudo aa-status | head -5
 # containerd 관련 이슈 시: sudo aa-complain /usr/bin/containerd
 
-# 5. hosts 파일 등록 (환경에 맞게 수정)
+# 6. hosts 파일 등록 (환경에 맞게 수정)
 sudo tee -a /etc/hosts <<EOF
 <MASTER1_IP> <MASTER1_HOSTNAME>
 <MASTER2_IP> <MASTER2_HOSTNAME>
@@ -338,6 +359,17 @@ sudo sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"
 
 # Harbor 인증서 경로 정리
 sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+
+# 5. containerd 서비스 Limits 설정 (systemd override)
+sudo mkdir -p /etc/systemd/system/containerd.service.d
+cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/limits.conf
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
 
 sudo systemctl enable --now containerd
 sudo systemctl status containerd --no-pager
