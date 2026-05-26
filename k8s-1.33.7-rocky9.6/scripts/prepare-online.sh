@@ -97,6 +97,45 @@ disable_swap_completely() {
     fi
 }
 
+configure_system_limits() {
+    echo -e "${YELLOW}🛑 파일 디스크립터(FD) 및 시스템 Limits 설정 시작...${NC}"
+
+    # 1. sysctl limits
+    cat > /etc/sysctl.d/99-kubernetes-limits.conf <<EOF
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 8192
+EOF
+    sysctl --system >/dev/null 2>&1
+    echo -e "  → sysctl Limits 설정 완료 (fs.file-max, fs.inotify)"
+
+    # 2. security limits
+    mkdir -p /etc/security/limits.d
+    cat > /etc/security/limits.d/99-kubernetes-limits.conf <<EOF
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+EOF
+    echo -e "  → 프로세스 Limits 설정 완료 (nofile, nproc)"
+
+    # 3. containerd systemd service limits override
+    mkdir -p /etc/systemd/system/containerd.service.d
+    cat > /etc/systemd/system/containerd.service.d/limits.conf <<EOF
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+    systemctl daemon-reload
+    echo -e "  → containerd systemd Limits 오버라이드 완료"
+    echo -e "  ${GREEN}✅ 파일 디스크립터 및 Limits 설정 완료.${NC}"
+}
+
+
 # ============================================================
 # Phase 1: 저장소 등록 및 패키지 설치
 # ============================================================
@@ -165,6 +204,7 @@ sysctl --system >/dev/null
 
 echo -e "  → swap 비활성화 (영구 박멸)"
 disable_swap_completely
+configure_system_limits
 
 # ============================================================
 # Phase 3: containerd 설정 및 kubelet 기동
