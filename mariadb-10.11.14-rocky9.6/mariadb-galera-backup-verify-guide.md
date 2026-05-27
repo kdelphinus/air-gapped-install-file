@@ -1,6 +1,6 @@
 # MariaDB Galera Cluster 백업 동작 확인 가이드
 
-> **환경**: Rocky Linux 9 + MariaDB 10.11.16 Galera Cluster + NetApp NFS
+> **환경**: Rocky Linux 9 + MariaDB 10.11.16 Galera Cluster + NetApp NFS  
 > **백업 위치**: `/bkup001/dump/`
 
 ---
@@ -329,3 +329,78 @@ sudo ls -la /var/lib/mariadb-backup/
 | 백업 서비스 저널 | `sudo journalctl -u mariadb-backup-dump.service -n 200` |
 | 백업 timer 저널 | `sudo journalctl -u mariadb-backup-dump.timer -n 100` |
 | MariaDB 에러 로그 | `/var/log/mariadb/mariadb.log` |
+
+---
+
+## 6. 백업 노드 장애 시 이관 절차 (3번 노드 장애 대응)
+
+백업 전담 노드인 **3번 노드(LGEDK8SCMP03V)**에 장애가 발생하여 다운되거나 백업 수행이 불가능한 경우, 백업 연속성을 보장하기 위해 **1번 노드(LGEDK8SCMP01V)** 또는 **2번 노드(LGEDK8SCMP02V)**로 백업 실행 노드를 신속히 이관해야 합니다.
+
+### 6.1 대체 노드로 백업 이관 절차
+
+대체할 노드(예: **1번 노드 LGEDK8SCMP01V**)에 접속하여 아래 절차를 수행합니다.
+
+#### 1단계: NFS 백업 스토리지 마운트 확인
+백업 디렉터리 `/bkup001`이 정상적으로 마운트되어 있는지 확인합니다.
+```bash
+df -h /bkup001
+```
+만약 마운트되어 있지 않다면 마운트를 수행합니다:
+```bash
+sudo mount -a  # /etc/fstab에 마운트 정보가 등록되어 있는 경우
+# 또는 수동 마운트
+# sudo mount -t nfs -o rw,relatime,vers=4.1 nas.internal:/vol/mariadb_backup /bkup001
+```
+
+#### 2단계: 백업 스크립트 및 설정 파일 점검
+대체 노드에 백업 스크립트와 설정 파일이 정상적으로 존재하는지 확인합니다.
+- 백업 스크립트: `/opt/mariadb-backup/backup-dump.sh`
+- 백업 설정 파일: `/etc/mysql/backup.cnf`
+- 백업 시스템드 서비스 및 타이머 파일 존재 여부 확인:
+  ```bash
+  sudo systemctl status mariadb-backup-dump.timer
+  ```
+
+#### 3단계: 대체 노드에서 백업 타이머 활성화 및 시작
+3번 노드의 장애 기간 동안 대체 노드에서 자동 백업이 동작하도록 타이머를 활성화하고 시작합니다.
+```bash
+sudo systemctl enable mariadb-backup-dump.timer
+sudo systemctl start mariadb-backup-dump.timer
+```
+
+#### 4단계: 타이머 작동 여부 및 이관 검증
+타이머가 정상 등록되었고 다음 백업 스케줄이 정상적으로 잡혔는지 확인합니다.
+```bash
+sudo systemctl list-timers --all | grep mariadb
+```
+
+---
+
+### 6.2 3번 노드 복구 후 원상 복구(원복) 절차
+
+3번 노드(LGEDK8SCMP03V)가 정상 복구되어 백업 전담 역할을 다시 수행할 수 있게 되면, 이중 백업 방지 및 리소스 관리를 위해 대체 노드의 타이머를 끄고 3번 노드로 원복합니다.
+
+#### 1단계: 대체 노드(예: 1번 노드)에서 백업 타이머 정지 및 비활성화
+대체 노드에 접속하여 백업 타이머를 중지하고 비활성화합니다.
+```bash
+sudo systemctl stop mariadb-backup-dump.timer
+sudo systemctl disable mariadb-backup-dump.timer
+```
+
+#### 2단계: 3번 노드(LGEDK8SCMP03V)에서 백업 타이머 활성화 및 시작
+복구된 3번 노드에 접속하여 백업 타이머를 다시 켭니다.
+```bash
+sudo systemctl enable mariadb-backup-dump.timer
+sudo systemctl start mariadb-backup-dump.timer
+```
+
+#### 3단계: 양쪽 노드 상태 최종 검증
+- **대체 노드**: 타이머가 `inactive (dead)` 상태인지 확인
+  ```bash
+  sudo systemctl status mariadb-backup-dump.timer | grep Active
+  ```
+- **3번 노드**: 타이머가 `active (waiting)` 상태인지 확인
+  ```bash
+  sudo systemctl status mariadb-backup-dump.timer | grep Active
+  ```
+
