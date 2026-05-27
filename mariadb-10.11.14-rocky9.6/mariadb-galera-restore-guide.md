@@ -1,6 +1,6 @@
 # MariaDB Galera Cluster 복구 가이드
 
-> **환경**: Rocky Linux 9 + MariaDB 10.11.16 Galera Cluster + NetApp NFS
+> **환경**: Rocky Linux 9 + MariaDB 10.11.16 Galera Cluster + NetApp NFS  
 > **백업 위치**: `/bkup001/dump/`
 
 ---
@@ -17,7 +17,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| 클러스터 노드 | LGEDK8SCMP01V, LGEDK8SCMP02V, LGEDK8SCMP03V (실제 호스트명으로 교체) |
+| 클러스터 노드 | LGEDK8SCMP01V, LGEDK8SCMP02V, LGEDK8SCMP03V |
 | MariaDB 버전 | 10.11.16 |
 | 백업 위치 | `/bkup001/dump/` |
 | 데이터 디렉터리 | `/var/lib/mysql/` |
@@ -44,7 +44,7 @@
 
 ### 1.1 자동 백업 timer 정지
 
-복구 전 반드시 먼저 자동 백업을 정지합니다.
+복구 전 반드시 먼저 자동 백업을 정지합니다. 평상시에는 백업 전담 노드인 **3번 노드(LGEDK8SCMP03V)**에서 수행하지만, 만약 3번 노드 장애로 인해 백업 노드가 타 노드로 이관되었다면 **현재 백업 타이머가 활성화되어 실행 중인 대체 노드(1번 또는 2번)**에서 아래 명령을 실행해야 합니다.
 
 ```bash
 sudo systemctl stop mariadb-backup-dump.timer
@@ -57,6 +57,7 @@ sudo systemctl status mariadb-backup-dump.timer | grep Active
    Active: inactive (dead) since Fri 2026-05-15 09:16:00 KST; 2s ago
 ```
 
+> ⚠️ **중요**: 3번 노드가 완전히 죽어서(다운) 접속할 수 없는 경우, 당연히 3번 노드에서는 중지 명령을 내릴 수 없습니다. 이 경우 백업 노드가 다른 노드로 이관되어 타이머가 작동 중인지 확인하고, 해당 대체 노드에서 타이머를 정지시키십시오.
 > 복구 완료 후 7장에서 반드시 재가동합니다.
 
 ### 1.2 백업 파일 확인
@@ -132,7 +133,7 @@ sudo zcat /var/tmp/restore_source.sql.gz \
 각 노드에서 실행합니다. 순서는 상관없고, 가능한 빨리 세 노드 모두 정지시킵니다.
 
 ```bash
-# db-node-1, db-node-2, db-node-3 각각에서
+# LGEDK8SCMP01V, LGEDK8SCMP02V, LGEDK8SCMP03V 각각에서
 sudo systemctl stop mariadb
 sudo systemctl status mariadb | grep Active
 ```
@@ -149,7 +150,7 @@ sudo systemctl status mariadb | grep Active
 
 ## 3. 부트스트랩 노드 초기화
 
-부트스트랩 노드 1대를 정합니다 (보통 db-node-1).
+부트스트랩 노드 1대를 정합니다(보통 1번 node).
 
 **부트스트랩 노드에서만** 실행:
 
@@ -255,9 +256,9 @@ sudo mysql -u root -p -e "SHOW DATABASES;"
 
 ## 5. 나머지 노드 순차 join
 
-### 5.1 db-node-2 기동
+### 5.1 LGEDK8SCMP02V 기동
 
-**db-node-2 에서**:
+**LGEDK8SCMP02V 에서**:
 
 ```bash
 # 기존 데이터 디렉터리도 보존 후 비우기
@@ -285,9 +286,9 @@ Joining → Joined → Synced
 
 `Synced` 가 나오면 다음 노드로.
 
-### 5.2 db-node-3 기동
+### 5.2 LGEDK8SCMP03V 기동
 
-**db-node-3 에서** 5.1 과 동일하게:
+**LGEDK8SCMP03V 에서** 5.1 과 동일하게:
 
 ```bash
 sudo mv /var/lib/mysql /var/lib/mysql.bak.$(date +%Y%m%d_%H%M%S)
@@ -365,6 +366,8 @@ sudo mysql -u root -p -e "SELECT COUNT(*) FROM <DB>.<주요_테이블>;"
 
 ### 7.1 자동 백업 timer 재가동 (필수)
 
+복구 완료 후 백업이 지속적으로 수행되도록 자동 백업 타이머를 재가동합니다.
+
 ```bash
 sudo systemctl start mariadb-backup-dump.timer
 sudo systemctl list-timers --all | grep mariadb
@@ -378,6 +381,13 @@ Sat 2026-05-16 02:00:00 KST 16h     mariadb-backup-dump.timer
 ```
 
 `NEXT` 가 다음 날 02:00 으로 잡혀 있어야 정상.
+
+> ⚠️ **백업 노드가 이관되어 복구를 진행한 경우의 타이머 재기동 규칙**:
+> 1. **3번 노드가 정상 복구되어 정상 기동된 경우**:
+>    - 복구 과정에서 3번 노드가 정상 복구(Synced)되어 정상 동작한다면, **3번 노드(LGEDK8SCMP03V)**에서 백업 타이머를 재가동하고 활성화(`systemctl enable --now`)합니다.
+>    - 이때 타 노드(1번 혹은 2번)에 임시로 켜두었던 백업 타이머가 있다면 반드시 중지 및 비활성화(`systemctl disable --now`)하여 중복 백업을 방지합니다.
+> 2. **3번 노드가 여전히 장애 상태이거나 임시 대체 노드에서 계속 백업을 돌아야 하는 경우**:
+>    - 현재 백업을 담당하고 있는 **대체 백업 노드(1번 혹은 2번)**에서 백업 타이머를 재가동합니다.
 
 ### 7.2 정리 (24시간 후 권장)
 
@@ -468,27 +478,4 @@ sudo systemctl status mariadb
 sudo systemctl stop   mariadb
 sudo systemctl start  mariadb            # 일반 시작 (기존 클러스터에 join)
 sudo galera_new_cluster                   # 부트스트랩 시작 (첫 노드 전용)
-```
-
----
-
-## 체크리스트
-
-```text
-□ 1.1  timer 정지
-□ 1.2  사용할 백업 파일 확인
-□ 1.3  gzip 무결성 검증 통과
-□ 1.4  사본 보관 (/var/tmp/restore_source.sql.gz)
-□ 2    모든 노드 mariadb 정지
-□ 3    부트스트랩 노드 데이터 디렉터리 초기화
-□ 4.1  galera_new_cluster 기동, cluster_size=1 + Synced
-□ 4.2  백업 import 완료
-□ 4.3  SHOW DATABASES 결과 정상
-□ 5.1  db-node-2 join, Synced
-□ 5.2  db-node-3 join, Synced
-□ 6.1  cluster_size=3, Primary, 모든 노드 Synced
-□ 6.2  데이터 행 수 확인
-□ 6.3  애플리케이션 정상 동작
-□ 7.1  timer 재가동, 다음 NEXT 가 다음날 02:00
-□ 7.2  24시간 후 정리 (백업 디렉터리, 사본 파일)
 ```
