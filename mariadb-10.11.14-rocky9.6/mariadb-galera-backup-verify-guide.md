@@ -2,7 +2,6 @@
 
 > **환경**: Rocky Linux 9 + MariaDB 10.11.16 Galera Cluster + NetApp NFS
 > **백업 위치**: `/bkup001/dump/`
-> **작성일**: 2026-05-15 / 버전 1.0
 
 ---
 
@@ -330,11 +329,3 @@ sudo ls -la /var/lib/mariadb-backup/
 | 백업 서비스 저널 | `sudo journalctl -u mariadb-backup-dump.service -n 200` |
 | 백업 timer 저널 | `sudo journalctl -u mariadb-backup-dump.timer -n 100` |
 | MariaDB 에러 로그 | `/var/log/mariadb/mariadb.log` |
-
----
-
-## 변경 이력
-
-| 일자 | 버전 | 변경 내용 |
-|------|------|----------|
-| 2026-05-15 | 1.0 | 최초 작성. 일일/주간 확인 절차 |
