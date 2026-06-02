@@ -1,0 +1,101 @@
+# OpenTelemetry Collector v0.158.0 (App v0.153.0) 헬름 차트 재정의 설정
+
+# ── [1] 컨테이너 이미지 설정 ──────────────────────────────────
+image:
+  # install.sh 에 의해 자동 수정됩니다 (예: Harbor 레지스트리 경로)
+  repository: "otel/opentelemetry-collector-contrib"
+  tag: "0.153.0"
+  pullPolicy: IfNotPresent
+
+# ── [2] 실행 모드 설정 ────────────────────────────────────────
+# daemonset | deployment | statefulset 중 선택
+# install.sh 에서 선택 가능
+mode: daemonset
+
+# ── [3] 서비스 노출 방식 설정 ─────────────────────────────────
+service:
+  # DaemonSet 모드에서도 서비스를 생성하여 파드들이 OTel Collector로 데이터를 전송할 수 있게 함
+  enabled: true
+  type: ClusterIP
+
+# ── [4] 콜렉터 세부 파이프라인 설정 (OTel Config) ─────────────
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+    prometheus:
+      config:
+        scrape_configs:
+          - job_name: 'opentelemetry-collector'
+            scrape_interval: 15s
+            static_configs:
+              - targets: ['${env:MY_POD_IP}:8888']
+    # DaemonSet 모드에서 노드의 리소스를 수집하기 위한 설정 (필요시 활성화)
+    hostmetrics:
+      collection_interval: 15s
+      scrapers:
+        cpu: {}
+        memory: {}
+        disk: {}
+        network: {}
+        filesystem: {}
+
+  processors:
+    batch:
+      send_batch_size: 8192
+      timeout: 1s
+      send_batch_max_size: 10240
+    memory_limiter:
+      check_interval: 2s
+      limit_percentage: 80
+      spike_limit_percentage: 20
+
+  exporters:
+    # 텔레메트리 디버깅용 콘솔/로그 출력
+    debug:
+      verbosity: basic
+    # 수집한 메트릭을 Prometheus 포맷으로 노출하기 위한 exporter
+    prometheus:
+      endpoint: ${env:MY_POD_IP}:8889
+      namespace: otel
+
+  service:
+    telemetry:
+      metrics:
+        address: ${env:MY_POD_IP}:8888
+    extensions: [health_check]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [debug]
+      metrics:
+        receivers: [otlp, prometheus, hostmetrics]
+        processors: [memory_limiter, batch]
+        exporters: [prometheus, debug]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [debug]
+
+# ── [5] 리소스 제한 설정 ─────────────────────────────────────
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# ── [6] 기타 모니터링 관련 포트 정의 ──────────────────────────
+# Prometheus가 수집해갈 수 있도록 OTel Exporter 포트 노출
+ports:
+  prometheus:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
