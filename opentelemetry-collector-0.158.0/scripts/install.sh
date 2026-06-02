@@ -116,12 +116,13 @@ if [ "$DO_UPGRADE" != "true" ]; then
     echo "이미지 소스를 선택하세요:"
     echo "  1) Harbor 레지스트리 사용"
     echo "  2) 로컬 이미지 직접 사용 (ctr import)"
-    read -p "선택 [1/2, 기본값 1]: " _IMG_SRC
+    echo "  3) 온라인 공식 레지스트리 직접 사용 (인터넷 환경)"
+    read -p "선택 [1/2/3, 기본값 1]: " _IMG_SRC
     if [ "${_IMG_SRC:-1}" == "1" ]; then
         IMAGE_SOURCE="harbor"
         read -p "Harbor 주소 (예: 192.168.1.10:30002): " HARBOR_REGISTRY
         read -p "Harbor 프로젝트 (예: library): " HARBOR_PROJECT
-    else
+    elif [ "${_IMG_SRC:-1}" == "2" ]; then
         IMAGE_SOURCE="local"
         echo "로컬 이미지를 containerd(k8s.io)에 로드 중..."
         for tar_file in ./images/*.tar*; do
@@ -129,6 +130,9 @@ if [ "$DO_UPGRADE" != "true" ]; then
             echo "  → $(basename "$tar_file") 임포트 중"
             sudo ctr -n k8s.io images import "$tar_file" 2>/dev/null || sudo docker load -i "$tar_file" 2>/dev/null
         done
+    else
+        IMAGE_SOURCE="online"
+        echo "온라인 공식 이미지를 직접 사용합니다 (Helm 배포 시 자동 다운로드)."
     fi
 
     # 2-2. 배포 모드 선택 (DaemonSet vs Deployment)
