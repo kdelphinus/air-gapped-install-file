@@ -9,8 +9,6 @@
 
 `mariadb-dump` 로 뜬 백업 파일을 사용해 **데이터베이스를 원상 복구** 하는 절차서입니다.
 
-평시 백업 동작 점검은 별도 문서 `mariadb-galera-backup-verify-guide.md` 참고.
-
 ---
 
 ## 환경 정보
