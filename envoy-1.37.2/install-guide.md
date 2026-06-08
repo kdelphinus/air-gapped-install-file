@@ -138,7 +138,7 @@ kubectl apply -f manifests/policy-global-config.yaml
 
 ---
 
-## 3단계: 배포 후 네트워크 구성 (심화)
+## 3단계: 배포 후 네트워크 구성
 
 ### 1. LoadBalancer — 수동 IP 할당 (온프레미스/DaemonSet)
 
