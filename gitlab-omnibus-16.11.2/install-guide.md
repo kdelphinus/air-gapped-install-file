@@ -12,33 +12,48 @@
 2. **네임스페이스 및 퍼시스턴트 볼륨(PV/PVC)**:
    * 복원될 용량에 맞춰 충분한 크기의 스토리지 공간을 갖춘 PV를 사전에 프로비저닝해야 합니다. (기본 `values.yaml` 기준: data 50Gi, config 1Gi)
 
+## 2. 배포 절차 (설치 방법 선택)
+
+설치 환경 및 운영 편의에 맞춰 **[방법 A] 자동화 스크립트 배포** 혹은 **[방법 B] 수동 명령어 배포** 중 하나를 선택하여 기동할 수 있습니다.
+
+### [방법 A] 자동화 스크립트 이용 배포 (권장)
+* **특징**: 입력 설정을 `install.conf`에 영구 보존하며, 기존 배포 상태를 감지하여 업그레이드/재설치/초기화 분기 처리를 자동 제공합니다.
+* **설치 명령**:
+  컴포넌트 루트 디렉토리에서 다음 스크립트를 실행하고 대화형 프롬프트에 따라 값을 입력하십시오:
+  ```bash
+  ./scripts/install.sh
+  ```
+* **동작 세부**:
+  1. **대화형 환경 입력**: 이미지 소스(Harbor / Local load / Online), 스토리지 경로(NFS / HostPath / Dynamic), 외부 도메인 등을 수집합니다.
+  2. **Values 자동 동기화**: 수집된 환경 변수는 `sed` 명령어를 통해 `values.yaml` 및 `configmap.yaml` 화이트리스트에 자동으로 동기화 매핑되어 반영됩니다.
+
 ---
 
-## 2. 1단계: K8s 자원 배포 및 GitLab 16.11.2 기동
-
-1. **설치 네임스페이스 생성**:
-   ```bash
-   kubectl create ns gitlab-omnibus
-   ```
-2. **PV 매니페스트 배포**:
-   * `manifests/gitlab-omnibus-pv.yaml` 내의 스토리지 저장 경로를 검증용 HostPath 혹은 NFS 디렉토리로 수정한 후 적용합니다:
+### [방법 B] 수동 명령어 이용 배포 (Manual Fallback)
+* **특징**: 자동화 스크립트 없이 매니페스트 설정을 직접 튜닝하여 단계별 수동 명령으로 배포를 통제합니다.
+* **수동 배포 단계**:
+  1. **설치 네임스페이스 생성**:
      ```bash
-     kubectl apply -f manifests/gitlab-omnibus-pv.yaml
+     kubectl create ns gitlab-omnibus
      ```
-3. **Values 설정 및 Helm 배포**:
-   * **[필수] 헬름 기동 전 프로브 IP 화이트리스트 사전 수정**:
-     GitLab은 기본 보안 정책으로 모니터링 경로(`/-/readiness`)를 호출하는 IP를 철저히 제한합니다. 쿠버네티스의 프로브(kube-probe) 요청 IP 대역이 기본 대역(`127.0.0.0/8`, `10.0.0.0/8` 등) 외에 위치하는 경우(예: CNI 마스커레이딩 대역 `1.x.x.x` 등), **반드시 배포 전에 `charts/gitlab-omnibus/templates/configmap.yaml` 파일 내 `monitoring_whitelist` 설정 배열에 해당 대역을 미리 추가**해야 합니다. 그렇지 않으면 헬스체크 프로브가 `404 Not Found`로 거부되어 파드가 정상(`Ready`) 상태로 들어가지 못합니다.
+  2. **[필수] 프로브 IP 화이트리스트 사전 수정**:
+     K8s 프로브(kube-probe) 요청 IP 대역이 기본 사설 대역 외에 위치하는 경우(예: CNI 마스커레이딩 대역 `1.x.x.x` 등), **배포 전에 `charts/gitlab-omnibus/templates/configmap.yaml` 파일 내 `monitoring_whitelist` 설정 배열에 해당 대역을 미리 수동 추가**해야 합니다 (미조치 시 404 에러로 파드가 정상 동작하지 않습니다).
      ```ruby
      gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '1.0.0.0/8']
      ```
-   * `values.yaml` 내의 `externalUrl` 주소를 테스트 도메인 또는 테스트 NodePort 주소(예: `http://<TEST_NODE_IP>:32135`)로 수정합니다.
-   * 아래 명령을 실행하여 16.11.2 파드를 띄웁니다:
+  3. **PV 매니페스트 배포**:
+     `manifests/gitlab-omnibus-pv.yaml` 내의 스토리지 저장 경로를 검증용 HostPath 혹은 NFS 디렉토리로 수정한 후 적용합니다:
      ```bash
-     helm upgrade --install gitlab-omnibus ./charts/gitlab-omnibus \
-       -n gitlab-omnibus \
-       -f values.yaml
+     kubectl apply -f manifests/gitlab-omnibus-pv.yaml
      ```
-
+  4. **Values 설정 및 Helm 배포**:
+     * `values.yaml` 내의 `externalUrl` 주소를 테스트 NodePort 주소(예: `http://<NODE_IP>:32135`)로 수정합니다.
+     * 아래 명령을 실행하여 16.11.2 파드를 띄웁니다:
+       ```bash
+       helm upgrade --install gitlab-omnibus ./charts/gitlab-omnibus \
+         -n gitlab-omnibus \
+         -f values.yaml
+       ```
 
 ---
 
