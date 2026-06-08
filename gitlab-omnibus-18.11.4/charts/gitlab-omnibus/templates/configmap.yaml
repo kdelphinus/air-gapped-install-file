@@ -20,7 +20,7 @@ data:
 
     # 모니터링 화이트리스트 — kube-probe(/-/readiness, /-/liveness)가 404가 아니도록
     # Pod CIDR(192.168.0.0/16), Service CIDR(10.96.0.0/12), 사설망 전체 + localhost 허용
-    gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
+    gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '1.0.0.0/8']
 
     # 모니터링 비활성화 (리소스 절약)
     prometheus_monitoring['enable'] = false
