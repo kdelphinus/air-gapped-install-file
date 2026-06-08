@@ -26,6 +26,11 @@
      kubectl apply -f manifests/gitlab-omnibus-pv.yaml
      ```
 3. **Values 설정 및 Helm 배포**:
+   * **[필수] 헬름 기동 전 프로브 IP 화이트리스트 사전 수정**:
+     GitLab은 기본 보안 정책으로 모니터링 경로(`/-/readiness`)를 호출하는 IP를 철저히 제한합니다. 쿠버네티스의 프로브(kube-probe) 요청 IP 대역이 기본 대역(`127.0.0.0/8`, `10.0.0.0/8` 등) 외에 위치하는 경우(예: CNI 마스커레이딩 대역 `1.x.x.x` 등), **반드시 배포 전에 `charts/gitlab-omnibus/templates/configmap.yaml` 파일 내 `monitoring_whitelist` 설정 배열에 해당 대역을 미리 추가**해야 합니다. 그렇지 않으면 헬스체크 프로브가 `404 Not Found`로 거부되어 파드가 정상(`Ready`) 상태로 들어가지 못합니다.
+     ```ruby
+     gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '1.0.0.0/8']
+     ```
    * `values.yaml` 내의 `externalUrl` 주소를 테스트 도메인 또는 테스트 NodePort 주소(예: `http://<TEST_NODE_IP>:32135`)로 수정합니다.
    * 아래 명령을 실행하여 16.11.2 파드를 띄웁니다:
      ```bash
@@ -33,6 +38,7 @@
        -n gitlab-omnibus \
        -f values.yaml
      ```
+
 
 ---
 
@@ -91,3 +97,16 @@
 kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-rake gitlab:check SANITIZE=true
 ```
 체크 결과 모든 검사 결과가 `green/yes`로 나타나면 테스트 환경에 성공적으로 운영 데이터가 복구된 것입니다. 이 시점부터 목표 버전인 `18.11.4`를 향한 **순차 마이그레이션 실습**을 시작할 수 있습니다. (상세 단계는 `gitlab-omnibus-18.11.4/install-guide.md` 참조)
+
+---
+
+## 5. 트러블슈팅: K8s 프로브(Readiness) 404 에러
+
+* **현상**: 파드가 `Running` 상태이나 `Ready`로 전환되지 않으며, `GET /-/readiness HTTP/1.1" 404` 로그가 반복될 때.
+* **원인**: GitLab은 외부 접근 및 서비스 거부(DoS) 방지를 위해 모니터링 엔드포인트(`/-/readiness`)의 IP 화이트리스트(`monitoring_whitelist`)를 운영합니다. K8s의 프로브 소스 IP(예: CNI 마스커레이딩 대역 등)가 기본 사설 대역을 벗어나면 GitLab Rails가 요청을 차단하여 404 Not Found를 응답합니다.
+* **해결 방법**:
+  `charts/gitlab-omnibus/templates/configmap.yaml` 파일 내의 `monitoring_whitelist` 리스트에 프로브가 시도되는 네트워크 대역(예: `'1.0.0.0/8'`) 혹은 사내 에어갭 보안 정책에 맞춰 모든 대역(`'0.0.0.0/0'`)을 추가한 뒤 Helm 업그레이드를 재수행하십시오:
+  ```ruby
+  gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '1.0.0.0/8']
+  ```
+
