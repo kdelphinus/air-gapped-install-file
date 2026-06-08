@@ -1,0 +1,39 @@
+# ============================================================
+# GitLab EE 18.11.4 Omnibus — 폐쇄망 단일 파드 설치 values
+# ============================================================
+
+image:
+  registry: <NODE_IP>:30002
+  repository: <PROJECT>/gitlab-ee
+  tag: 18.11.4-ee.0
+  pullPolicy: IfNotPresent
+
+externalUrl: http://gitlab.devops.internal
+httpNodePort: 32135
+sshPort: 30022
+timezone: Asia/Seoul
+
+# ── Terraform State (HTTP backend) ─────────────────────────
+# GitLab Managed Terraform State 기본 활성. data PVC 내부에 저장됨.
+terraformState:
+  enabled: true
+
+storage:
+  data:
+    size: 50Gi
+    storageClass: manual
+  config:
+    size: 1Gi
+    storageClass: manual
+
+# ── 리소스 설정 ────────────────────────────────────────────
+# Omnibus는 PostgreSQL/Redis/Nginx/Sidekiq 전부 포함 → 최소 2Gi 권장
+resources:
+  requests:
+    cpu: 500m
+    memory: 6Gi
+  limits:
+    cpu: 4
+    memory: 16Gi
+
+nodeSelector: {}
