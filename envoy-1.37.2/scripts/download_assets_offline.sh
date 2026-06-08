@@ -6,8 +6,6 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Envoy Gateway v1.7.2 (Envoy Proxy v1.37.2) 에셋 다운로드 스크립트
-
 set -e
 
 BASE_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -17,12 +15,9 @@ IMAGE_DIR="${BASE_DIR}/images"
 mkdir -p "$CHART_DIR" "$IMAGE_DIR"
 
 echo "[1/2] Helm 차트 다운로드 중..."
-helm repo add envoygateway https://helm.envoygateway.ai
-helm repo update
-# Controller 차트
-helm pull envoygateway/gateway --version v1.7.2 -d "$CHART_DIR"
-# Infra 차트
-# helm pull envoygateway/gateway-infra --version v1.7.2 -d "$CHART_DIR"
+helm pull oci://docker.io/envoyproxy/gateway-helm \
+  --version v1.7.2 \
+  -d "$CHART_DIR"
 
 echo "[2/2] 컨테이너 이미지 다운로드 및 저장 중..."
 IMAGES=(
@@ -31,11 +26,17 @@ IMAGES=(
 )
 
 for IMG in "${IMAGES[@]}"; do
-    FILENAME=$(echo $IMG | tr ':/' '-')
-    echo "-> 다운로드: $IMG"
-    sudo ctr images pull "$IMG"
-    echo "-> 저장: ${IMAGE_DIR}/${FILENAME}.tar"
-    sudo ctr images export "${IMAGE_DIR}/${FILENAME}.tar" "$IMG"
+    FILENAME=$(echo "$IMG" | tr ':/' '-')
+    TAR_PATH="${IMAGE_DIR}/${FILENAME}.tar"
+
+    echo "-> 저장: ${TAR_PATH}"
+    rm -f "$TAR_PATH"
+
+    skopeo copy \
+      --override-os linux \
+      --override-arch amd64 \
+      "docker://${IMG}" \
+      "docker-archive:${TAR_PATH}:${IMG}"
 done
 
 echo "[완료] 모든 에셋이 저장되었습니다."
