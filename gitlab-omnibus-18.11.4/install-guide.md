@@ -1,127 +1,156 @@
-# 🚀 GitLab Omnibus 업그레이드 및 마이그레이션 가이드 (v16.11.2 ──> v18.11.4)
+# 🚀 GitLab 크로스 클러스터 이관 및 순차 업그레이드 종합 가이드 (v16.11.2 ──> v18.11.4)
 
-본 문서는 사내 GitLab Omnibus 단일 파드(Kubernetes 환경)를 버전 `16.11.2`에서 최신 LTS 안정 버전인 `18.11.4`로 데이터 유실 없이 안전하게 업그레이드하기 위한 가이드입니다.
-
----
-
-## 1. 사전 필수 전제 조건 (Kubernetes vs VM)
-
-> [!IMPORTANT]
-> **대상 환경 구분**
-> * 본 가이드의 기본 패키지 명령은 **Omnibus Linux Package (VM 환경)** 기준입니다.
-> * **Kubernetes 환경에서 Omnibus 컨테이너**를 직접 운영하는 경우에는 실제 패키지 설치 명령 대신 **컨테이너 이미지 태그 교체 및 Pod 생명주기 제어 절차**로 치환하여 적용해야 합니다.
-> * **공식 GitLab Helm Chart**를 사용하여 업그레이드할 경우에는 본 Omnibus 단일 설정과 다르므로, GitLab 버전과 Chart 버전 간의 버전 매핑 테이블을 사전에 별도로 확인해야 합니다.
-
-> [!CAUTION]
-> **치명적 리스크: 시작 프로브(Startup/Liveness Probe)에 의한 파드 강제 재시작 방지**
-> 주요 버전 정지점에서 PostgreSQL 엔진 업그레이드(`pg-upgrade`) 및 스키마 변경(`reconfigure`)이 실행될 때, 데이터베이스 크기에 따라 완료까지 수십 분 이상 소요될 수 있습니다. 이때 Kubernetes 프로브 임계값을 초과하면 Kubelet이 파드를 비정상으로 판단하고 강제로 종료한 뒤 재시작합니다. 이는 데이터베이스 파일 손상 및 마이그레이션 깨짐을 초래하므로 아래 둘 중 하나의 조치를 취해야 합니다.
-> * **방안 A (임계치 연장)**: 업그레이드 실행 전 `deployment.yaml` 내 `startupProbe.failureThreshold` 값을 `120`회(60분 대기) 이상으로 임시 상향합니다.
-> * **방안 B (수동 기동 - 권장)**: `deployment.yaml`의 컨테이너 `command` 스펙에 `["sleep", "36000"]`을 주입하여 자동 기동을 강제 우회한 뒤, `kubectl exec`로 컨테이너 내부로 직접 들어가 `gitlab-ctl reconfigure` 및 `gitlab-ctl pg-upgrade`를 수동 진행합니다.
+본 문서는 구형 클러스터의 GitLab Omnibus (v16.11.2) 환경에서 실행 중인 운영 데이터를 안전하게 보존하면서, 신형 클러스터의 최신 LTS 안정 버전(v18.11.4) 환경으로 **크로스 클러스터 이관(Migration)** 및 **순차 업그레이드**를 수행하기 위한 엔터프라이즈 가이드라인입니다.
 
 ---
 
-## 2. 공식 필수 업그레이드 경로 (Required Upgrade Stops)
+## 1. 크로스 클러스터 이관(Migration) 전략 설계
 
-* **공식 업그레이드 경로 참조 링크**:
+구형 클러스터의 데이터를 신형 클러스터로 이전할 때, 기존 PV(NFS 스토리지 등)를 신형에 직접 그대로 마운트하여 업그레이드하는 방식은 데이터가 깨졌을 때 복구(롤백)가 불가능하므로 **결코 권장되지 않습니다.** 아래의 두 가지 전략 중 상황에 맞는 아키텍처를 선택하여 수행하십시오.
+
+### 1안. [가장 추천] 백업 & 복원(Restore) 기반 격리 이관 방식 (안전성 100%)
+구형 클러스터와 원본 스토리지는 그대로 보존한 채, 신형 클러스터에 완전히 독립된 새로운 PV/PVC를 생성하여 데이터를 마이그레이션하는 표준 방식입니다.
+
+* **이관 프로세스**:
+  1. 구형 클러스터(v16.11.2)에서 서비스 영향도가 낮은 시간대에 **공식 애플리케이션 백업 파일(`tar`)과 암호키 정보**를 추출합니다. (상세 절차는 2장 참조)
+  2. 신형 클러스터에 **완전히 독립된 새 영구 볼륨(PV/PVC)**을 갖는 GitLab 16.11.2 파드를 기동합니다.
+  3. 구형 클러스터의 백업 자산을 신형 클러스터의 16.11.2 파드에 복원(Restore)합니다. (상세 절차는 3장 참조)
+  4. 신형 클러스터에 복구된 GitLab v16.11.2의 정상 기동과 데이터 정합성을 확인합니다.
+  5. 검증 완료 후, **신형 클러스터 내에서만 18.11.4까지 순차 업그레이드를 진행**합니다.
+* **장점**: 업그레이드 실패 시 신형 클러스터 자원만 리셋하면 되므로, 구형 클러스터의 라이브 서비스에는 전혀 지장이 없고 **DNS 롤백만으로 1초 만에 서비스 원복**이 가능합니다.
+
+### 2안. NFS 파일 스토리지 물리 복제(rsync/Snapshot) 방식
+동일한 원본 데이터를 기반으로 인플레이스(In-place) 마이그레이션을 모방하여 진행하고 싶을 때 사용하는 하드웨어/스토리지 수준 복제 방식입니다.
+
+* **이관 프로세스**:
+  1. **[필수]** 구형 클러스터의 GitLab v16 파드를 완전히 정지(`scale=0`)하여 NFS 스토리지에 대한 모든 쓰기 동작을 중단시킵니다.
+  2. NFS 스토리지 서버 레벨에서 원본 디렉토리를 **신형 클러스터용 새 NFS 디렉토리로 통째로 물리 복제**합니다. (예: `rsync -a` 또는 스토리지 볼륨 스냅샷 복제)
+  3. 신형 클러스터에 GitLab 16.11.2 파드를 띄우고, **복제된 새 NFS 스토리지 경로와 바인딩된 PV/PVC**를 매핑합니다.
+  4. 정상 기동하는 것을 검증한 뒤 18.11.4까지 순차 업그레이드를 진행합니다.
+* **주의점**: 기존 구형 GitLab 파드가 켜져 있는 상태에서 동일한 NFS 디렉토리를 신형 파드가 동시에 읽고 쓰면 데이터베이스 테이블 및 Git 리포지토리가 영구적으로 손상(오염)됩니다.
+
+---
+
+## 2. 사전 원본 데이터 백업 절차 (롤백 대비)
+
+작업 도중 발생하는 장애나 데이터 정합성 실패에 대응하기 위해 구형 클러스터의 데이터 자산을 다음과 같이 격리 보관해야 합니다.
+
+### A. GitLab 공식 애플리케이션 백업 (DB 및 리포지토리)
+GitLab 내부의 데이터베이스, 업로드된 파일, Git 리포지토리 등의 정합성을 맞춰 하나의 아카이브로 패키징합니다.
+```bash
+# 구형 클러스터의 GitLab 파드 내 백업 명령 실행
+kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-backup create
+```
+* **결과물**: `/var/opt/gitlab/backups/` 내에 `[타임스탬프]_YYYY_MM_DD_16.11.2_gitlab_backup.tar` 파일이 생성됩니다.
+* 이 파일을 `kubectl cp` 또는 NFS 직접 접근을 통해 외부의 안전한 로컬/백업 서버로 다운로드하여 복사해 둡니다.
+
+### B. 시스템 설정 및 복호화 암호 키 백업 (★필수★)
+**GitLab 공식 백업 명령(`gitlab-backup create`)은 암호키와 환경 설정 파일을 포함하지 않습니다.** 데이터베이스 내 암호화된 계정 비밀번호, 러너 토큰, 통합 서비스 정보 등을 복구하려면 반드시 아래 두 파일을 **수동으로 별도 보관**해야 합니다. 이 파일이 유실되면 데이터를 복원하더라도 GitLab 로그인이 불가능하고 DB가 무용지물이 됩니다.
+* `/etc/gitlab/gitlab-secrets.json` (복호화 비밀키)
+* `/etc/gitlab/gitlab.rb` (사용자 정의 설정 파일)
+
+### C. 물리 NFS 스토리지 통째 아카이브 (NFS 서버 단)
+스토리지 서버 수준에서 혹시 모를 파일 손상에 대비하기 위해 디렉토리 스냅샷이나 압축 보관을 수행합니다.
+```bash
+# NFS 서버에서 디렉토리 권한을 보존하여 tar 아카이브 수행
+tar -cvpf gitlab-nfs-raw-backup.tar /data/gitlab-omnibus/data-dir
+```
+
+---
+
+## 3. 신형 클러스터 상에서의 16.11.2 초기 복원(Restore) 절차
+
+신형 클러스터로 이전한 후, 구형의 데이터를 v16.11.2 파드에 안전하게 주입하는 단계입니다.
+
+1. **설정 및 복호화 키 주입**:
+   * 신형 클러스터에 프로비저닝된 config PV 경로(예: `/data/gitlab_omnibus/config/`)에 구형 클러스터에서 백업받은 `gitlab-secrets.json`과 `gitlab.rb`를 먼저 복사해 넣습니다.
+2. **백업 tar 파일 위치 지정 및 권한 설정**:
+   * 신형 클러스터용 data PV 내의 백업 경로(`/var/opt/gitlab/backups/`)에 구형 클러스터의 백업 tar 파일을 업로드하고, 파일 소유권을 GitLab 엔진 권한으로 조정합니다:
+     ```bash
+     chown git:git /var/opt/gitlab/backups/[타임스탬프]_16.11.2_gitlab_backup.tar
+     ```
+3. **서비스 백그라운드 프로세스 중지**:
+   * DB 덮어쓰기 도중 충돌을 막기 위해 Puma(웹서버)와 Sidekiq(배치/큐 처리) 프로세스를 일시 정지합니다:
+     ```bash
+     kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-ctl stop puma
+     kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-ctl stop sidekiq
+     ```
+4. **복원 명령어 트리거**:
+   * 백업 파일의 타임스탬프 명세를 인자로 주입하여 복원을 실행합니다 (질의창이 나타나면 `yes`를 입력):
+     ```bash
+     kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-backup restore BACKUP=[타임스탬프]_2026_06_08_16.11.2
+     ```
+5. **환경 재설정 및 재기동**:
+   * 복원이 정상 완료되면 DB 스키마 갱신을 적용하고 중지한 프로세스들을 재기동합니다.
+     ```bash
+     kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-ctl reconfigure
+     ```
+     ```bash
+     kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-ctl restart
+     ```
+6. **복원 상태 검증**:
+   * Rake 자가 정합성 체크 툴을 돌려 정상 판정이 나오는지 검토합니다:
+     ```bash
+     kubectl exec -it deploy/gitlab-omnibus -n gitlab-omnibus -- gitlab-rake gitlab:check SANITIZE=true
+     ```
+
+---
+
+## 4. 공식 필수 업그레이드 경로 및 K8s 최적화 (Required Stops)
+
+신형 클러스터 상에서 데이터 복원이 완벽하게 완료된 후, LTS 최종 버전인 `18.11.4`를 향해 아래 명시된 **마이그레이션 필수 정지점(Upgrade Stops)** 순서로 `helm upgrade` 이미지 태그를 변경해가며 업그레이드를 수행합니다.
+
+### 업그레이드 경로 요약
+```text
+[16.11.2] (복구 검증 완료) -> [16.11.10] -> [17.1.8] -> [17.3.7] -> [17.5.5] -> [17.8.7] -> [17.11.7] -> [18.2.8] -> [18.5.7] -> [18.8.10] -> [18.11.4]
+```
+* **참조 공식 링크**:
   * [GitLab Upgrade Path Tool (16.11.10 -> 18.11.4)](https://gitlab-com.gitlab.io/support/toolbox/upgrade-path/?current=16.11.10&target=18.11.4)
   * [GitLab 공식 Upgrade Paths 가이드](https://docs.gitlab.com/update/upgrade_paths/#upgrade-path-tool)
 
-GitLab은 마이그레이션 중단점을 준수해야 하며, 데이터 마이그레이션이 완료되는 시점을 SQL로 대조해가며 순차 이동해야 합니다.
+---
 
-```text
-[16.11.2] (시작 및 백업 복원 완료 단계)
-   │
-   ▼
-[16.11.10] ── (최종 16버전 안정화 패치 완료)
-   │
-   ▼
-[17.1.8]  ── (PostgreSQL 14 상태 보장 진입) *중요 Stop* (1)
-   │
-   ▼
-[17.3.7]  ── (17.x 중간 정지점)
-   │
-   ▼
-[17.5.5]
-   │
-   ▼
-[17.8.7]
-   │
-   ▼
-[17.11.7] ── (17.x 최종 안정화 패치 완료)
-   │
-   ▼
-[18.2.8]  ── (PostgreSQL 16 상태 보장 진입) *중요 Stop* (2)
-   │
-   ▼
-[18.5.7]
-   │
-   ▼
-[18.8.10]
-   │
-   ▼
-[18.11.4] ── (최종 18버전 마이그레이션 완료 및 검증)
-```
-
-*(1) **17.1.8 정지점 사유**: 17.1.8은 공식 문서상 대규모 `ci_pipeline_messages` 테이블을 가진 인스턴스에 대한 조건부 Required Stop이지만, 본 계획에서는 GitLab Support Upgrade Path Tool 결과와 보수적 운영 원칙에 따라 전체 데이터 안전성을 확보하기 위해 필수 정지점으로 규정하여 포함합니다.*
+### ⚠️ 중요: PostgreSQL 업그레이드 대비 스토리지 여유 공간 확보 (50% 룰)
+* GitLab 메이저 버전 진입 시(17.x 진입 시 PostgreSQL 14, 18.x 진입 시 PostgreSQL 16) 내장 데이터베이스 엔진의 메이저 업그레이드가 진행됩니다.
+* 이때 GitLab Omnibus는 기존 PostgreSQL 데이터 디렉토리를 복제하여 변환하는 안전한 마이그레이션 기법을 사용하므로, **데이터베이스 크기의 최소 1배(전체 스토리지 기준 약 50%의 여유 용량) 이상의 추가 공간이 PV에 확보되어 있어야 합니다.**
+* **조치 사항**: 마이그레이션 시작 전 PV/PVC의 스토리지 할당 크기가 현재 사용량 대비 최소 2배 이상 여유를 가질 수 있도록 확장 프로비저닝을 마친 후 작업을 수행하십시오.
 
 ---
 
-## 3. 마이그레이션 및 업그레이드 상세 절차
+### ⚠️ K8s 시작 프로브(Startup/Liveness Probe) 무한 재시작 회피 방안
+주요 버전 정지점에서 DB 업그레이드(`pg-upgrade`) 및 `reconfigure`가 실행될 때 DB의 크기에 따라 수십 분 이상 걸릴 수 있습니다. 이때 쿠버네티스 프로브 기본 임계치를 초과하면 파드가 비정상 종료 및 무한 재시작 루프에 걸려 데이터가 파손됩니다. 아래 둘 중 하나의 대응책을 반드시 적용하십시오.
 
-### 3.1단계: 테스트 환경 구성 및 16.11.2 초기 백업 복원
-1. 테스트 네임스페이스 또는 전용 K8s 노드를 격리 확보합니다.
-2. `gitlab-omnibus-16.11.2` 컴포넌트 폴더를 이용하여 16.11.2 버전의 GitLab 파드를 최초 기동합니다.
-3. 운영 서버에서 `gitlab-backup create` 및 `gitlab-ctl backup-etc`로 떠둔 백업본과 암호화 비밀키(`gitlab-secrets.json`, `gitlab.rb`)를 복원하여 정상 동작하는 상태를 검증합니다.
-
-### 3.2단계: 순차 업그레이드 시뮬레이션 실행
-`gitlab-omnibus-18.11.4` 컴포넌트 내의 차트를 사용하되, 이미지 태그(`image.tag`)를 명령어로 오버라이드하여 필수 정지점 순서대로 차례대로 헬름 업그레이드를 수행합니다.
-
-```bash
-# 1. 16.11.10 최종 패치 적용
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=16.11.10-ee.0
-# (기동 완료 및 DB Background Migration 확인 필수)
-
-# 2. 17.1.8 업그레이드 (PostgreSQL 14 상태 보장 확인)
-# [주의] 이 단계 기동 전 deployment.yaml의 startupProbe 임계치 조정 권장
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=17.1.8-ee.0
-
-# 3. 17.3.7 -> 17.5.5 -> 17.8.7 -> 17.11.7 순차 적용
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=17.3.7-ee.0
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=17.5.5-ee.0
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=17.8.7-ee.0
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=17.11.7-ee.0
-
-# 4. 18.2.8 업그레이드 (PostgreSQL 16 상태 보장 확인)
-# [주의] 이 단계 기동 전 deployment.yaml의 startupProbe 임계치 조정 권장
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=18.2.8-ee.0
-
-# 5. 18.5.7 -> 18.8.10 -> 18.11.4 최종 버전 순차 적용
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=18.5.7-ee.0
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=18.8.10-ee.0
-helm upgrade gitlab-omnibus ./charts/gitlab-omnibus -n gitlab-omnibus --set image.tag=18.11.4-ee.0
-```
+* **방안 A (임계치 일시적 연장)**:
+  `deployment.yaml` 내 `startupProbe.failureThreshold` 값을 `120`회(60분 수준) 이상으로 늘려 충분한 시간을 줍니다.
+* **방안 B (수동 기동 - 권장)**:
+  1. `deployment.yaml`의 컨테이너 `command` 스펙에 `["sleep", "36000"]`을 임시 주입하여 자동 기동을 우회하고 백그라운드 슬립 상태로 파드를 띄웁니다.
+  2. `kubectl exec -it [파드명] -n [네임스페이스] -- bash`로 직접 컨테이너 내부에 접속합니다.
+  3. 컨테이너 내부에서 아래 명령을 차례대로 내려 수동으로 완료를 확인합니다:
+     ```bash
+     gitlab-ctl reconfigure
+     gitlab-ctl pg-upgrade  # DB 엔진 메이저 변환 완료 확인
+     ```
+  4. 변환 완료 후 `deployment.yaml`의 `command` 설정을 원상 복구하여 헬름 배포를 원상 복구시킵니다.
 
 ---
 
-## 4. 버전 이동 간 데이터베이스 상태 검증 방법 (핵심)
+## 5. 버전 이동 간 상태 검증 및 문제 해결 (Troubleshooting)
 
-각각의 헬름 업그레이드 명령어 적용 후, 다음 버전으로 넘어가기 전 반드시 아래의 백그라운드 스키마 데이터 변환이 완전히 종료되었는지 확인하고 넘어가야 합니다.
+각각의 `helm upgrade` 단계가 완료된 후, 다음 단계의 업그레이드 커맨드를 입력하기 전에 반드시 백그라운드 스키마 데이터 변환이 완전히 종료되었는지 확인하고 넘어가야 합니다.
 
-### 4.1. 배치가 완료되지 않은 마이그레이션 확인 SQL
-파드가 기동 완료(`Running` 상태 진입)되면 컨테이너 내부로 실행 진입하여 아래 SQL을 질의합니다.
+### 5.1. 미완료 백그라운드 마이그레이션 확인 SQL
+파드가 기동 완료(`Running` 상태 진입)되면 내부 DB에 접근해 다음 질의를 날립니다.
 ```bash
-# 컨테이너 내 접속 후 psql 쿼리 실행
 sudo gitlab-psql -c "
 SELECT job_class_name, table_name, column_name, job_arguments, status 
 FROM batched_background_migrations 
 WHERE status NOT IN (3, 6);
 "
 ```
-* **성공 기준**: 조회 결과가 **0 rows**여야 정상 종료된 상태입니다.
-* **대기**: 만약 행이 출력된다면 백그라운드 배치 마이그레이션이 돌고 있는 상태이므로 완료될 때까지 기다리십시오.
+* **성공 판정**: 조회 결과가 **0 rows**여야 합니다. 0 rows가 출력되기 전에 버전을 올리면 스키마가 충돌하여 데이터베이스가 오염됩니다.
 
-### 4.2. 마이그레이션이 실패(failed) 혹은 멈춤 상태일 때 수동 강제 트리거
-특정 태스크가 정지되었거나 멈춤 상태일 경우 아래 명령으로 강제 강도 완료를 시도합니다.
+### 5.2. 마이그레이션이 실패(failed) 혹은 대기 상태에 머물 때 강제 트리거
+특정 백작업이 멈춰있어 진행이 안 될 경우, 컨테이너 내에서 아래의 Rails Runner 명령어로 즉시 강제 마무리를 트리거합니다.
 ```bash
 sudo gitlab-rails runner -e production '
 Gitlab::Database::BackgroundMigration::BatchedMigration.queued.each do |m|
@@ -132,15 +161,12 @@ end'
 
 ---
 
-## 5. 업그레이드 완료 후 기능 정밀 검증 시나리오
-
-최종 `18.11.4`까지 업그레이드가 완료되면 아래 항목들을 빠짐없이 확인합니다.
+## 6. 최종 이관 완료 후 기능 정밀 검증 시나리오
 
 1. **Rake 자산 무결성 자가 점검**:
    ```bash
    sudo gitlab-rake gitlab:check SANITIZE=true
    ```
-   * 모든 항목이 `green` 및 `yes`인지 확인합니다.
 2. **로그인 및 세션**:
    * 기존 사용자 계정으로 로그인 가능 여부 및 패스워드 검증.
    * OTP 및 2FA가 연동된 계정의 복구 정합성 확인.
