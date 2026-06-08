@@ -151,6 +151,57 @@ EOF
     echo -e "  ${GREEN}✅ 파일 디스크립터 및 Limits 설정 완료.${NC}"
 }
 
+check_time_sync() {
+    echo -e "${CYAN}============================================================${NC}"
+    echo -e "${CYAN} 🕒 시스템 시간 동기화 상태 수동 확인${NC}"
+    echo -e "${CYAN}============================================================${NC}"
+    echo -e "${YELLOW}[안내] 노드 간 시간 일치 여부는 Kubernetes 설치의 필수 요구사항입니다.${NC}"
+    echo -e "현재 시스템의 시간 설정 상태를 확인해 주세요:\n"
+
+    if command -v timedatectl >/dev/null 2>&1; then
+        timedatectl status
+    else
+        echo -e "  현재 시간: $(date)"
+    fi
+    echo ""
+
+    local is_synchronized=0
+
+    # 1. timedatectl 검증
+    if command -v timedatectl >/dev/null 2>&1; then
+        if timedatectl status 2>/dev/null | grep -qi "System clock synchronized: yes"; then
+            is_synchronized=1
+        fi
+    fi
+
+    # 2. 서비스 검증 (timesyncd, chrony, ntp 등)
+    if [ "$is_synchronized" -eq 0 ]; then
+        for svc in "chrony" "chronyd" "systemd-timesyncd" "ntp" "ntpd"; do
+            if systemctl is-active --quiet "$svc" 2>/dev/null; then
+                is_synchronized=1
+                break
+            fi
+        done
+    fi
+
+    if [ "$is_synchronized" -eq 1 ]; then
+        echo -e "${GREEN}✅ 시간 동기화 상태가 정상 감지되었습니다.${NC}"
+        echo ""
+        read -p "동기화 상태를 확인하셨습니까? 진행하려면 Enter를 누르세요..." _DUMMY
+    else
+        echo -e "${RED}⚠️ [경고] 시간 동기화(NTP/Chrony/timesyncd) 활성화 또는 동기화 완료 상태를 감지하지 못했습니다.${NC}"
+        echo -e "노드 간의 시간이 맞지 않으면 설치 및 가입 과정에서 오류가 발생할 수 있습니다."
+        echo ""
+        read -p "수동으로 시간 동기화를 확인하셨으며, 이대로 계속 진행하시겠습니까? [y/N]: " _TIME_CONTINUE
+        _TIME_CONTINUE="${_TIME_CONTINUE:-N}"
+        if [[ ! "$_TIME_CONTINUE" =~ ^[Yy]$ ]]; then
+            echo "설치를 취소합니다. 시간 동기화 설정을 확인해 주세요."
+            exit 1
+        fi
+    fi
+    echo ""
+}
+
 
 
 # ==========================================
@@ -193,6 +244,8 @@ if [ "$1" = "--join" ]; then
         echo -e "${CYAN}   endpoint: ${JOIN_ENDPOINT}${NC}"
         echo -e "${CYAN}============================================================${NC}"
     fi
+
+    check_time_sync
 
     echo -e "${YELLOW}DEB 설치 · OS 사전 설정 · containerd 구성 · 이미지 로드 진행...${NC}"
 
@@ -438,6 +491,8 @@ _GO="${_GO:-Y}"
 [[ ! "$_GO" =~ ^[Yy]$ ]] && { echo "취소합니다."; exit 0; }
 
 save_conf
+
+check_time_sync
 
 # ── [5] DEB 설치 ────────────────────────────────────────────
 echo ""

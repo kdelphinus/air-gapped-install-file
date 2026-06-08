@@ -37,6 +37,34 @@ done
 tar -zxvf ~/k8s-1.30.tar.gz
 ```
 
+## Phase 0.5: 시간 동기화 설정 (Chrony) — 전체 노드 필수
+
+Kubernetes 클러스터는 노드 간 시간 동기화가 필수적입니다. 시간이 틀어지면 인증서 유효기간 오류, 클러스터 합류 실패 등이 발생하므로, 설치 전에 모든 노드의 시간을 동기화해야 합니다.
+
+### 1. Chrony 설정 변경 (내부망 NTP 서버 지정)
+에어갭(폐쇄망) 환경의 경우, 내부망에 구축된 NTP 서버 주소로 설정해야 합니다. `/etc/chrony.conf` 파일을 수정합니다.
+```bash
+sudo vi /etc/chrony.conf
+```
+```text
+# 기존 pool/server 설정을 주석 처리하고 내부 NTP 서버 지정
+server <INTERNAL_NTP_SERVER_IP> iburst
+```
+설정 후 서비스를 활성화하고 시작합니다.
+```bash
+sudo systemctl enable --now chronyd
+sudo systemctl restart chronyd
+```
+
+### 2. 동기화 상태 확인
+모든 노드에서 시스템 클럭 동기화 상태를 최종 검증합니다.
+```bash
+timedatectl status
+```
+출력 결과 중 **`System clock synchronized: yes`** 상태를 확인합니다. `chronyc sources` 또는 `chronyc tracking`을 실행하여 연동이 성공적으로 이루어졌는지 상세히 확인할 수 있습니다.
+
+---
+
 ## Phase 1: 공통 RPM 설치 (전체 노드)
 
 ```bash

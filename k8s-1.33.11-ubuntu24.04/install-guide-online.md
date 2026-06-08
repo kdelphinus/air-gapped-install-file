@@ -11,6 +11,48 @@ containerd v2.2.x + CNI(Calico 또는 Cilium) 선택 구성이며, 폐쇄망 설
 - swap 비활성화
 - `sudo` 권한
 
+## Phase 0.5: 시간 동기화 설정 (Chrony / systemd-timesyncd) — 전체 노드 필수
+
+Kubernetes 클러스터는 노드 간 시간 동기화가 필수적입니다. 시간이 틀어지면 인증서 유효기간 오류, 클러스터 합류 실패 등이 발생하므로, 설치 전에 모든 노드의 시간을 동기화해야 합니다.
+
+### 1. 시간 동기화 서비스 확인 및 설정
+환경에 따라 **Chrony** 또는 Ubuntu 기본 데몬인 **systemd-timesyncd**를 사용하여 동기화를 수행합니다.
+
+#### 옵션 A: Chrony를 사용하는 경우
+`/etc/chrony/chrony.conf`에 시간 서버(예: `pool ntp.ubuntu.com iburst` 또는 `pool time.google.com iburst`)를 구성합니다.
+```bash
+sudo vi /etc/chrony/chrony.conf
+```
+설정 후 서비스를 재기동하고 활성화합니다.
+```bash
+sudo systemctl enable --now chrony
+sudo systemctl restart chrony
+```
+
+#### 옵션 B: systemd-timesyncd를 사용하는 경우
+`/etc/systemd/timesyncd.conf` 파일을 편집하여 시간 서버를 지정하거나 기본 제공 설정을 사용합니다.
+```bash
+sudo vi /etc/systemd/timesyncd.conf
+```
+```ini
+[Time]
+NTP=time.google.com
+```
+설정 후 서비스를 재기동하고 활성화합니다.
+```bash
+sudo systemctl enable --now systemd-timesyncd
+sudo systemctl restart systemd-timesyncd
+```
+
+### 2. 동기화 상태 확인
+모든 노드에서 시스템 클럭 동기화 상태를 최종 검증합니다.
+```bash
+timedatectl status
+```
+출력 결과 중 **`System clock synchronized: yes`** 상태를 확인합니다. Chrony를 사용하는 경우 `chronyc sources` 또는 `chronyc tracking`을 수행하여 연동 상태를 정밀 진입 확인할 수 있습니다.
+
+---
+
 ## Phase 1: 저장소 등록 및 패키지 설치 (전체 노드)
 
 ```bash
