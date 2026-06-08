@@ -152,11 +152,11 @@ SVC_NAME=$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owni
 
 # 단일 노드 IP 등록 시
 kubectl patch svc -n envoy-gateway-system $SVC_NAME --type merge \
-  -p '{"spec":{"externalIPs":["[Worker1 IP]"]}}'
+  -p '{"spec":{"externalIPs":["{WORKER1_IP}"]}}'
 
 # 전체 워커 노드 IP 일괄 등록 시 (다중 노드 환경)
 kubectl patch svc -n envoy-gateway-system $SVC_NAME --type merge \
-  -p '{"spec":{"externalIPs":["[Worker1 IP]","[Worker2 IP]","[Worker3 IP]"]}}'
+  -p '{"spec":{"externalIPs":["{WORKER1_IP}","{WORKER2_IP}","{WORKER3_IP}"]}}'
 ```
 
 #### 2) 게이트웨이(Gateway) 리소스 주소 바인딩
@@ -166,18 +166,18 @@ kubectl patch svc -n envoy-gateway-system $SVC_NAME --type merge \
 ```bash
 # 단일 노드 IP 바인딩
 kubectl patch gateway cluster-gateway -n envoy-gateway-system --type='merge' \
-  -p '{"spec":{"addresses":[{"type":"IPAddress","value":"[Worker1 IP]"}]}}'
+  -p '{"spec":{"addresses":[{"type":"IPAddress","value":"{WORKER1_IP}"}]}}'
 
 # 다중 노드 IP 바인딩 (전체 워커 노드 등록 권장)
 kubectl patch gateway cluster-gateway -n envoy-gateway-system --type='merge' \
   -p '{"spec":{"addresses":[
-    {"type":"IPAddress","value":"[Worker1 IP]"},
-    {"type":"IPAddress","value":"[Worker2 IP]"},
-    {"type":"IPAddress","value":"[Worker3 IP]"}
+    {"type":"IPAddress","value":"{WORKER1_IP}"},
+    {"type":"IPAddress","value":"{WORKER2_IP}"},
+    {"type":"IPAddress","value":"{WORKER3_IP}"}
   ]}}'
 ```
 
-> **주의**: `[Worker1 IP]`, `[Worker2 IP]` 등의 부분은 실제 환경의 워커 노드 IP 주소로 변경하여 실행해야 합니다.
+> **주의**: `{WORKER1_IP}`, `{WORKER2_IP}` 등의 부분은 실제 환경의 워커 노드 IP 주소로 변경하여 실행해야 합니다.
 
 ### 2. NodePort — 포트 확인 및 HAProxy 연동
 
