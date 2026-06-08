@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gitlab-omnibus
+  namespace: <NAMESPACE>
+spec:
+  parentRefs:
+    - name: cluster-gateway
+      namespace: envoy-gateway-system
+  hostnames:
+    - <DOMAIN_NAME>
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: gitlab-omnibus
+          port: 80

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  namespace: {{ .Release.Namespace }}
+data:
+  gitlab.rb: |
+    external_url '{{ .Values.externalUrl }}'
+
+    # Nginx
+    nginx['listen_port'] = 80
+    nginx['listen_https'] = false
+    nginx['redirect_http_to_https'] = false
+
+    # SSH
+    gitlab_rails['gitlab_shell_ssh_port'] = {{ .Values.sshPort }}
+
+    # 시간대
+    gitlab_rails['time_zone'] = '{{ .Values.timezone }}'
+
+    # 모니터링 화이트리스트 — kube-probe(/-/readiness, /-/liveness)가 404가 아니도록
+    # Pod CIDR(192.168.0.0/16), Service CIDR(10.96.0.0/12), 사설망 전체 + localhost 허용
+    gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
+
+    # 모니터링 비활성화 (리소스 절약)
+    prometheus_monitoring['enable'] = false
+    alertmanager['enable'] = false
+    node_exporter['enable'] = false
+    redis_exporter['enable'] = false
+    postgres_exporter['enable'] = false
+    gitlab_exporter['enable'] = false
+
+    # 로그: stdout (kubectl logs로 확인 가능)
+    logging['svlogd_size'] = 200 * 1024 * 1024
+    logging['svlogd_num'] = 2
+
+    # Terraform State (HTTP backend)
+    gitlab_rails['terraform_state_enabled'] = {{ .Values.terraformState.enabled }}
