@@ -22,6 +22,10 @@
 
 ## 2. 공식 필수 업그레이드 경로 (Required Upgrade Stops)
 
+* **공식 업그레이드 경로 참조 링크**:
+  * [GitLab Upgrade Path Tool (16.11.10 -> 18.11.4)](https://gitlab-com.gitlab.io/support/toolbox/upgrade-path/?current=16.11.10&target=18.11.4)
+  * [GitLab 공식 Upgrade Paths 가이드](https://docs.gitlab.com/update/upgrade_paths/#upgrade-path-tool)
+
 GitLab은 마이그레이션 중단점을 준수해야 하며, 데이터 마이그레이션이 완료되는 시점을 SQL로 대조해가며 순차 이동해야 합니다.
 
 ```text
