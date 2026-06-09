@@ -148,15 +148,18 @@ if [ -z "${IMAGE_SOURCE}" ]; then
     echo ""
     echo "이미지 소스를 선택하세요:"
     echo "  1) Harbor 레지스트리 사용 (사전에 images/upload_images_to_harbor_v3-lite.sh 실행 필요)"
-    echo "  2) 로컬 tar import + 미적재 시 docker.io 직접 풀 (인터넷 연결 시)"
-    read -p "선택 [1/2, 기본값: 1]: " _IMG_SRC
+    echo "  2) 로컬 tar import 전용 (폐쇄망, images/*.tar 필요)"
+    echo "  3) Online pull 허용 (인터넷 연결 환경에서 docker.io 사용)"
+    read -p "선택 [1/2/3, 기본값: 1]: " _IMG_SRC
     _IMG_SRC="${_IMG_SRC:-1}"
     if [ "$_IMG_SRC" = "1" ]; then
         IMAGE_SOURCE="harbor"
     elif [ "$_IMG_SRC" = "2" ]; then
         IMAGE_SOURCE="local"
+    elif [ "$_IMG_SRC" = "3" ]; then
+        IMAGE_SOURCE="online"
     else
-        echo "[오류] 1 또는 2를 선택하세요."; exit 1
+        echo "[오류] 1, 2, 또는 3을 선택하세요."; exit 1
     fi
 fi
 
@@ -179,10 +182,13 @@ elif [ "${IMAGE_SOURCE}" = "local" ] && [ "${DO_UPGRADE}" != "true" ]; then
         IMPORT_COUNT=$((IMPORT_COUNT + 1))
     done
     if [ "${IMPORT_COUNT}" -eq 0 ]; then
-        echo "  ℹ  ./images/ 에 tar 파일이 없습니다 — 인터넷 연결망이라면 docker.io에서 직접 풀합니다."
+        echo "[오류] ./images/ 에 tar 파일이 없습니다. 로컬 import 모드에서는 오프라인 tar 파일이 필요합니다."
+        exit 1
     else
         echo "  ${IMPORT_COUNT}개 이미지 import 완료"
     fi
+elif [ "${IMAGE_SOURCE}" = "online" ]; then
+    echo "  ℹ  Online pull 모드 — 이미지가 없으면 런타임이 docker.io에서 직접 pull합니다."
 fi
 
 # ── 스토리지 타입 선택 ────────────────────────────────────
@@ -295,8 +301,7 @@ if [ "${IMAGE_SOURCE}" = "harbor" ]; then
     IMAGE_REGISTRY="${HARBOR_REGISTRY}"
     IMAGE_REPOSITORY="${HARBOR_PROJECT}/gitlab-ee"
 else
-    # 로컬 모드: 사전 import된 이미지가 있으면 IfNotPresent로 그대로 사용,
-    # 없으면 공식 업스트림(docker.io)에서 풀 (인터넷 연결망 시나리오)
+    # 로컬/온라인 모드: 기본 이미지명을 사용한다. local은 사전 import 필수, online은 docker.io pull 허용.
     IMAGE_REGISTRY="docker.io"
     IMAGE_REPOSITORY="gitlab/gitlab-ee"
 fi

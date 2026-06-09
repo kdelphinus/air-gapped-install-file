@@ -22,10 +22,14 @@ IMAGES=(
 
 for IMG in "${IMAGES[@]}"; do
     FILENAME=$(echo $IMG | tr ':/' '-')
+    CTR_IMG="${IMG}"
+    if [[ "${CTR_IMG}" != *.*/* && "${CTR_IMG}" != localhost/* ]]; then
+        CTR_IMG="docker.io/${CTR_IMG}"
+    fi
     echo "-> 다운로드: $IMG"
-    sudo ctr images pull "$IMG"
+    sudo ctr images pull "$CTR_IMG"
     echo "-> 저장: ${IMAGE_DIR}/${FILENAME}.tar"
-    sudo ctr images export "${IMAGE_DIR}/${FILENAME}.tar" "$IMG"
+    sudo ctr images export "${IMAGE_DIR}/${FILENAME}.tar" "$CTR_IMG"
 done
 
 echo "[완료] 모든 에셋이 저장되었습니다."
