@@ -13,30 +13,54 @@ IMAGE_DIR="${BASE_DIR}/images"
 SCRIPT_DIR="${BASE_DIR}/scripts"
 mkdir -p "$CHART_DIR" "$IMAGE_DIR" "$SCRIPT_DIR"
 
-echo "[1/3] Helm 차트 다운로드..."
-helm pull vmware-tanzu/velero --version 12.0.0 -d "$CHART_DIR" || true
+select_download_scope() {
+    echo "다운로드 범위를 선택하세요:"
+    echo "  1) 전체 (Helm 차트 + 컨테이너 이미지 + CLI)"
+    echo "  2) Helm 차트만"
+    echo "  3) 컨테이너 이미지만"
+    read -p "선택 [1/2/3, 기본값: 1]: " DOWNLOAD_SCOPE
+    DOWNLOAD_SCOPE="${DOWNLOAD_SCOPE:-1}"
 
-echo "[2/3] 이미지 다운로드 (Velero & MinIO)..."
+    case "$DOWNLOAD_SCOPE" in
+        1|all|ALL) DOWNLOAD_HELM=true; DOWNLOAD_IMAGES=true; DOWNLOAD_CLI=true ;;
+        2|helm|HELM) DOWNLOAD_HELM=true; DOWNLOAD_IMAGES=false; DOWNLOAD_CLI=false ;;
+        3|image|images|IMAGE|IMAGES) DOWNLOAD_HELM=false; DOWNLOAD_IMAGES=true; DOWNLOAD_CLI=false ;;
+        *) echo "[오류] 1, 2, 또는 3을 선택하세요."; exit 1 ;;
+    esac
+}
+
+select_download_scope
+
+if [ "$DOWNLOAD_HELM" = true ]; then
+    echo "[1/3] Helm 차트 다운로드..."
+    helm pull vmware-tanzu/velero --version 12.0.0 -d "$CHART_DIR" || true
+fi
+
 IMAGES=(
     "docker.io/velero/velero:v1.18.0"
     "docker.io/velero/velero-plugin-for-aws:v1.14.0"
     "quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z"
     "quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z"
 )
-for IMG in "${IMAGES[@]}"; do
-    # registry 명칭(docker.io/, quay.io/) 제거 후 파일명 생성
-    SAFE_NAME=$(echo $IMG | sed -E 's/(docker.io\/|quay.io\/)//' | tr ':/' '-')
-    if [ ! -f "${IMAGE_DIR}/${SAFE_NAME}.tar" ]; then
-        echo "🚀 Pulling $IMG..."
-        sudo ctr -n k8s.io images pull "$IMG" || continue
-        echo "📦 Exporting to ${IMAGE_DIR}/${SAFE_NAME}.tar..."
-        sudo ctr -n k8s.io images export "${IMAGE_DIR}/${SAFE_NAME}.tar" "$IMG"
-    fi
-done
+if [ "$DOWNLOAD_IMAGES" = true ]; then
+    echo "[2/3] 이미지 다운로드 (Velero & MinIO)..."
+    for IMG in "${IMAGES[@]}"; do
+        # registry 명칭(docker.io/, quay.io/) 제거 후 파일명 생성
+        SAFE_NAME=$(echo $IMG | sed -E 's/(docker.io\/|quay.io\/)//' | tr ':/' '-')
+        if [ ! -f "${IMAGE_DIR}/${SAFE_NAME}.tar" ]; then
+            echo "🚀 Pulling $IMG..."
+            sudo ctr -n k8s.io images pull "$IMG" || continue
+            echo "📦 Exporting to ${IMAGE_DIR}/${SAFE_NAME}.tar..."
+            sudo ctr -n k8s.io images export "${IMAGE_DIR}/${SAFE_NAME}.tar" "$IMG"
+        fi
+    done
+fi
 
-echo "[3/3] CLI 다운로드..."
-VELERO_VER="v1.18.0"
-if [ ! -f "${BASE_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz" ]; then
-    wget -q https://github.com/vmware-tanzu/velero/releases/download/${VELERO_VER}/velero-${VELERO_VER}-linux-amd64.tar.gz -O "${BASE_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz"
+if [ "$DOWNLOAD_CLI" = true ]; then
+    echo "[3/3] CLI 다운로드..."
+    VELERO_VER="v1.18.0"
+    if [ ! -f "${BASE_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz" ]; then
+        wget -q https://github.com/vmware-tanzu/velero/releases/download/${VELERO_VER}/velero-${VELERO_VER}-linux-amd64.tar.gz -O "${BASE_DIR}/velero-${VELERO_VER}-linux-amd64.tar.gz"
+    fi
 fi
 echo "[완료] Velero 및 MinIO 에셋 저장 완료."

@@ -12,11 +12,30 @@ CHART_DIR="${BASE_DIR}/charts"
 IMAGE_DIR="${BASE_DIR}/images"
 mkdir -p "$CHART_DIR" "$IMAGE_DIR"
 
-echo "[1/2] Helm 차트 다운로드 중..."
-# 82.12.0 버전으로 다운로드
-helm pull prometheus-community/kube-prometheus-stack --version 82.12.0 -d "$CHART_DIR" || true
+select_download_scope() {
+    echo "다운로드 범위를 선택하세요:"
+    echo "  1) 전체 (Helm 차트 + 컨테이너 이미지)"
+    echo "  2) Helm 차트만"
+    echo "  3) 컨테이너 이미지만"
+    read -p "선택 [1/2/3, 기본값: 1]: " DOWNLOAD_SCOPE
+    DOWNLOAD_SCOPE="${DOWNLOAD_SCOPE:-1}"
 
-echo "[2/2] 컨테이너 이미지 다운로드 및 저장 중..."
+    case "$DOWNLOAD_SCOPE" in
+        1|all|ALL) DOWNLOAD_HELM=true; DOWNLOAD_IMAGES=true ;;
+        2|helm|HELM) DOWNLOAD_HELM=true; DOWNLOAD_IMAGES=false ;;
+        3|image|images|IMAGE|IMAGES) DOWNLOAD_HELM=false; DOWNLOAD_IMAGES=true ;;
+        *) echo "[오류] 1, 2, 또는 3을 선택하세요."; exit 1 ;;
+    esac
+}
+
+select_download_scope
+
+if [ "$DOWNLOAD_HELM" = true ]; then
+    echo "[1/2] Helm 차트 다운로드 중..."
+    # 82.12.0 버전으로 다운로드
+    helm pull prometheus-community/kube-prometheus-stack --version 82.12.0 -d "$CHART_DIR" || true
+fi
+
 IMAGES=(
     "quay.io/prometheus/prometheus:v3.10.0"
     "quay.io/prometheus/alertmanager:v0.31.1"
@@ -30,15 +49,18 @@ IMAGES=(
     "ghcr.io/jkroepke/kube-webhook-certgen:v1.7.8"
 )
 
-for IMG in "${IMAGES[@]}"; do
-    # SAFE_NAME logic matching the actual files in images/ directory
-    SAFE_NAME=$(echo $IMG | tr ':/' '-')
-    echo "-> 처리 중: $IMG (File: ${SAFE_NAME}.tar)"
-    if [ ! -f "${IMAGE_DIR}/${SAFE_NAME}.tar" ]; then
-        sudo ctr images pull "$IMG" || continue
-        sudo ctr images export "${IMAGE_DIR}/${SAFE_NAME}.tar" "$IMG"
-    else
-        echo "   이미 존재함: ${SAFE_NAME}.tar"
-    fi
-done
+if [ "$DOWNLOAD_IMAGES" = true ]; then
+    echo "[2/2] 컨테이너 이미지 다운로드 및 저장 중..."
+    for IMG in "${IMAGES[@]}"; do
+        # SAFE_NAME logic matching the actual files in images/ directory
+        SAFE_NAME=$(echo $IMG | tr ':/' '-')
+        echo "-> 처리 중: $IMG (File: ${SAFE_NAME}.tar)"
+        if [ ! -f "${IMAGE_DIR}/${SAFE_NAME}.tar" ]; then
+            sudo ctr images pull "$IMG" || continue
+            sudo ctr images export "${IMAGE_DIR}/${SAFE_NAME}.tar" "$IMG"
+        else
+            echo "   이미 존재함: ${SAFE_NAME}.tar"
+        fi
+    done
+fi
 echo "[완료] Monitoring 에셋 저장 완료."
