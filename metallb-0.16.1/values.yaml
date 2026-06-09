@@ -25,3 +25,8 @@ prometheus:
     enabled: false
   serviceMonitor:
     enabled: false
+
+# FRR-K8s (BGP) 서브차트 비활성화 (L2 모드 사용 시 불필요)
+frrk8s:
+  enabled: false
+

@@ -155,8 +155,8 @@ if [ "$IMAGE_SOURCE" == "harbor" ]; then
     IMG_SPEAKER="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/metallb-speaker"
 fi
 
-sed -i "s|repository:.*metallb-controller.*|repository: ${IMG_CONTROLLER}|g" "$VALUES_FILE"
-sed -i "s|repository:.*metallb-speaker.*|repository: ${IMG_SPEAKER}|g" "$VALUES_FILE"
+sed -i "s|repository:.*controller.*|repository: ${IMG_CONTROLLER}|g" "$VALUES_FILE"
+sed -i "s|repository:.*speaker.*|repository: ${IMG_SPEAKER}|g" "$VALUES_FILE"
 
 # 3-2. manifests/l2-config.yaml — IP 풀 치환
 # addresses 목록의 첫 줄(들여쓰기 + "- <range>")을 사용자 입력으로 교체
