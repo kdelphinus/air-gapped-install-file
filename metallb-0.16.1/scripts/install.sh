@@ -130,11 +130,12 @@ if [ "$DO_UPGRADE" != "true" ]; then
     echo "   노드/게이트웨이/Pod/Service CIDR 과 겹치지 않는 유휴 IP 범위를 지정하세요."
     echo "   (예: 노드가 172.30.235.0/24 라면 → 172.30.235.200-172.30.235.220)"
     while true; do
-        read -p "LoadBalancer IP 풀 (형식: start-end): " ADDRESS_POOL
-        if [[ "$ADDRESS_POOL" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}-([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        read -p "LoadBalancer IP 풀 (형식: start-end 또는 CIDR, 예: 10.10.10.81/32): " ADDRESS_POOL
+        if [[ "$ADDRESS_POOL" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}-([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || \
+           [[ "$ADDRESS_POOL" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
             break
         fi
-        echo "  ❌ 형식이 올바르지 않습니다. 예: 172.30.235.200-172.30.235.220"
+        echo "  ❌ 형식이 올바르지 않습니다. 예: 172.30.235.200-172.30.235.220 또는 10.10.10.81/32"
     done
 fi
 
@@ -159,8 +160,8 @@ sed -i "s|repository:.*controller.*|repository: ${IMG_CONTROLLER}|g" "$VALUES_FI
 sed -i "s|repository:.*speaker.*|repository: ${IMG_SPEAKER}|g" "$VALUES_FILE"
 
 # 3-2. manifests/l2-config.yaml — IP 풀 치환
-# addresses 목록의 첫 줄(들여쓰기 + "- <range>")을 사용자 입력으로 교체
-sed -i -E "s|^([[:space:]]*)-[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}-([0-9]{1,3}\.){3}[0-9]{1,3}[[:space:]]*$|\1- ${ADDRESS_POOL}|" "$L2_MANIFEST"
+# addresses 목록의 첫 줄(들여쓰기 + "- <range>" 또는 "- <cidr>")을 사용자 입력으로 교체
+sed -i -E "s@^([[:space:]]*)-[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}(-[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|/[0-9]+)[[:space:]]*$@\1- ${ADDRESS_POOL}@" "$L2_MANIFEST"
 
 # ==========================================
 # [4] 설치/업그레이드 실행
