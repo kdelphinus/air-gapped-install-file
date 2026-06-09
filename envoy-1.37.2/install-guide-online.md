@@ -145,27 +145,37 @@ kubectl get svc -n envoy-gateway-system
 
 L4 스위치 또는 HAProxy 의 Real Server 로 워커 IP:30080 / :30443 등록.
 
-### 와일드카드 TLS 인증서 적용
+### TLS 인증서 및 HTTPS 구성
+
+Envoy Gateway에서 HTTPS(TLS) 서비스를 노출하려면 사전에 인증서 Secret을 생성해 두어야 합니다.
+
+**TLS Secret 생성 (설치 전 또는 완료 후):**
+
+`gateway-infra` 설정(`values-infra.yaml`)에 정의된 Secret 이름(기본값: `gateway-tls`)과 매칭되도록 생성합니다.
 
 ```bash
-kubectl create secret tls wildcard-tls-secret \
-  --cert=fullchain.pem --key=privkey.pem \
+# 인증서 파일이 위치한 디렉토리에서 실행
+kubectl create secret tls gateway-tls \
+  --cert=cert.pem --key=key.pem \
   -n envoy-gateway-system
 ```
 
-`Gateway` 리스너에 추가:
+> [!NOTE]
+> 만약 다른 이름(예: `wildcard-tls-secret`)으로 Secret을 생성할 경우, `values-infra.yaml`의 `gateway.tls.name` 항목을 해당 Secret 이름으로 수정한 뒤 설치 스크립트(`install.sh`)를 실행해야 합니다.
 
+**자동 바인딩 원리:**
+`values-infra.yaml`에서 `gateway.tls.enabled: true` 상태이면 `gateway-infra` 템플릿이 Gateway 리소스에 HTTPS 443 리스너와 Secret 참조 관계를 자동으로 구성합니다.
 ```yaml
-listeners:
-  - name: https
-    port: 443
-    protocol: HTTPS
-    hostname: "*.devops.internal"
-    tls:
-      mode: Terminate
-      certificateRefs:
-        - name: wildcard-tls-secret
-          kind: Secret
+spec:
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: gateway-tls  # values-infra.yaml의 gateway.tls.name 값을 동적으로 반영
+            kind: Secret
 ```
 
 ---

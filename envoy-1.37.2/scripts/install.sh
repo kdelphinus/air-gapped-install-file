@@ -218,6 +218,21 @@ helm upgrade --install eg-gateway $CONTROLLER_CHART \
 
 kubectl wait --timeout=5m -n $NAMESPACE deployment/envoy-gateway --for=condition=Available
 
+# TLS Secret 존재 여부 사전 체크
+if [ "$TLS_ENABLED" == "true" ]; then
+    TLS_SECRET_NAME=$(awk '/tls:/{flag=1;next} flag && /name:/{print $2;exit}' ./values-infra.yaml | tr -d '"')
+    TLS_SECRET_NAME="${TLS_SECRET_NAME:-gateway-tls}"
+    
+    if ! kubectl get secret -n $NAMESPACE "$TLS_SECRET_NAME" >/dev/null 2>&1; then
+        echo ""
+        echo "⚠️  [경고] TLS가 활성화되었으나, 네임스페이스($NAMESPACE) 내에 Secret('$TLS_SECRET_NAME')이 존재하지 않습니다."
+        echo "     이 상태에서는 Gateway의 HTTPS 리스너가 Invalid 상태가 되어 서비스에서 443 포트가 개방되지 않습니다."
+        echo "     설치 완료 후 반드시 아래 명령어로 인증서 Secret을 생성해 주세요:"
+        echo "     👉 kubectl create secret tls $TLS_SECRET_NAME --cert=cert.pem --key=key.pem -n $NAMESPACE"
+        echo ""
+    fi
+fi
+
 echo "🚀 [2/2] Infrastructure 배포 중..."
 helm upgrade --install gateway-infra $INFRA_CHART \
   -n $NAMESPACE \
