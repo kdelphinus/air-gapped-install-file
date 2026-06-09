@@ -146,13 +146,17 @@ save_conf
 echo ""
 echo "🔧 설정 파일(values.yaml, l2-config.yaml) 업데이트 중..."
 
-# 3-1. values.yaml — Harbor 이미지 경로
+# 3-1. values.yaml — 이미지 경로 설정
+IMG_CONTROLLER="quay.io/metallb/controller"
+IMG_SPEAKER="quay.io/metallb/speaker"
+
 if [ "$IMAGE_SOURCE" == "harbor" ]; then
     IMG_CONTROLLER="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/metallb-controller"
     IMG_SPEAKER="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/metallb-speaker"
-    sed -i "s|repository:.*metallb-controller.*|repository: ${IMG_CONTROLLER}|g" "$VALUES_FILE"
-    sed -i "s|repository:.*metallb-speaker.*|repository: ${IMG_SPEAKER}|g" "$VALUES_FILE"
 fi
+
+sed -i "s|repository:.*metallb-controller.*|repository: ${IMG_CONTROLLER}|g" "$VALUES_FILE"
+sed -i "s|repository:.*metallb-speaker.*|repository: ${IMG_SPEAKER}|g" "$VALUES_FILE"
 
 # 3-2. manifests/l2-config.yaml — IP 풀 치환
 # addresses 목록의 첫 줄(들여쓰기 + "- <range>")을 사용자 입력으로 교체
