@@ -162,7 +162,12 @@ sed -i -E "s|^([[:space:]]*)-[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}-([0-9]{1,3}
 # [4] 설치/업그레이드 실행
 # ==========================================
 echo ""
-echo "🚀 [1/2] MetalLB Helm ${DO_UPGRADE:+업그레이드}${DO_UPGRADE:-설치} 중..."
+if [ "$DO_UPGRADE" == "true" ]; then
+    ACTION_TXT="업그레이드"
+else
+    ACTION_TXT="설치"
+fi
+echo "🚀 [1/2] MetalLB Helm $ACTION_TXT 중..."
 helm upgrade --install "$RELEASE" "$CHART" \
   -n $NAMESPACE --create-namespace \
   -f "$VALUES_FILE"
