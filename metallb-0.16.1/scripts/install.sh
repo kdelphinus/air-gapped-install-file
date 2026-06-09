@@ -170,7 +170,7 @@ sed -i "s|repository:.*speaker.*|repository: ${IMG_SPEAKER}|g" "$VALUES_FILE"
 
 # 3-2. manifests/l2-config.yaml — IP 풀 치환
 # addresses 목록의 첫 줄(들여쓰기 + "- <range>" 또는 "- <cidr>")을 사용자 입력으로 교체
-sed -i -E "s@^([[:space:]]*)-[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}(-[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|/[0-9]+)[[:space:]]*$@\1- ${ADDRESS_POOL}@" "$L2_MANIFEST"
+sed -i -E "s@^([[:space:]]*)-[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}(-[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|/[0-9]+)[[:space:]]*\$@\1- ${ADDRESS_POOL}@" "$L2_MANIFEST"
 
 # 3-3. manifests/l2-config.yaml — IPAddressPool 이름 치환
 CURR_POOL_NAME=$(awk '/kind: IPAddressPool/{flag=1} flag && /name:/{print $2; exit}' "$L2_MANIFEST")
