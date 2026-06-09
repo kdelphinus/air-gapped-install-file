@@ -250,11 +250,11 @@ kubectl get secret gitlab-gitlab-initial-root-password \
 ### 스크립트로 업그레이드 (권장)
 
 ```bash
-./scripts/upgrade.sh
+./scripts/install.sh
 ```
 
-이전 설치 시 저장된 `gitlab-components-state.sh`를 읽어 선택한 컴포넌트 상태를 자동으로 복원합니다.
-유지 여부를 확인한 뒤, 변경이 필요하면 해당 항목만 다시 선택할 수 있습니다.
+기존 Helm 릴리스 또는 네임스페이스가 감지되면 `install.sh`가 업그레이드/재설치/초기화 메뉴를 표시합니다.
+`1) 업그레이드`를 선택하면 저장된 `install.conf` 및 선택 컴포넌트 설정을 재사용해 `helm upgrade --install`을 수행합니다.
 
 ### 직접 Helm 명령어로 업그레이드
 
