@@ -143,7 +143,7 @@ if [ "$DO_UPGRADE" != "true" ]; then
     # 2-4. IPAddressPool 이름
     echo ""
     CURR_POOL_NAME=$(awk '/kind: IPAddressPool/{flag=1} flag && /name:/{print $2; exit}' "$L2_MANIFEST")
-    CURR_POOL_NAME="${CURR_POOL_NAME:-first-pool}"
+    CURR_POOL_NAME="${CURR_POOL_NAME:-cluster-pool}"
     read -p "IPAddressPool 이름 입력 [기본값: ${POOL_NAME:-$CURR_POOL_NAME}]: " USER_POOL_NAME
     POOL_NAME="${USER_POOL_NAME:-${POOL_NAME:-$CURR_POOL_NAME}}"
 fi
@@ -174,7 +174,7 @@ sed -i -E "s@^([[:space:]]*)-[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}(-[0-9]{1,3}
 
 # 3-3. manifests/l2-config.yaml — IPAddressPool 이름 치환
 CURR_POOL_NAME=$(awk '/kind: IPAddressPool/{flag=1} flag && /name:/{print $2; exit}' "$L2_MANIFEST")
-CURR_POOL_NAME="${CURR_POOL_NAME:-first-pool}"
+CURR_POOL_NAME="${CURR_POOL_NAME:-cluster-pool}"
 POOL_NAME="${POOL_NAME:-$CURR_POOL_NAME}"
 sed -i "s|name: ${CURR_POOL_NAME}|name: ${POOL_NAME}|g" "$L2_MANIFEST"
 sed -i "s|- ${CURR_POOL_NAME}|- ${POOL_NAME}|g" "$L2_MANIFEST"
