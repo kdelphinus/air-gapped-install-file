@@ -195,19 +195,20 @@ kubectl delete svc metallb-test -n kube-system
 
 ## 4단계: 삭제 및 초기화
 
-### 자동화
+### 자동화 (스크립트 사용)
 
 ```bash
-sudo ./scripts/install.sh
-# → 메뉴에서 "3) 초기화" 선택
+chmod +x ./scripts/uninstall.sh
+sudo ./scripts/uninstall.sh
 ```
 
-### 수동
+### 수동 삭제
 
 ```bash
 helm uninstall metallb -n metallb-system
-# CR finalizer 가 남아 ns 삭제가 지연되는 경우
-for KIND in ipaddresspool l2advertisement bgpadvertisement bgppeer; do
+
+# CR finalizer가 남아 네임스페이스 삭제가 지연되는 경우 실행
+for KIND in ipaddresspool l2advertisement bgpadvertisement bgppeer community bfdprofile; do
   kubectl get $KIND -n metallb-system -o name 2>/dev/null \
     | xargs -r -I {} kubectl patch {} -n metallb-system \
         -p '{"metadata":{"finalizers":[]}}' --type=merge
