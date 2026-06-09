@@ -25,6 +25,7 @@ IMAGE_SOURCE="${IMAGE_SOURCE}"
 HARBOR_REGISTRY="${HARBOR_REGISTRY}"
 HARBOR_PROJECT="${HARBOR_PROJECT}"
 ADDRESS_POOL="${ADDRESS_POOL}"
+POOL_NAME="${POOL_NAME}"
 MODE="${MODE}"
 INSTALLED_VERSION="v0.16.1"
 EOF
@@ -79,6 +80,7 @@ if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     [ -n "$IMAGE_SOURCE" ] && echo "     - 이미지 소스  : $IMAGE_SOURCE"
     [ -n "$HARBOR_REGISTRY" ] && echo "     - Harbor       : $HARBOR_REGISTRY/$HARBOR_PROJECT"
     [ -n "$ADDRESS_POOL" ] && echo "     - IP 풀        : $ADDRESS_POOL"
+    [ -n "$POOL_NAME" ] && echo "     - Pool 이름    : $POOL_NAME"
     [ -n "$MODE" ] && echo "     - 모드         : $MODE"
 
     echo ""
@@ -137,6 +139,13 @@ if [ "$DO_UPGRADE" != "true" ]; then
         fi
         echo "  ❌ 형식이 올바르지 않습니다. 예: 172.30.235.200-172.30.235.220 또는 10.10.10.81/32"
     done
+
+    # 2-4. IPAddressPool 이름
+    echo ""
+    CURR_POOL_NAME=$(awk '/kind: IPAddressPool/{flag=1} flag && /name:/{print $2; exit}' "$L2_MANIFEST")
+    CURR_POOL_NAME="${CURR_POOL_NAME:-first-pool}"
+    read -p "IPAddressPool 이름 입력 [기본값: ${POOL_NAME:-$CURR_POOL_NAME}]: " USER_POOL_NAME
+    POOL_NAME="${USER_POOL_NAME:-${POOL_NAME:-$CURR_POOL_NAME}}"
 fi
 
 save_conf
@@ -162,6 +171,13 @@ sed -i "s|repository:.*speaker.*|repository: ${IMG_SPEAKER}|g" "$VALUES_FILE"
 # 3-2. manifests/l2-config.yaml — IP 풀 치환
 # addresses 목록의 첫 줄(들여쓰기 + "- <range>" 또는 "- <cidr>")을 사용자 입력으로 교체
 sed -i -E "s@^([[:space:]]*)-[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}(-[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|/[0-9]+)[[:space:]]*$@\1- ${ADDRESS_POOL}@" "$L2_MANIFEST"
+
+# 3-3. manifests/l2-config.yaml — IPAddressPool 이름 치환
+CURR_POOL_NAME=$(awk '/kind: IPAddressPool/{flag=1} flag && /name:/{print $2; exit}' "$L2_MANIFEST")
+CURR_POOL_NAME="${CURR_POOL_NAME:-first-pool}"
+POOL_NAME="${POOL_NAME:-$CURR_POOL_NAME}"
+sed -i "s|name: ${CURR_POOL_NAME}|name: ${POOL_NAME}|g" "$L2_MANIFEST"
+sed -i "s|- ${CURR_POOL_NAME}|- ${POOL_NAME}|g" "$L2_MANIFEST"
 
 # ==========================================
 # [4] 설치/업그레이드 실행
@@ -189,6 +205,7 @@ echo "========================================================"
 echo "🎉 MetalLB v0.16.1 구성 완료!"
 echo "설정 파일 : $CONF_FILE"
 echo "IP 풀     : $ADDRESS_POOL"
+echo "Pool 이름 : $POOL_NAME"
 echo "모드      : $MODE"
 echo "========================================================"
 kubectl get pods -n $NAMESPACE
