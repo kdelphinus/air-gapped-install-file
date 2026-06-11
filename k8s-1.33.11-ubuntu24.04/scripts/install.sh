@@ -137,7 +137,7 @@ root hard nofile 1048576
 EOF
     echo -e "  → 프로세스 Limits 설정 완료 (nofile, nproc)"
 
-    # 3. containerd systemd service limits override
+    # 3. containerd/kubelet systemd service limits override
     mkdir -p /etc/systemd/system/containerd.service.d
     cat > /etc/systemd/system/containerd.service.d/limits.conf <<EOF
 [Service]
@@ -146,8 +146,16 @@ LimitNPROC=infinity
 LimitCORE=infinity
 TasksMax=infinity
 EOF
+    mkdir -p /etc/systemd/system/kubelet.service.d
+    cat > /etc/systemd/system/kubelet.service.d/limits.conf <<EOF
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
     systemctl daemon-reload
-    echo -e "  → containerd systemd Limits 오버라이드 완료"
+    echo -e "  → containerd/kubelet systemd Limits 오버라이드 완료"
     echo -e "  ${GREEN}✅ 파일 디스크립터 및 Limits 설정 완료.${NC}"
 }
 
@@ -554,8 +562,14 @@ done
 # ── [9] kubeadm init ────────────────────────────────────────
 echo ""
 echo -e "${CYAN}[9/10] kubeadm init...${NC}"
+API_ENDPOINT="${CONTROL_PLANE_ENDPOINT}"
+if [[ "$API_ENDPOINT" != *:* ]]; then
+    API_ENDPOINT="${API_ENDPOINT}:6443"
+fi
+API_HOST="${API_ENDPOINT%:*}"
+API_PORT="${API_ENDPOINT##*:}"
 KUBEADM_ARGS=(
-    --control-plane-endpoint "${CONTROL_PLANE_ENDPOINT}:6443"
+    --control-plane-endpoint "$API_ENDPOINT"
     --pod-network-cidr "$POD_CIDR"
     --service-cidr "$SERVICE_CIDR"
     --kubernetes-version "$K8S_VERSION"
@@ -664,8 +678,8 @@ case "${CNI_CHOICE}::${CNI_INSTALL_MODE}" in
             touch "$CILIUM_CONF"
             {
                 grep -Ev "^(K8S_SERVICE_HOST|K8S_SERVICE_PORT|POD_CIDR)=" "$CILIUM_CONF" 2>/dev/null || true
-                echo "K8S_SERVICE_HOST=\"${CONTROL_PLANE_ENDPOINT}\""
-                echo "K8S_SERVICE_PORT=\"6443\""
+                echo "K8S_SERVICE_HOST=\"${API_HOST}\""
+                echo "K8S_SERVICE_PORT=\"${API_PORT}\""
                 echo "POD_CIDR=\"${POD_CIDR}\""
             } > "${CILIUM_CONF}.tmp" && mv "${CILIUM_CONF}.tmp" "$CILIUM_CONF"
 
@@ -692,11 +706,11 @@ _JOIN_HASH=$(echo "$_JOIN_CMD" | grep -oP '(?<=sha256:)\S+' || true)
 _CERT_KEY=$(kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1 || true)
 echo ""
 echo -e " ${YELLOW}워커 노드:${NC}"
-echo "   sudo ./scripts/install.sh --join ${_JOIN_TOKEN} ${_JOIN_HASH} ${CONTROL_PLANE_ENDPOINT}"
+echo "   sudo ./scripts/install.sh --join ${_JOIN_TOKEN} ${_JOIN_HASH} ${API_ENDPOINT}"
 echo ""
 if [ -n "$_CERT_KEY" ]; then
     echo -e " ${YELLOW}추가 마스터 노드 (HA):${NC}"
-    echo "   sudo ./scripts/install.sh --join ${_JOIN_TOKEN} ${_JOIN_HASH} ${CONTROL_PLANE_ENDPOINT} --control-plane ${_CERT_KEY}"
+    echo "   sudo ./scripts/install.sh --join ${_JOIN_TOKEN} ${_JOIN_HASH} ${API_ENDPOINT} --control-plane ${_CERT_KEY}"
     echo -e "   ${YELLOW}(certificate-key 는 1시간 후 만료됩니다)${NC}"
     echo ""
 fi

@@ -107,6 +107,33 @@ sudo sysctl --system
 sudo swapoff -a
 sudo sed -i '/\sswap\s/s/^/#/' /etc/fstab
 
+# 파일 디스크립터(FD) 및 시스템 Limits 상향
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-limits.conf
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 8192
+EOF
+sudo sysctl --system
+
+cat <<EOF | sudo tee /etc/security/limits.d/99-kubernetes-limits.conf
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+EOF
+
+sudo mkdir -p /etc/systemd/system/kubelet.service.d
+cat <<EOF | sudo tee /etc/systemd/system/kubelet.service.d/limits.conf
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+
 # hosts 파일 등록 (환경에 맞게 수정)
 sudo tee -a /etc/hosts <<EOF
 <MASTER1_IP> <MASTER1_HOSTNAME>
@@ -148,9 +175,24 @@ sudo sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"
 # Harbor(또는 사설 레지스트리) insecure registry 사용 시 config_path 단일화
 sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
 
+# containerd 서비스 Limits 설정 (systemd override)
+sudo mkdir -p /etc/systemd/system/containerd.service.d
+cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/limits.conf
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+
 sudo systemctl restart containerd
 sudo systemctl enable containerd
 ```
+
+> `/etc/security/limits.d`는 주로 로그인 세션에 적용됩니다. `kubelet`과
+> `containerd`처럼 systemd가 직접 띄우는 서비스는 위 systemd override까지
+> 적용해야 FD/프로세스 limits가 일관되게 반영됩니다.
 
 > containerd 재시작 후 `SystemdCgroup = true` 적용 여부 확인:
 >

@@ -121,7 +121,7 @@ root hard nofile 1048576
 EOF
     echo -e "  → 프로세스 Limits 설정 완료 (nofile, nproc)"
 
-    # 3. containerd systemd service limits override
+    # 3. containerd/kubelet systemd service limits override
     mkdir -p /etc/systemd/system/containerd.service.d
     cat > /etc/systemd/system/containerd.service.d/limits.conf <<EOF
 [Service]
@@ -130,8 +130,16 @@ LimitNPROC=infinity
 LimitCORE=infinity
 TasksMax=infinity
 EOF
+    mkdir -p /etc/systemd/system/kubelet.service.d
+    cat > /etc/systemd/system/kubelet.service.d/limits.conf <<EOF
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
     systemctl daemon-reload
-    echo -e "  → containerd systemd Limits 오버라이드 완료"
+    echo -e "  → containerd/kubelet systemd Limits 오버라이드 완료"
     echo -e "  ${GREEN}✅ 파일 디스크립터 및 Limits 설정 완료.${NC}"
 }
 

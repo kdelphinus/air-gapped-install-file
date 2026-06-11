@@ -184,6 +184,17 @@ root soft nofile 1048576
 root hard nofile 1048576
 EOF
 
+# 3) kubelet 서비스 Limits 설정 (systemd override)
+sudo mkdir -p /etc/systemd/system/kubelet.service.d
+cat <<EOF | sudo tee /etc/systemd/system/kubelet.service.d/limits.conf
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+
 # 7. hosts 파일 등록 (환경에 맞게 수정)
 sudo tee -a /etc/hosts <<EOF
 <MASTER1_IP> <MASTER1_HOSTNAME>
@@ -234,6 +245,10 @@ sudo crictl --runtime-endpoint=unix:///run/containerd/containerd.sock info | hea
 # 8. 이제 kubelet 활성화 (containerd 가동 후)
 sudo systemctl enable --now kubelet
 ```
+
+> `/etc/security/limits.d`는 주로 로그인 세션에 적용됩니다. `kubelet`과
+> `containerd`처럼 systemd가 직접 띄우는 서비스는 위 systemd override까지
+> 적용해야 FD/프로세스 limits가 일관되게 반영됩니다.
 
 > `crictl` 은 `cri-tools` 패키지(Phase 1 에서 kubeadm 의존성으로 설치됨)에 포함되어 `/usr/bin/crictl` 에
 > 있습니다. `/etc/crictl.yaml` 이 없으면 매 호출마다 경고가 뜨므로 아래로 생성:

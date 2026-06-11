@@ -152,7 +152,34 @@ sudo systemctl daemon-reload
 #    - BIOS(Legacy) 부팅인 경우:
 #      sudo grub2-mkconfig -o /boot/grub2/grub.cfg
 
-# 5. hosts 파일 등록 (환경에 맞게 수정)
+# 5. 파일 디스크립터(FD) 및 시스템 Limits 상향
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-limits.conf
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 8192
+EOF
+sudo sysctl --system
+
+cat <<EOF | sudo tee /etc/security/limits.d/99-kubernetes-limits.conf
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+EOF
+
+sudo mkdir -p /etc/systemd/system/kubelet.service.d
+cat <<EOF | sudo tee /etc/systemd/system/kubelet.service.d/limits.conf
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+
+# 6. hosts 파일 등록 (환경에 맞게 수정)
 sudo tee -a /etc/hosts <<EOF
 <MASTER1_IP> <MASTER1_HOSTNAME>
 <MASTER2_IP> <MASTER2_HOSTNAME>
@@ -179,10 +206,25 @@ sudo sed -i 's/pause:3.10.1/pause:3.9/g' /etc/containerd/config.toml
 # Harbor 인증서 경로 설정
 sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
 
+# containerd 서비스 Limits 설정 (systemd override)
+sudo mkdir -p /etc/systemd/system/containerd.service.d
+cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/limits.conf
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+
 # containerd 시작 및 활성화
 sudo systemctl enable --now containerd
 sudo systemctl status containerd
 ```
+
+> `/etc/security/limits.d`는 주로 로그인 세션에 적용됩니다. `kubelet`과
+> `containerd`처럼 systemd가 직접 띄우는 서비스는 위 systemd override까지
+> 적용해야 FD/프로세스 limits가 일관되게 반영됩니다.
 
 ### (선택) containerd 데이터 경로 변경 — 소프트링크 방식
 
