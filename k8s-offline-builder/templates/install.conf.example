@@ -1,0 +1,18 @@
+# Copy this file to ../install.conf and adjust values.
+
+K8S_VERSION="v1.33.11"
+TARGET_OS="ubuntu24.04"
+ARCH="amd64"
+
+CONTAINER_RUNTIME="containerd"
+CONTAINERD_VERSION="auto"
+
+CNI_CHOICE="calico"
+CALICO_VERSION="v3.31.0"
+CALICO_INSTALL_METHOD="manifest"
+CILIUM_VERSION="v1.19.3"
+
+HELM_VERSION="v3.20.2"
+NERDCTL_VERSION="2.2.2"
+
+BUNDLE_OUTPUT_DIR="bundles"

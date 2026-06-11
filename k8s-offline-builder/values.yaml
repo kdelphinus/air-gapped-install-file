@@ -1,0 +1,22 @@
+# Kubernetes Offline Builder defaults
+kubernetes:
+  version: v1.33.11
+  targetOS: ubuntu24.04
+  arch: amd64
+
+runtime:
+  name: containerd
+  version: auto
+
+cni:
+  name: calico
+  calicoVersion: v3.31.0
+  calicoInstallMethod: manifest
+  ciliumVersion: v1.19.3
+
+tools:
+  helmVersion: v3.20.2
+  nerdctlVersion: 2.2.2
+
+bundle:
+  outputDir: bundles

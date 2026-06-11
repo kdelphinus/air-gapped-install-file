@@ -1,0 +1,39 @@
+# Compatibility policy seed for k8s-offline-builder.
+#
+# 이 파일은 빌더가 지원하기로 검증한 조합을 기록하는 내부 정책 파일입니다.
+# 실제 지원 범위는 Kubernetes, containerd, Calico, Cilium 공식 문서를 확인한 뒤
+# 이 파일에 명시적으로 추가합니다.
+
+kubernetes:
+  versionFormat: "v<major>.<minor>.<patch>"
+  supportedTargetOS:
+    - ubuntu24.04
+  supportedArch:
+    - amd64
+  componentSkewPolicy:
+    kubelet: "must not be newer than kube-apiserver; may be up to three minor versions older"
+    kubeProxy: "must not be newer than kube-apiserver; may be up to three minor versions older"
+    kubectl: "within one minor version older or newer than kube-apiserver"
+
+runtime:
+  containerd:
+    versions:
+      - auto
+    requirements:
+      - "CRI v1 support is required for Kubernetes v1.26+"
+      - "systemd cgroup driver is configured in generated bundles"
+
+cni:
+  calico:
+    versions:
+      - v3.31.0
+    installMethods:
+      - manifest
+      - operator
+    notes:
+      - "Refresh against Tigera's tested Kubernetes versions before widening support."
+  cilium:
+    versions:
+      - v1.19.3
+    notes:
+      - "Refresh against Cilium's Kubernetes compatibility page before widening support."
