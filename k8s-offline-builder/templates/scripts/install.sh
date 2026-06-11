@@ -21,6 +21,7 @@ DEB_DIR="${BASE_DIR}/k8s/debs"
 BIN_DIR="${BASE_DIR}/k8s/binaries"
 IMG_DIR="${BASE_DIR}/k8s/images"
 UTIL_DIR="${BASE_DIR}/k8s/utils"
+CHART_DIR="${BASE_DIR}/k8s/charts"
 
 if [ ! -f "$CONF_FILE" ]; then
     echo -e "${RED}[오류] install.conf 파일이 없습니다.${NC}"
@@ -42,6 +43,8 @@ source "$CONF_FILE"
 : "${SERVICE_CIDR:=}"
 : "${CONTROL_PLANE_ENDPOINT:=}"
 : "${CRI_SOCKET:=unix:///run/containerd/containerd.sock}"
+: "${ENABLE_HUBBLE:=true}"
+: "${MTU_VALUE:=1500}"
 
 if [[ "$K8S_VERSION" != v* ]]; then
     K8S_VERSION="v${K8S_VERSION}"
@@ -69,6 +72,8 @@ CNI_CHOICE="${CNI_CHOICE}"
 CALICO_VERSION="${CALICO_VERSION:-}"
 CALICO_INSTALL_METHOD="${CALICO_INSTALL_METHOD}"
 CILIUM_VERSION="${CILIUM_VERSION:-}"
+ENABLE_HUBBLE="${ENABLE_HUBBLE}"
+MTU_VALUE="${MTU_VALUE}"
 ENV_TYPE="${ENV_TYPE}"
 NODE_ROLE="${NODE_ROLE}"
 CNI_INSTALL_MODE="${CNI_INSTALL_MODE}"
@@ -231,6 +236,31 @@ EOF
     fi
 }
 
+install_binaries() {
+    echo -e "${CYAN}번들 바이너리 설치...${NC}"
+
+    local helm_tgz helm_tmp
+    helm_tgz=$(ls "$BIN_DIR"/helm-*-linux-"$ARCH".tar.gz 2>/dev/null | head -1 || true)
+    if [ -n "$helm_tgz" ]; then
+        helm_tmp=$(mktemp -d)
+        tar -xzf "$helm_tgz" -C "$helm_tmp"
+        install -m 0755 "$helm_tmp/linux-${ARCH}/helm" /usr/local/bin/helm
+        rm -rf "$helm_tmp"
+        echo "  → helm 설치 완료: $(helm version --short 2>/dev/null || echo unknown)"
+    else
+        echo -e "${YELLOW}[경고] Helm tarball 이 없습니다. Cilium 설치 시 helm 명령이 필요합니다.${NC}"
+    fi
+
+    local nerdctl_tgz nerdctl_tmp
+    nerdctl_tgz=$(ls "$BIN_DIR"/nerdctl-full-*-linux-"$ARCH".tar.gz 2>/dev/null | head -1 || true)
+    if [ -n "$nerdctl_tgz" ]; then
+        nerdctl_tmp=$(mktemp -d)
+        tar -xzf "$nerdctl_tgz" -C "$nerdctl_tmp"
+        [ -f "$nerdctl_tmp/bin/nerdctl" ] && install -m 0755 "$nerdctl_tmp/bin/nerdctl" /usr/local/bin/nerdctl
+        rm -rf "$nerdctl_tmp"
+    fi
+}
+
 configure_containerd() {
     echo -e "${CYAN}containerd 설정...${NC}"
     mkdir -p /etc/containerd
@@ -319,15 +349,95 @@ install_cni() {
             fi
             ;;
         cilium)
-            echo -e "${RED}[오류] Cilium 번들 내장 설치는 아직 구현되지 않았습니다.${NC}"
-            echo "       Cilium 자산 수집/설치 연계 구현 후 사용하세요."
-            exit 1
+            install_cilium
             ;;
         *)
             echo -e "${RED}[오류] 지원하지 않는 CNI: $CNI_CHOICE${NC}"
             exit 1
             ;;
     esac
+}
+
+install_cilium() {
+    local chart_version chart_file values_file
+    chart_version="${CILIUM_VERSION#v}"
+    chart_file="${CHART_DIR}/cilium-${chart_version}.tgz"
+    values_file="$(mktemp)"
+
+    command -v helm >/dev/null 2>&1 || { echo -e "${RED}[오류] helm 명령을 찾을 수 없습니다.${NC}"; exit 1; }
+    [ -f "$chart_file" ] || { echo -e "${RED}[오류] Cilium Helm chart 파일이 없습니다: $chart_file${NC}"; exit 1; }
+
+    echo -e "${CYAN}Cilium Helm 설치...${NC}"
+    cat > "$values_file" <<EOF
+image:
+  repository: "quay.io/cilium/cilium"
+  tag: "${CILIUM_VERSION}"
+  pullPolicy: "IfNotPresent"
+  useDigest: false
+
+operator:
+  replicas: 1
+  rollOutPods: true
+  unmanagedPodWatcher:
+    restart: false
+  image:
+    repository: "quay.io/cilium/operator-generic"
+    tag: "${CILIUM_VERSION}"
+    pullPolicy: "IfNotPresent"
+    useDigest: false
+
+envoy:
+  image:
+    repository: "quay.io/cilium/cilium-envoy"
+    tag: "v1.36.6-1776000132-2437d2edeaf4d9b56ef279bd0d71127440c067aa"
+    useDigest: false
+
+kubeProxyReplacement: true
+k8sServiceHost: "${API_HOST}"
+k8sServicePort: "${API_PORT}"
+
+ipam:
+  mode: "cluster-pool"
+  operator:
+    clusterPoolIPv4PodCIDRList:
+      - "${POD_CIDR}"
+    clusterPoolIPv4MaskSize: 24
+
+mtu: ${MTU_VALUE}
+
+hubble:
+  enabled: ${ENABLE_HUBBLE}
+  tls:
+    auto:
+      method: cronJob
+  relay:
+    enabled: ${ENABLE_HUBBLE}
+    image:
+      repository: "quay.io/cilium/hubble-relay"
+      tag: "${CILIUM_VERSION}"
+      useDigest: false
+  ui:
+    enabled: ${ENABLE_HUBBLE}
+    backend:
+      image:
+        repository: "quay.io/cilium/hubble-ui-backend"
+        tag: "v0.13.3"
+        useDigest: false
+    frontend:
+      image:
+        repository: "quay.io/cilium/hubble-ui"
+        tag: "v0.13.3"
+        useDigest: false
+EOF
+
+    helm upgrade --install cilium "$chart_file" \
+        --namespace kube-system \
+        -f "$values_file" \
+        --wait
+    rm -f "$values_file"
+
+    kubectl wait --for=condition=Ready pod -l k8s-app=cilium \
+        -n kube-system --timeout=300s 2>/dev/null || true
 }
 
 run_join() {
@@ -465,6 +575,15 @@ echo -e "${CYAN}설정 요약${NC}"
 echo "  환경      : $ENV_TYPE"
 echo "  CNI       : $CNI_CHOICE"
 [ "$CNI_CHOICE" = "calico" ] && echo "  Calico    : $CALICO_INSTALL_METHOD"
+if [ "$CNI_CHOICE" = "cilium" ]; then
+    read -p "Cilium Hubble 활성화 [Y/n]: " _HUBBLE
+    _HUBBLE="${_HUBBLE:-Y}"
+    ENABLE_HUBBLE=$([[ "$_HUBBLE" =~ ^[Nn]$ ]] && echo "false" || echo "true")
+    read -p "Cilium MTU [기본: ${MTU_VALUE}]: " _MTU
+    MTU_VALUE="${_MTU:-$MTU_VALUE}"
+    echo "  Hubble    : $ENABLE_HUBBLE"
+    echo "  MTU       : $MTU_VALUE"
+fi
 echo "  Pod CIDR  : $POD_CIDR"
 echo "  Svc CIDR  : $SERVICE_CIDR"
 echo "  Endpoint  : $CONTROL_PLANE_ENDPOINT"
@@ -475,6 +594,7 @@ _GO="${_GO:-Y}"
 save_conf
 check_time_sync
 install_debs_and_prepare_node
+install_binaries
 configure_containerd
 load_images
 

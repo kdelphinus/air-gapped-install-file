@@ -13,6 +13,8 @@ cni:
   calicoVersion: v3.31.0
   calicoInstallMethod: manifest
   ciliumVersion: v1.19.3
+  enableHubble: true
+  mtu: 1500
 
 tools:
   helmVersion: v3.20.2

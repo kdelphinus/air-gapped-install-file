@@ -44,6 +44,8 @@ normalize_builder_config() {
     CALICO_VERSION="${CALICO_VERSION:-v3.31.0}"
     CALICO_INSTALL_METHOD="${CALICO_INSTALL_METHOD:-manifest}"
     CILIUM_VERSION="${CILIUM_VERSION:-v1.19.3}"
+    ENABLE_HUBBLE="${ENABLE_HUBBLE:-true}"
+    MTU_VALUE="${MTU_VALUE:-1500}"
     HELM_VERSION="${HELM_VERSION:-v3.20.2}"
     NERDCTL_VERSION="${NERDCTL_VERSION:-2.2.2}"
     BUNDLE_OUTPUT_DIR="${BUNDLE_OUTPUT_DIR:-bundles}"
@@ -81,6 +83,8 @@ validate_builder_config() {
     if [ "$CNI_CHOICE" = "cilium" ]; then
         [[ "$CILIUM_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
             fail "CILIUM_VERSION 형식이 올바르지 않습니다: $CILIUM_VERSION"
+        validate_choice "ENABLE_HUBBLE" "$ENABLE_HUBBLE" "true" "false"
+        [[ "$MTU_VALUE" =~ ^[0-9]+$ ]] || fail "MTU_VALUE 형식이 올바르지 않습니다: $MTU_VALUE"
     fi
 }
 
@@ -101,6 +105,8 @@ print_builder_summary() {
     fi
     if [ "${CNI_CHOICE}" = "cilium" ]; then
         echo "  Cilium            : ${CILIUM_VERSION}"
+        echo "  Hubble            : ${ENABLE_HUBBLE}"
+        echo "  MTU               : ${MTU_VALUE}"
     fi
     echo "  Staging directory : ${STAGING_DIR}"
 }

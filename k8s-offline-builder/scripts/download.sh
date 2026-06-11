@@ -17,6 +17,7 @@ DEB_DIR="${K8S_DIR}/debs"
 BIN_DIR="${K8S_DIR}/binaries"
 IMG_DIR="${K8S_DIR}/images"
 UTIL_DIR="${K8S_DIR}/utils"
+CHART_DIR="${K8S_DIR}/charts"
 
 APT_LISTS_TO_CLEAN=()
 
@@ -86,7 +87,7 @@ echo ""
 
 case "$TARGET_OS" in
     ubuntu24.04)
-        mkdir -p "$DEB_DIR" "$BIN_DIR" "$IMG_DIR" "$UTIL_DIR"
+        mkdir -p "$DEB_DIR" "$BIN_DIR" "$IMG_DIR" "$UTIL_DIR" "$CHART_DIR"
 
         echo "[1/6] APT repo 임시 등록..."
         apt-get update -qq
@@ -174,6 +175,12 @@ case "$TARGET_OS" in
                 -o "${UTIL_DIR}/calico-custom-resources.yaml"
             echo "  → Calico 매니페스트 수집 완료"
         fi
+        if [ "$CNI_CHOICE" = "cilium" ]; then
+            CILIUM_CHART_VERSION="${CILIUM_VERSION#v}"
+            curl -fsSL "https://helm.cilium.io/cilium-${CILIUM_CHART_VERSION}.tgz" \
+                -o "${CHART_DIR}/cilium-${CILIUM_CHART_VERSION}.tgz"
+            echo "  → Cilium Helm chart 수집 완료"
+        fi
         curl -fsSL "https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml" \
             -o "${UTIL_DIR}/local-path-storage.yaml"
 
@@ -215,7 +222,17 @@ case "$TARGET_OS" in
         fi
 
         if [ "$CNI_CHOICE" = "cilium" ]; then
-            echo "  → Cilium 이미지는 cilium 전용 컴포넌트 수집 로직과 연계 예정입니다."
+            CILIUM_IMAGES=(
+                "quay.io/cilium/cilium:${CILIUM_VERSION}"
+                "quay.io/cilium/operator-generic:${CILIUM_VERSION}"
+                "quay.io/cilium/hubble-relay:${CILIUM_VERSION}"
+                "quay.io/cilium/hubble-ui:v0.13.3"
+                "quay.io/cilium/hubble-ui-backend:v0.13.3"
+                "quay.io/cilium/cilium-envoy:v1.36.6-1776000132-2437d2edeaf4d9b56ef279bd0d71127440c067aa"
+            )
+            for img in "${CILIUM_IMAGES[@]}"; do
+                pull_and_save_image "$img" || true
+            done
         fi
 
         if [ "${#FAILED_IMAGES[@]}" -gt 0 ]; then
@@ -236,5 +253,6 @@ echo "  DEB        : $(ls -1 "$DEB_DIR"/*.deb 2>/dev/null | wc -l) 개"
 echo "  바이너리   : $(ls -1 "$BIN_DIR"/*.tar.gz 2>/dev/null | wc -l) 개"
 echo "  이미지     : $(ls -1 "$IMG_DIR"/*.tar 2>/dev/null | wc -l) 개"
 echo "  매니페스트 : $(ls -1 "$UTIL_DIR"/*.yaml 2>/dev/null | wc -l) 개"
+echo "  Helm chart : $(ls -1 "$CHART_DIR"/*.tgz 2>/dev/null | wc -l) 개"
 echo ""
 echo "다음 단계: ./scripts/build_bundle.sh"

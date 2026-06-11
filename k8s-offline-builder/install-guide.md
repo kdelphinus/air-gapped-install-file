@@ -30,6 +30,9 @@ vi install.conf
 | `CNI_CHOICE` | CNI 선택값 |
 | `CALICO_VERSION` | Calico 버전 |
 | `CALICO_INSTALL_METHOD` | `manifest` 또는 `operator` |
+| `CILIUM_VERSION` | Cilium 버전 |
+| `ENABLE_HUBBLE` | Cilium Hubble 활성화 여부 |
+| `MTU_VALUE` | Cilium 설치 시 적용할 MTU |
 | `BUNDLE_OUTPUT_DIR` | 생성 산출물 루트 |
 
 ## 3. 온라인 수집
@@ -44,7 +47,7 @@ sudo ./scripts/download.sh
 - kubeadm/kubelet/kubectl 패키지와 의존성 수집
 - containerd 패키지 수집
 - kubeadm 기준 core image 목록 생성 및 export
-- CNI 매니페스트와 이미지 수집
+- CNI 매니페스트, Helm chart, 이미지 수집
 - 번들 생성용 staging 디렉터리 구성
 
 현재 구현은 Ubuntu 24.04 기준으로 실제 수집을 수행합니다. 외부 네트워크와 APT repo 등록이 필요하므로 `sudo`로 실행합니다.
@@ -107,9 +110,10 @@ bundles/k8s-v1.33.11-ubuntu24.04.tar.gz
 - worker/control-plane join
 - Calico manifest 설치
 - Calico Tigera operator 설치
+- Cilium Helm chart 설치
 - WSL2 사전 설정 보조 스크립트
 
-Cilium 내장 설치는 자산 수집/설치 연계가 완료된 뒤 활성화합니다.
+Cilium 선택 시 kube-proxy phase를 건너뛰고 Cilium의 `kubeProxyReplacement=true` 설정으로 설치합니다.
 
 ## 6. Manual Installation & Upgrade
 
@@ -128,7 +132,6 @@ bash -n scripts/build_bundle.sh
 
 ## 7. 다음 구현 단계
 
-1. Cilium 자산 수집/설치 연계 구현
-2. Rocky/RHEL 계열 RPM 수집 및 설치 경로 추가
-3. compatibility 정책 파일 기반 버전 조합 검증 강화
-4. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증
+1. Rocky/RHEL 계열 RPM 수집 및 설치 경로 추가
+2. compatibility 정책 파일 기반 버전 조합 검증 강화
+3. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증
