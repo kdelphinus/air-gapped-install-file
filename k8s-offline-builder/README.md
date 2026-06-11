@@ -76,9 +76,10 @@ k8s-offline-builder/
 
 ## 호환성 체크 방향
 
-빌더는 다음 두 단계로 호환성을 확인하도록 확장합니다.
+빌더는 다음 두 단계로 호환성을 확인합니다.
 
 1. **형식/지원 범위 검증**: `scripts/lib/common.sh`에서 `K8S_VERSION`, `TARGET_OS`, `CNI_CHOICE`, `CALICO_INSTALL_METHOD` 같은 입력값을 먼저 검증합니다.
-2. **검증된 조합 정책**: `manifests/compatibility.yaml`에 공식 문서로 확인한 Kubernetes/containerd/CNI 조합만 기록하고, 이후 다운로드 전에 이 정책과 대조합니다.
+2. **검증된 조합 정책**: `manifests/compatibility.yaml`에 공식 문서로 확인한 Kubernetes/containerd/CNI 조합만 기록하고, 다운로드/번들 생성 전에 이 정책과 대조합니다.
 
-정확한 버전 호환성은 시간이 지나면 바뀌므로, 새 Kubernetes minor 또는 CNI 버전을 추가하기 전에 공식 문서를 확인한 뒤 정책 파일을 갱신합니다.
+현재 정책은 `policy.validatedTuples`에 명시된 조합만 허용하는 strict 방식입니다.
+새 Kubernetes minor 또는 CNI 버전을 추가하려면 공식 문서와 실환경 검증 결과를 확인한 뒤 정책 파일에 해당 조합을 추가합니다.

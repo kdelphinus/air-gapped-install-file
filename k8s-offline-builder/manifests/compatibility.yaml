@@ -3,6 +3,38 @@
 # 이 파일은 빌더가 지원하기로 검증한 조합을 기록하는 내부 정책 파일입니다.
 # 실제 지원 범위는 Kubernetes, containerd, Calico, Cilium 공식 문서를 확인한 뒤
 # 이 파일에 명시적으로 추가합니다.
+#
+# policy 섹션은 scripts/lib/common.sh 가 외부 yq 없이 직접 읽는 검증 대상입니다.
+# 새 Kubernetes minor, OS, runtime, CNI 버전을 허용하려면 아래 목록과
+# validatedTuples 에 명시적으로 추가해야 합니다.
+
+policy:
+  kubernetesMinors:
+    - v1.33
+  targetOS:
+    - ubuntu24.04
+  arch:
+    - amd64
+  containerRuntime:
+    - containerd
+  containerdVersions:
+    - auto
+  cni:
+    - calico
+    - cilium
+  calicoVersions:
+    - v3.31.0
+  calicoInstallMethods:
+    - manifest
+    - operator
+  ciliumVersions:
+    - v1.19.3
+  ciliumInstallMethods:
+    - helm
+  validatedTuples:
+    - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.0|manifest"
+    - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.0|operator"
+    - "v1.33|ubuntu24.04|amd64|containerd|auto|cilium|v1.19.3|helm"
 
 kubernetes:
   versionFormat: "v<major>.<minor>.<patch>"

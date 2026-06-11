@@ -63,7 +63,7 @@ sudo ./scripts/download.sh
 - `CNI_CHOICE`: `calico` 또는 `cilium`
 - `CALICO_INSTALL_METHOD`: `manifest` 또는 `operator`
 
-### 호환성 정책 관리
+### 호환성 정책 검증
 
 컴포넌트 간 버전 호환성은 `manifests/compatibility.yaml`에 기록합니다. 이 파일은 자동 생성 결과가 아니라, 공식 문서와 실제 검증 결과를 반영하는 내부 정책 파일입니다.
 
@@ -74,7 +74,15 @@ sudo ./scripts/download.sh
 - Calico: Tigera/Calico의 Kubernetes 지원 범위 기준
 - Cilium: Cilium의 Kubernetes compatibility matrix 기준
 
-다음 단계에서는 `download.sh`가 실제 수집 전에 이 정책 파일과 설정값을 더 엄격하게 대조하도록 확장합니다.
+`download.sh`와 `build_bundle.sh`는 실제 수집/생성 전에 다음 값을 정책 파일과 대조합니다.
+
+- Kubernetes minor 버전
+- 대상 OS와 아키텍처
+- container runtime과 containerd 버전 정책
+- CNI 종류, CNI 버전, 설치 방식
+- `policy.validatedTuples`에 명시된 전체 조합
+
+정책에 없는 조합은 네트워크 수집을 시작하기 전에 오류로 중단됩니다.
 
 ## 4. 번들 생성
 
@@ -133,5 +141,4 @@ bash -n scripts/build_bundle.sh
 ## 7. 다음 구현 단계
 
 1. Rocky/RHEL 계열 RPM 수집 및 설치 경로 추가
-2. compatibility 정책 파일 기반 버전 조합 검증 강화
-3. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증
+2. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증

@@ -68,6 +68,78 @@ validate_choice() {
     fail "${name} 값이 허용 범위를 벗어났습니다: ${value} (허용: $*)"
 }
 
+policy_list_contains() {
+    local key="$1"
+    local expected="$2"
+    local file="${COMPATIBILITY_FILE:-manifests/compatibility.yaml}"
+
+    awk -v key="$key" -v expected="$expected" '
+        function trim_quotes(value) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+            gsub(/^"|"$/, "", value)
+            return value
+        }
+        $0 ~ "^[[:space:]]*" key ":[[:space:]]*$" {
+            in_list = 1
+            indent = match($0, /[^ ]/) - 1
+            next
+        }
+        in_list {
+            if ($0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/) {
+                next
+            }
+            current_indent = match($0, /[^ ]/) - 1
+            if (current_indent <= indent && $0 !~ /^[[:space:]]*-/) {
+                exit
+            }
+            if ($0 ~ /^[[:space:]]*-[[:space:]]*/) {
+                value = $0
+                sub(/^[[:space:]]*-[[:space:]]*/, "", value)
+                if (trim_quotes(value) == expected) {
+                    found = 1
+                    exit
+                }
+            }
+        }
+        END {
+            exit found ? 0 : 1
+        }
+    ' "$file"
+}
+
+require_policy_value() {
+    local key="$1"
+    local value="$2"
+    policy_list_contains "$key" "$value" || \
+        fail "compatibility.yaml 정책에 허용되지 않은 값입니다: ${key}=${value}"
+}
+
+validate_compatibility_policy() {
+    local file="${COMPATIBILITY_FILE:-manifests/compatibility.yaml}"
+    require_file "$file"
+
+    require_policy_value "kubernetesMinors" "$K8S_MINOR"
+    require_policy_value "targetOS" "$TARGET_OS"
+    require_policy_value "arch" "$ARCH"
+    require_policy_value "containerRuntime" "$CONTAINER_RUNTIME"
+    require_policy_value "containerdVersions" "$CONTAINERD_VERSION"
+    require_policy_value "cni" "$CNI_CHOICE"
+
+    local tuple
+    if [ "$CNI_CHOICE" = "calico" ]; then
+        require_policy_value "calicoVersions" "$CALICO_VERSION"
+        require_policy_value "calicoInstallMethods" "$CALICO_INSTALL_METHOD"
+        tuple="${K8S_MINOR}|${TARGET_OS}|${ARCH}|${CONTAINER_RUNTIME}|${CONTAINERD_VERSION}|calico|${CALICO_VERSION}|${CALICO_INSTALL_METHOD}"
+    else
+        require_policy_value "ciliumVersions" "$CILIUM_VERSION"
+        require_policy_value "ciliumInstallMethods" "helm"
+        tuple="${K8S_MINOR}|${TARGET_OS}|${ARCH}|${CONTAINER_RUNTIME}|${CONTAINERD_VERSION}|cilium|${CILIUM_VERSION}|helm"
+    fi
+
+    policy_list_contains "validatedTuples" "$tuple" || \
+        fail "compatibility.yaml 에 검증된 조합이 없습니다: ${tuple}"
+}
+
 validate_builder_config() {
     validate_choice "TARGET_OS" "$TARGET_OS" "ubuntu24.04"
     validate_choice "ARCH" "$ARCH" "amd64"
@@ -92,6 +164,7 @@ load_and_validate_config() {
     load_builder_config
     normalize_builder_config
     validate_builder_config
+    validate_compatibility_policy
 }
 
 print_builder_summary() {
