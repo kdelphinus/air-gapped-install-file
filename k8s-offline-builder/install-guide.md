@@ -38,7 +38,7 @@ vi install.conf
 sudo ./scripts/download.sh
 ```
 
-이 단계는 향후 다음 작업을 수행합니다.
+이 단계는 다음 작업을 수행합니다.
 
 - Kubernetes minor repo 자동 계산
 - kubeadm/kubelet/kubectl 패키지와 의존성 수집
@@ -47,7 +47,7 @@ sudo ./scripts/download.sh
 - CNI 매니페스트와 이미지 수집
 - 번들 생성용 staging 디렉터리 구성
 
-현재 1차 골격 단계에서는 설정값 검증과 실행 계획 출력까지만 수행합니다.
+현재 구현은 Ubuntu 24.04 기준으로 실제 수집을 수행합니다. 외부 네트워크와 APT repo 등록이 필요하므로 `sudo`로 실행합니다.
 
 ### 설정값 검증
 
@@ -71,7 +71,7 @@ sudo ./scripts/download.sh
 - Calico: Tigera/Calico의 Kubernetes 지원 범위 기준
 - Cilium: Cilium의 Kubernetes compatibility matrix 기준
 
-다음 단계에서는 `download.sh`가 실제 수집 전에 이 정책 파일과 설정값을 대조하도록 확장합니다.
+다음 단계에서는 `download.sh`가 실제 수집 전에 이 정책 파일과 설정값을 더 엄격하게 대조하도록 확장합니다.
 
 ## 4. 번들 생성
 
@@ -86,13 +86,30 @@ bundles/k8s-v1.33.11-ubuntu24.04/
 bundles/k8s-v1.33.11-ubuntu24.04.tar.gz
 ```
 
-현재 1차 골격 단계에서는 대상 경로 계산과 생성 계획 출력까지만 수행합니다.
+`build_bundle.sh`는 staging 디렉터리를 만들고, 수집된 자산, 번들 내부용 스크립트와 `install.conf`를 배치한 뒤 tar.gz 아카이브를 생성합니다.
+
+```bash
+./scripts/build_bundle.sh --dry-run  # 경로만 확인
+./scripts/build_bundle.sh            # staging 생성 + tar.gz 생성
+```
 
 ## 5. 폐쇄망 설치
 
 생성된 번들 내부의 `scripts/install.sh`가 실제 폐쇄망 노드에서 실행될 설치 스크립트입니다.
 
 빌더 루트의 `scripts/install.sh`는 실수로 빌더 자체를 설치 대상으로 사용하는 것을 막기 위한 안내용 진입점입니다.
+
+현재 번들 설치 지원 범위:
+
+- Ubuntu 24.04
+- containerd
+- kubeadm 기반 control-plane init
+- worker/control-plane join
+- Calico manifest 설치
+- Calico Tigera operator 설치
+- WSL2 사전 설정 보조 스크립트
+
+Cilium 내장 설치는 자산 수집/설치 연계가 완료된 뒤 활성화합니다.
 
 ## 6. Manual Installation & Upgrade
 
@@ -111,8 +128,7 @@ bash -n scripts/build_bundle.sh
 
 ## 7. 다음 구현 단계
 
-1. Ubuntu 24.04용 DEB 수집 구현
-2. kubeadm image list 기반 이미지 export 구현
-3. Calico manifest/operator 방식별 자산 수집 구현
-4. 번들 디렉터리 생성 및 tar.gz 패키징 구현
-5. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증
+1. Cilium 자산 수집/설치 연계 구현
+2. Rocky/RHEL 계열 RPM 수집 및 설치 경로 추가
+3. compatibility 정책 파일 기반 버전 조합 검증 강화
+4. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증

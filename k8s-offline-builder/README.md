@@ -14,7 +14,7 @@ Kubernetes 버전과 OS 버전을 고정하지 않고, 온라인 호스트에서
 
 ## 현재 범위
 
-이 단계는 1차 골격 구성입니다.
+이 단계는 Ubuntu 24.04 기준 수집/번들 생성의 초기 구현입니다.
 
 - 공통 설정 파일: `install.conf`
 - 예시 설정 템플릿: `templates/install.conf.example`
@@ -28,7 +28,11 @@ Kubernetes 버전과 OS 버전을 고정하지 않고, 온라인 호스트에서
 - 번들 내부 스크립트 템플릿: `templates/scripts/`
 - 산출물 루트: `bundles/`
 
-실제 패키지 다운로드와 번들 생성 로직은 다음 단계에서 Ubuntu 24.04 기준으로 구현합니다.
+현재 `download.sh`는 Ubuntu 24.04 기준으로 DEB, 바이너리, 매니페스트, Kubernetes core image, Calico image를 수집합니다.
+`build_bundle.sh`는 staging 디렉터리에 수집 자산, 번들 스크립트, 설정을 배치하고 tar.gz 파일을 생성합니다.
+
+번들 내부 `scripts/install.sh`는 Ubuntu 24.04 + containerd + Calico 조합의 kubeadm init/join 설치를 수행합니다.
+Cilium 내장 설치와 Rocky/RHEL 계열은 후속 구현 대상입니다.
 
 ## 기본 사용 흐름
 
