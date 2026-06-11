@@ -123,9 +123,10 @@ sudo ./scripts/install.sh
 #   1) 환경 확인 (wsl2 / vm)
 #   2) CNI 선택 (calico / cilium) + Pod CIDR
 #   3) CNI 설치 모드 (auto / manual)
-#   4) Envoy Gateway 모드 (calico+auto 선택 시)
-#   5) Service CIDR
-#   6) 컨트롤 플레인 엔드포인트
+#   4) Calico 설치 방식 (manifest / operator, calico 선택 시)
+#   5) Envoy Gateway 모드 (calico+auto 선택 시)
+#   6) Service CIDR
+#   7) 컨트롤 플레인 엔드포인트
 #      → 단일: 노드 IP (WSL2는 자동 감지)
 #      → HA  : VIP 또는 FQDN
 ```
@@ -218,7 +219,7 @@ sudo ./scripts/uninstall.sh --purge  # 바이너리까지 완전 제거
 | `k8s/debs/` | kubeadm, kubelet, kubectl, cri-tools, containerd.io + 시스템 유틸 DEB |
 | `k8s/binaries/` | helm, nerdctl tarball |
 | `k8s/images/` | kubeadm 코어 + Calico 이미지 `.tar` |
-| `k8s/utils/` | `calico.yaml`, `local-path-storage.yaml` 등 매니페스트 |
+| `k8s/utils/` | `calico.yaml`, `tigera-operator.yaml`, `calico-custom-resources.yaml`, `local-path-storage.yaml` 등 매니페스트 |
 | `scripts/` | `download.sh`, `install.sh`, `uninstall.sh`, `wsl2_prep.sh` |
 
 ## Phase 0: 설치 파일 배포 (Bastion → 전체 노드)
@@ -918,6 +919,15 @@ sudo journalctl -u haproxy -n 20 --no-pager
 
 ### 옵션 A: Calico + Envoy Gateway
 
+Calico는 환경 규모와 운영 선호에 따라 두 방식 중 하나를 선택합니다.
+
+| 방식 | 특징 | 사용 파일 |
+| --- | --- | --- |
+| `manifest` | 단일 `calico.yaml` 적용. 더 단순하고 가벼운 기본 경로 | `k8s/utils/calico.yaml` |
+| `operator` | Tigera Operator 기반. CRD와 operator를 통해 Calico 구성 관리 | `k8s/utils/tigera-operator.yaml`, `k8s/utils/calico-custom-resources.yaml` |
+
+#### 옵션 A-1: manifest 방식 (권장 기본값)
+
 ```bash
 # 1. Calico 설치
 kubectl apply -f k8s/utils/calico.yaml
@@ -932,6 +942,27 @@ cd ../envoy-1.37.2
 
 > Pod CIDR을 기본(`192.168.0.0/16`)에서 변경한 경우 `k8s/utils/calico.yaml`의
 > `CALICO_IPV4POOL_CIDR` 주석을 해제하고 값을 수정한 뒤 적용합니다.
+
+#### 옵션 A-2: Tigera Operator 방식
+
+```bash
+# 1. Tigera Operator 설치
+kubectl create -f k8s/utils/tigera-operator.yaml
+
+# 2. CRD 등록 확인 후 custom resources 적용
+kubectl wait --for=condition=established crd/installations.operator.tigera.io --timeout=180s
+kubectl create -f k8s/utils/calico-custom-resources.yaml
+
+# 3. Calico 파드가 전부 Running이 될 때까지 대기
+kubectl get pods -n calico-system -w
+
+# 4. Envoy Gateway 설치 (L7 라우팅)
+cd ../envoy-1.37.2
+./scripts/install.sh
+```
+
+> Pod CIDR을 기본(`192.168.0.0/16`)에서 변경한 경우
+> `k8s/utils/calico-custom-resources.yaml`의 `cidr:` 값을 수정한 뒤 적용합니다.
 
 ### 옵션 B: Cilium
 

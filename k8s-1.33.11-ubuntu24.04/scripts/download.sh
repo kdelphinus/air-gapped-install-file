@@ -170,12 +170,14 @@ fi
 echo ""
 echo "[4/6] 매니페스트 다운로드..."
 
-# Calico — Tigera Operator 방식: 두 파일 분리 저장
+# Calico — 가벼운 단일 매니페스트 방식 + Tigera Operator 방식 모두 저장
+curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml" \
+    -o "${UTIL_DIR}/calico.yaml"
 curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml" \
     -o "${UTIL_DIR}/tigera-operator.yaml"
 curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/custom-resources.yaml" \
     -o "${UTIL_DIR}/calico-custom-resources.yaml"
-echo "  → Calico: tigera-operator.yaml + calico-custom-resources.yaml"
+echo "  → Calico: calico.yaml + tigera-operator.yaml + calico-custom-resources.yaml"
 
 # local-path-storage (Rancher)
 curl -fsSL "https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml" \
@@ -214,27 +216,32 @@ echo "  → Tigera Operator 이미지: ${TIGERA_OPERATOR_IMAGE}"
 # Calico 컴포넌트 이미지 (Calico 버전과 동일)
 CALICO_IMAGES=(
     "${TIGERA_OPERATOR_IMAGE}"
-    "docker.io/calico/cni:${CALICO_VERSION}"
-    "docker.io/calico/node:${CALICO_VERSION}"
-    "docker.io/calico/kube-controllers:${CALICO_VERSION}"
-    "docker.io/calico/typha:${CALICO_VERSION}"
-    "docker.io/calico/pod2daemon-flexvol:${CALICO_VERSION}"
-    "docker.io/calico/csi:${CALICO_VERSION}"
-    "docker.io/calico/node-driver-registrar:${CALICO_VERSION}"
-    "docker.io/calico/apiserver:${CALICO_VERSION}"
+    "quay.io/calico/cni:${CALICO_VERSION}"
+    "quay.io/calico/node:${CALICO_VERSION}"
+    "quay.io/calico/kube-controllers:${CALICO_VERSION}"
+    "quay.io/calico/typha:${CALICO_VERSION}"
+    "quay.io/calico/pod2daemon-flexvol:${CALICO_VERSION}"
+    "quay.io/calico/csi:${CALICO_VERSION}"
+    "quay.io/calico/node-driver-registrar:${CALICO_VERSION}"
+    "quay.io/calico/apiserver:${CALICO_VERSION}"
 )
 
 FAILED_IMAGES=()
 
 pull_and_save() {
     local IMG="$1"
+    [ -z "$IMG" ] && return 0
     # registry prefix 제거 + ':', '/' 를 '-' 로
     local SAFE_NAME
     SAFE_NAME=$(echo "$IMG" | sed -E 's#^(docker\.io|quay\.io|registry\.k8s\.io)/##' | tr ':/' '-')
     local TAR="${IMG_DIR}/${SAFE_NAME}.tar"
     if [ -f "$TAR" ]; then
-        echo "  → ${IMG} (이미 존재, skip)"
-        return 0
+        if tar -xOf "$TAR" manifest.json 2>/dev/null | grep -Fq "$IMG"; then
+            echo "  → ${IMG} (이미 존재, skip)"
+            return 0
+        fi
+        echo "  → ${IMG} (기존 tar 이미지 ref 불일치, 재생성)"
+        rm -f "$TAR"
     fi
     echo "  → pull: ${IMG}"
     if ! ctr -n k8s.io images pull "$IMG" >/dev/null 2>&1; then

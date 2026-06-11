@@ -49,6 +49,7 @@ ENV_TYPE="${ENV_TYPE}"
 NODE_ROLE="${NODE_ROLE}"
 CNI_CHOICE="${CNI_CHOICE}"
 CNI_INSTALL_MODE="${CNI_INSTALL_MODE}"
+CALICO_INSTALL_METHOD="${CALICO_INSTALL_METHOD}"
 GATEWAY_INSTALL_MODE="${GATEWAY_INSTALL_MODE}"
 POD_CIDR="${POD_CIDR}"
 SERVICE_CIDR="${SERVICE_CIDR}"
@@ -60,7 +61,7 @@ EOF
 }
 
 reset_conf_vars() {
-    ENV_TYPE="" NODE_ROLE="" CNI_CHOICE="" CNI_INSTALL_MODE="" GATEWAY_INSTALL_MODE=""
+    ENV_TYPE="" NODE_ROLE="" CNI_CHOICE="" CNI_INSTALL_MODE="" CALICO_INSTALL_METHOD="" GATEWAY_INSTALL_MODE=""
     POD_CIDR="" SERVICE_CIDR="" CONTROL_PLANE_ENDPOINT=""
 }
 
@@ -219,6 +220,9 @@ if [ "$1" = "--join" ]; then
     JOIN_TOKEN="$2"
     JOIN_HASH="$3"
     JOIN_ENDPOINT="$4"
+    if [ -n "$JOIN_ENDPOINT" ] && [[ "$JOIN_ENDPOINT" != *:* ]]; then
+        JOIN_ENDPOINT="${JOIN_ENDPOINT}:6443"
+    fi
     JOIN_IS_CP=0
     JOIN_CERT_KEY=""
 
@@ -382,6 +386,7 @@ if [ "$EXIST_K8S" = "yes" ]; then
         echo "  📋 저장된 설정:"
         echo "     환경     : ${ENV_TYPE:-미설정}"
         echo "     CNI      : ${CNI_CHOICE:-미설정} (모드: ${CNI_INSTALL_MODE:-미설정})"
+        [ "$CNI_CHOICE" = "calico" ] && echo "     Calico   : ${CALICO_INSTALL_METHOD:-manifest}"
         echo "     설치버전 : ${INSTALLED_VERSION:-미설정}"
     fi
     echo ""
@@ -443,6 +448,20 @@ if [ -z "$CNI_INSTALL_MODE" ]; then
     esac
 fi
 
+if [ "$CNI_CHOICE" = "calico" ] && [ -z "$CALICO_INSTALL_METHOD" ]; then
+    echo ""
+    echo "Calico 설치 방식을 선택하세요:"
+    echo "  1) manifest — calico.yaml 단일 매니페스트 방식 (가벼운 기본 경로)"
+    echo "  2) operator — Tigera Operator + custom resources 방식"
+    read -p "선택 [1/2, 기본값: 1]: " _CALICO_METHOD
+    _CALICO_METHOD="${_CALICO_METHOD:-1}"
+    case "$_CALICO_METHOD" in
+        1) CALICO_INSTALL_METHOD="manifest" ;;
+        2) CALICO_INSTALL_METHOD="operator" ;;
+        *) echo -e "${RED}[오류] 1 또는 2를 선택하세요.${NC}"; exit 1 ;;
+    esac
+fi
+
 # Envoy Gateway 설치 모드 (calico + auto 시에만)
 if [ "$CNI_CHOICE" = "calico" ] && [ "$CNI_INSTALL_MODE" = "auto" ]; then
     if [ -z "$GATEWAY_INSTALL_MODE" ]; then
@@ -489,6 +508,7 @@ echo ""
 echo -e "${CYAN}🔧 설정 요약${NC}"
 echo "   환경          : $ENV_TYPE"
 echo "   CNI           : $CNI_CHOICE ($CNI_INSTALL_MODE)"
+[ "$CNI_CHOICE" = "calico" ] && echo "   Calico 방식   : ${CALICO_INSTALL_METHOD:-manifest}"
 [ "$CNI_CHOICE" = "calico" ] && echo "   Envoy Gateway : ${GATEWAY_INSTALL_MODE:-N/A}"
 echo "   Pod CIDR      : $POD_CIDR"
 echo "   Service CIDR  : $SERVICE_CIDR"
@@ -623,7 +643,12 @@ fi
 echo ""
 echo -e "${CYAN}[10/10] CNI / Gateway 처리...${NC}"
 
-install_calico() {
+install_calico_operator() {
+    [ ! -f "$UTIL_DIR/tigera-operator.yaml" ] && \
+        { echo -e "${RED}[오류] $UTIL_DIR/tigera-operator.yaml 파일이 없습니다.${NC}"; exit 1; }
+    [ ! -f "$UTIL_DIR/calico-custom-resources.yaml" ] && \
+        { echo -e "${RED}[오류] $UTIL_DIR/calico-custom-resources.yaml 파일이 없습니다.${NC}"; exit 1; }
+
     echo -e "${CYAN}  → Calico Tigera Operator 설치${NC}"
     kubectl create -f "$UTIL_DIR/tigera-operator.yaml"
     echo "  → Tigera CRD 등록 대기 (최대 3분)..."
@@ -650,9 +675,45 @@ install_calico() {
         -n calico-system --timeout=300s 2>/dev/null || true
 }
 
+install_calico_manifest() {
+    [ ! -f "$UTIL_DIR/calico.yaml" ] && \
+        { echo -e "${RED}[오류] $UTIL_DIR/calico.yaml 파일이 없습니다. 인터넷 호스트에서 scripts/download.sh 를 다시 실행하세요.${NC}"; exit 1; }
+
+    echo -e "${CYAN}  → Calico calico.yaml 단일 매니페스트 설치${NC}"
+    if [ "$POD_CIDR" = "192.168.0.0/16" ]; then
+        kubectl apply -f "$UTIL_DIR/calico.yaml"
+    else
+        awk -v cidr="$POD_CIDR" '
+            /# - name: CALICO_IPV4POOL_CIDR/ {
+                sub(/# -/, "-")
+                print
+                getline
+                sub(/#   value:.*/, "  value: \"" cidr "\"")
+                print
+                next
+            }
+            { print }
+        ' "$UTIL_DIR/calico.yaml" | kubectl apply -f -
+    fi
+
+    echo "  → Calico Pod 생성 대기..."
+    _ELAPSED=0
+    until kubectl get pods -n kube-system -l k8s-app=calico-node 2>/dev/null | grep -q calico-node; do
+        if [ "$_ELAPSED" -ge 120 ]; then break; fi
+        sleep 5; _ELAPSED=$((_ELAPSED + 5))
+    done
+    echo "  → Calico Pod Ready 대기 (최대 5분)..."
+    kubectl wait --for=condition=Ready pod -l k8s-app=calico-node \
+        -n kube-system --timeout=300s 2>/dev/null || true
+}
+
 case "${CNI_CHOICE}::${CNI_INSTALL_MODE}" in
     calico::auto)
-        install_calico
+        if [ "${CALICO_INSTALL_METHOD:-manifest}" = "operator" ]; then
+            install_calico_operator
+        else
+            install_calico_manifest
+        fi
         if [ "$GATEWAY_INSTALL_MODE" = "auto" ]; then
             if [ -x "$ENVOY_COMPONENT_DIR/scripts/install.sh" ]; then
                 echo -e "${CYAN}  → Envoy Gateway 자동 설치 호출${NC}"
@@ -666,8 +727,9 @@ case "${CNI_CHOICE}::${CNI_INSTALL_MODE}" in
         ;;
     calico::manual)
         echo -e "${YELLOW}  → Calico/Envoy 는 수동 설치하세요.${NC}"
-        echo "     Calico:  kubectl create -f $UTIL_DIR/tigera-operator.yaml"
-        echo "              kubectl create -f $UTIL_DIR/calico-custom-resources.yaml"
+        echo "     Calico manifest: kubectl apply -f $UTIL_DIR/calico.yaml"
+        echo "     Calico operator: kubectl create -f $UTIL_DIR/tigera-operator.yaml"
+        echo "                      kubectl create -f $UTIL_DIR/calico-custom-resources.yaml"
         echo "     Envoy :  $ENVOY_COMPONENT_DIR/scripts/install.sh"
         ;;
     cilium::auto)
