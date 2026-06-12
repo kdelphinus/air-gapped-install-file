@@ -20,6 +20,8 @@ spec:
       labels:
         app: gitlab-omnibus
         release: {{ .Release.Name }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       {{- with .Values.nodeSelector }}
       nodeSelector:
