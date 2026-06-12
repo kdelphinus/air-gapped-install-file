@@ -38,8 +38,9 @@ NODE_NAME="" # 빈 값이면 자동 감지
 NFS_SERVER="" # 예: 192.168.1.100
 NFS_PATH=""   # 예: /nfs/harbor
 
-# 5. 고급 설정 (Ingress 선택 시 사용)
+# 5. 고급 설정 (Ingress 선택 시 사용 및 파드 고정 타겟 노드 지정)
 INGRESS_CLASS="nginx"
+TARGET_NODE_NAME="" # 모든 Harbor 파드를 특정 노드에 고정하고 싶을 때 노드명 입력 (빈 값이면 실행 중 프롬프트로 확인)
 
 # =================================================================
 # --- 메인 스크립트 로직 ---
@@ -222,19 +223,22 @@ fi
 echo ""
 read -p "Control Plane(Master) 노드의 Taint를 허용하여 Pod을 스케줄링하겠습니까? (y/N): " ALLOW_CP_TAINT
 ENABLE_CP_TOLERATIONS="false"
-MASTER_NODE_NAME=""
 if [[ "$ALLOW_CP_TAINT" =~ ^[yY]([eE][sS])?$ ]]; then
     ENABLE_CP_TOLERATIONS="true"
     echo "Control Plane Taint 허용(Tolerations)이 활성화되었습니다."
-    
-    # 마스터 노드 이름 자동 감지 (nodeSelector용)
-    DETECTED_MASTER_NAME=$($KUBECTL_CMD get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || $KUBECTL_CMD get nodes -l node-role.kubernetes.io/master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-    if [ -n "$DETECTED_MASTER_NAME" ]; then
-        MASTER_NODE_NAME="$DETECTED_MASTER_NAME"
-        echo "마스터 노드 감지 완료: $MASTER_NODE_NAME (모든 파드를 이 노드로 고정합니다.)"
-    else
-        read -p "마스터 노드 이름을 입력해주세요 (파드 고정용): " INPUT_MASTER_NAME
-        MASTER_NODE_NAME="$INPUT_MASTER_NAME"
+fi
+
+# 3-3. 특정 노드에 파드 고정 여부 확인
+echo ""
+read -p "모든 Harbor 파드를 특정 노드에 고정하여 배포하시겠습니까? (y/N): " FORCE_NODE_PIN
+TARGET_NODE_NAME=""
+if [[ "$FORCE_NODE_PIN" =~ ^[yY]([eE][sS])?$ ]]; then
+    # 기본값 추천용 첫 번째 노드 감지
+    DEFAULT_NODE=$($KUBECTL_CMD get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    read -p "고정하여 배포할 노드 이름을 입력하세요 [기본값: ${DEFAULT_NODE}]: " INPUT_NODE
+    TARGET_NODE_NAME="${INPUT_NODE:-$DEFAULT_NODE}"
+    if [ -n "$TARGET_NODE_NAME" ]; then
+        echo "Harbor 파드 고정 노드 설정 완료: $TARGET_NODE_NAME"
     fi
 fi
 
@@ -524,8 +528,6 @@ if [[ "$ENABLE_CP_TOLERATIONS" == "true" ]]; then
     cat >> "$VALUES_FILE" <<EOF
 
 nginx:
-  nodeSelector:
-    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -534,8 +536,6 @@ nginx:
       operator: "Exists"
       effect: "NoSchedule"
 portal:
-  nodeSelector:
-    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -544,8 +544,6 @@ portal:
       operator: "Exists"
       effect: "NoSchedule"
 core:
-  nodeSelector:
-    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -554,8 +552,6 @@ core:
       operator: "Exists"
       effect: "NoSchedule"
 jobservice:
-  nodeSelector:
-    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -564,8 +560,6 @@ jobservice:
       operator: "Exists"
       effect: "NoSchedule"
 registry:
-  nodeSelector:
-    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -574,8 +568,6 @@ registry:
       operator: "Exists"
       effect: "NoSchedule"
 trivy:
-  nodeSelector:
-    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -585,8 +577,6 @@ trivy:
       effect: "NoSchedule"
 database:
   internal:
-    nodeSelector:
-      kubernetes.io/hostname: "${MASTER_NODE_NAME}"
     tolerations:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
@@ -596,8 +586,6 @@ database:
         effect: "NoSchedule"
 redis:
   internal:
-    nodeSelector:
-      kubernetes.io/hostname: "${MASTER_NODE_NAME}"
     tolerations:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
@@ -605,6 +593,39 @@ redis:
       - key: "node-role.kubernetes.io/master"
         operator: "Exists"
         effect: "NoSchedule"
+EOF
+fi
+
+# 특정 노드에 파드 고정(nodeSelector) 추가 주입
+if [ -n "$TARGET_NODE_NAME" ]; then
+    cat >> "$VALUES_FILE" <<EOF
+
+nginx:
+  nodeSelector:
+    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+portal:
+  nodeSelector:
+    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+core:
+  nodeSelector:
+    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+jobservice:
+  nodeSelector:
+    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+registry:
+  nodeSelector:
+    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+trivy:
+  nodeSelector:
+    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+database:
+  internal:
+    nodeSelector:
+      kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+redis:
+  internal:
+    nodeSelector:
+      kubernetes.io/hostname: "${TARGET_NODE_NAME}"
 EOF
 fi
 
