@@ -5,14 +5,19 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   gitlab.rb: |
+    require 'uri'
     external_url '{{ .Values.externalUrl }}'
 
     # Nginx
     nginx['listen_port'] = 80
     nginx['listen_https'] = false
     nginx['redirect_http_to_https'] = false
+
+    # external_url 포트 자동 추출 및 X-Forwarded-Port 주입
+    uri = URI.parse('{{ .Values.externalUrl }}')
+    external_port = uri.port || (uri.scheme == 'https' ? 443 : 80)
     nginx['proxy_set_headers'] = {
-      "X-Forwarded-Port" => "{{ .Values.httpNodePort }}"
+      "X-Forwarded-Port" => external_port.to_s
     }
 
     # SSH
