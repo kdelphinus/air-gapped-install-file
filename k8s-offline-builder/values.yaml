@@ -2,11 +2,15 @@
 kubernetes:
   version: v1.33.11
   targetOS: ubuntu24.04
+  supportedTargetOS:
+    - ubuntu24.04
+    - rocky9.6
   arch: amd64
 
 runtime:
   name: containerd
   version: auto
+  rocky96VersionPolicy: "2.1.*"
 
 cni:
   name: calico

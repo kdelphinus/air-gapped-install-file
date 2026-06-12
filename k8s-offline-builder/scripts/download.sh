@@ -12,8 +12,10 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 K8S_DEB_VERSION="${K8S_VERSION#v}-1.1"
+K8S_RPM_VERSION="${K8S_VERSION#v}"
 K8S_DIR="${STAGING_DIR}/k8s"
 DEB_DIR="${K8S_DIR}/debs"
+RPM_DIR="${K8S_DIR}/rpms"
 BIN_DIR="${K8S_DIR}/binaries"
 IMG_DIR="${K8S_DIR}/images"
 UTIL_DIR="${K8S_DIR}/utils"
@@ -29,7 +31,20 @@ cleanup_apt_lists() {
     apt-get update -qq >/dev/null 2>&1 || true
 }
 
-trap cleanup_apt_lists EXIT
+cleanup_package_repos() {
+    if [ "${#APT_LISTS_TO_CLEAN[@]}" -gt 0 ]; then
+        cleanup_apt_lists
+    fi
+    if [ -n "${K8S_YUM_REPO:-}" ]; then
+        rm -f "$K8S_YUM_REPO"
+        if [ "${DOCKER_YUM_REPO_CREATED:-0}" -eq 1 ]; then
+            rm -f /etc/yum.repos.d/docker-ce.repo
+        fi
+        dnf makecache -q >/dev/null 2>&1 || true
+    fi
+}
+
+trap cleanup_package_repos EXIT
 
 download_deb_with_dependencies() {
     local pkg="$1"
@@ -76,6 +91,129 @@ pull_and_save_image() {
 
     echo "    export: $(basename "$tar_path")"
     ctr -n k8s.io images export "$tar_path" "$img"
+}
+
+download_rpm_with_dependencies() {
+    local pkg="$1"
+
+    echo "  → ${pkg} RPM 의존성 수집 중..."
+    dnf download \
+        --resolve \
+        --alldeps \
+        --destdir "$RPM_DIR" \
+        --disableexcludes=kubernetes \
+        "$pkg" || echo "    ! ${pkg} 다운로드 실패 (skip)"
+}
+
+download_common_binaries() {
+    echo ""
+    echo "[3/6] 바이너리 tarball 다운로드..."
+    HELM_TGZ="helm-${HELM_VERSION}-linux-${ARCH}.tar.gz"
+    if [ ! -f "${BIN_DIR}/${HELM_TGZ}" ]; then
+        curl -fsSL "https://get.helm.sh/${HELM_TGZ}" -o "${BIN_DIR}/${HELM_TGZ}"
+    fi
+    NERDCTL_TGZ="nerdctl-full-${NERDCTL_VERSION}-linux-${ARCH}.tar.gz"
+    if [ ! -f "${BIN_DIR}/${NERDCTL_TGZ}" ]; then
+        curl -fsSL "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/${NERDCTL_TGZ}" \
+            -o "${BIN_DIR}/${NERDCTL_TGZ}"
+    fi
+    echo "  → 바이너리 $(ls -1 "$BIN_DIR"/*.tar.gz 2>/dev/null | wc -l)개 수집 완료"
+}
+
+download_common_manifests() {
+    echo ""
+    echo "[4/6] 매니페스트 다운로드..."
+    if [ "$CNI_CHOICE" = "calico" ]; then
+        curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml" \
+            -o "${UTIL_DIR}/calico.yaml"
+        curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml" \
+            -o "${UTIL_DIR}/tigera-operator.yaml"
+        curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/custom-resources.yaml" \
+            -o "${UTIL_DIR}/calico-custom-resources.yaml"
+        echo "  → Calico 매니페스트 수집 완료"
+    fi
+    if [ "$CNI_CHOICE" = "cilium" ]; then
+        CILIUM_CHART_VERSION="${CILIUM_VERSION#v}"
+        curl -fsSL "https://helm.cilium.io/cilium-${CILIUM_CHART_VERSION}.tgz" \
+            -o "${CHART_DIR}/cilium-${CILIUM_CHART_VERSION}.tgz"
+        echo "  → Cilium Helm chart 수집 완료"
+    fi
+    curl -fsSL "https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml" \
+        -o "${UTIL_DIR}/local-path-storage.yaml"
+}
+
+download_common_images() {
+    echo ""
+    echo "[5/6] 컨테이너 이미지 다운로드..."
+    if ! command -v ctr >/dev/null 2>&1; then
+        echo "  ! ctr 미존재 → containerd.io 임시 설치"
+        case "$TARGET_OS" in
+            ubuntu24.04)
+                apt-get install -y containerd.io >/dev/null
+                ;;
+            rocky9.6)
+                dnf install -y containerd.io >/dev/null
+                ;;
+        esac
+        systemctl enable --now containerd >/dev/null 2>&1 || true
+    fi
+    if ! command -v kubeadm >/dev/null 2>&1; then
+        case "$TARGET_OS" in
+            ubuntu24.04)
+                apt-get install -y "kubeadm=${K8S_DEB_VERSION}" >/dev/null
+                ;;
+            rocky9.6)
+                dnf install -y --disableexcludes=kubernetes "kubeadm-${K8S_RPM_VERSION}-*" >/dev/null
+                ;;
+        esac
+    fi
+
+    K8S_IMAGES=$(kubeadm config images list --kubernetes-version="${K8S_VERSION}")
+    FAILED_IMAGES=()
+
+    for img in $K8S_IMAGES; do
+        pull_and_save_image "$img" || true
+    done
+
+    if [ "$CNI_CHOICE" = "calico" ]; then
+        TIGERA_OPERATOR_IMAGE=$(grep 'image:' "${UTIL_DIR}/tigera-operator.yaml" | awk '{print $2}' | head -1)
+        [ -z "$TIGERA_OPERATOR_IMAGE" ] && TIGERA_OPERATOR_IMAGE="quay.io/tigera/operator:v1.40.0"
+        CALICO_IMAGES=(
+            "$TIGERA_OPERATOR_IMAGE"
+            "quay.io/calico/cni:${CALICO_VERSION}"
+            "quay.io/calico/node:${CALICO_VERSION}"
+            "quay.io/calico/kube-controllers:${CALICO_VERSION}"
+            "quay.io/calico/typha:${CALICO_VERSION}"
+            "quay.io/calico/pod2daemon-flexvol:${CALICO_VERSION}"
+            "quay.io/calico/csi:${CALICO_VERSION}"
+            "quay.io/calico/node-driver-registrar:${CALICO_VERSION}"
+            "quay.io/calico/apiserver:${CALICO_VERSION}"
+        )
+        for img in "${CALICO_IMAGES[@]}"; do
+            pull_and_save_image "$img" || true
+        done
+    fi
+
+    if [ "$CNI_CHOICE" = "cilium" ]; then
+        CILIUM_IMAGES=(
+            "quay.io/cilium/cilium:${CILIUM_VERSION}"
+            "quay.io/cilium/operator-generic:${CILIUM_VERSION}"
+            "quay.io/cilium/hubble-relay:${CILIUM_VERSION}"
+            "quay.io/cilium/hubble-ui:v0.13.3"
+            "quay.io/cilium/hubble-ui-backend:v0.13.3"
+            "quay.io/cilium/cilium-envoy:v1.36.6-1776000132-2437d2edeaf4d9b56ef279bd0d71127440c067aa"
+        )
+        for img in "${CILIUM_IMAGES[@]}"; do
+            pull_and_save_image "$img" || true
+        done
+    fi
+
+    if [ "${#FAILED_IMAGES[@]}" -gt 0 ]; then
+        echo "  ⚠ pull 실패 목록:"
+        for img in "${FAILED_IMAGES[@]}"; do
+            echo "    - $img"
+        done
+    fi
 }
 
 echo "============================================================"
@@ -151,105 +289,65 @@ case "$TARGET_OS" in
         cd - >/dev/null
         echo "  → DEB $(ls -1 "$DEB_DIR"/*.deb 2>/dev/null | wc -l)개 수집 완료"
 
-        echo ""
-        echo "[3/6] 바이너리 tarball 다운로드..."
-        HELM_TGZ="helm-${HELM_VERSION}-linux-${ARCH}.tar.gz"
-        if [ ! -f "${BIN_DIR}/${HELM_TGZ}" ]; then
-            curl -fsSL "https://get.helm.sh/${HELM_TGZ}" -o "${BIN_DIR}/${HELM_TGZ}"
+        download_common_binaries
+        download_common_manifests
+        download_common_images
+        ;;
+    rocky9.6)
+        mkdir -p "$RPM_DIR" "$BIN_DIR" "$IMG_DIR" "$UTIL_DIR" "$CHART_DIR"
+
+        echo "[1/6] DNF repo 임시 등록..."
+        dnf install -y epel-release >/dev/null 2>&1 || true
+        dnf install -y dnf-plugins-core yum-utils curl tar jq chrony >/dev/null
+        DOCKER_YUM_REPO_CREATED=0
+        if [ ! -f /etc/yum.repos.d/docker-ce.repo ]; then
+            dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo >/dev/null
+            DOCKER_YUM_REPO_CREATED=1
         fi
-        NERDCTL_TGZ="nerdctl-full-${NERDCTL_VERSION}-linux-${ARCH}.tar.gz"
-        if [ ! -f "${BIN_DIR}/${NERDCTL_TGZ}" ]; then
-            curl -fsSL "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/${NERDCTL_TGZ}" \
-                -o "${BIN_DIR}/${NERDCTL_TGZ}"
-        fi
-        echo "  → 바이너리 $(ls -1 "$BIN_DIR"/*.tar.gz 2>/dev/null | wc -l)개 수집 완료"
+
+        K8S_YUM_REPO="/etc/yum.repos.d/kubernetes-offline-builder.repo"
+        cat > "$K8S_YUM_REPO" <<EOF
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/${K8S_MINOR}/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/${K8S_MINOR}/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF
+        dnf makecache -q
+        echo "  → repo 등록 완료"
 
         echo ""
-        echo "[4/6] 매니페스트 다운로드..."
-        if [ "$CNI_CHOICE" = "calico" ]; then
-            curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml" \
-                -o "${UTIL_DIR}/calico.yaml"
-            curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml" \
-                -o "${UTIL_DIR}/tigera-operator.yaml"
-            curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/custom-resources.yaml" \
-                -o "${UTIL_DIR}/calico-custom-resources.yaml"
-            echo "  → Calico 매니페스트 수집 완료"
-        fi
-        if [ "$CNI_CHOICE" = "cilium" ]; then
-            CILIUM_CHART_VERSION="${CILIUM_VERSION#v}"
-            curl -fsSL "https://helm.cilium.io/cilium-${CILIUM_CHART_VERSION}.tgz" \
-                -o "${CHART_DIR}/cilium-${CILIUM_CHART_VERSION}.tgz"
-            echo "  → Cilium Helm chart 수집 완료"
-        fi
-        curl -fsSL "https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml" \
-            -o "${UTIL_DIR}/local-path-storage.yaml"
-
-        echo ""
-        echo "[5/6] 컨테이너 이미지 다운로드..."
-        if ! command -v ctr >/dev/null 2>&1; then
-            echo "  ! ctr 미존재 → containerd.io 임시 설치"
-            apt-get install -y containerd.io >/dev/null
-            systemctl enable --now containerd >/dev/null 2>&1 || true
-        fi
-        if ! command -v kubeadm >/dev/null 2>&1; then
-            apt-get install -y "kubeadm=${K8S_DEB_VERSION}" >/dev/null
-        fi
-
-        K8S_IMAGES=$(kubeadm config images list --kubernetes-version="${K8S_VERSION}")
-        FAILED_IMAGES=()
-
-        for img in $K8S_IMAGES; do
-            pull_and_save_image "$img" || true
+        echo "[2/6] RPM 다운로드..."
+        rm -f "$RPM_DIR"/*.rpm
+        RPM_PKGS=(
+            "kubelet-${K8S_RPM_VERSION}-*"
+            "kubeadm-${K8S_RPM_VERSION}-*"
+            "kubectl-${K8S_RPM_VERSION}-*"
+            "cri-tools"
+            "containerd.io-${CONTAINERD_VERSION}"
+            socat conntrack-tools iproute-tc libseccomp
+            jq chrony haproxy keepalived psmisc
+        )
+        for pkg in "${RPM_PKGS[@]}"; do
+            download_rpm_with_dependencies "$pkg"
         done
+        echo "  → RPM $(ls -1 "$RPM_DIR"/*.rpm 2>/dev/null | wc -l)개 수집 완료"
 
-        if [ "$CNI_CHOICE" = "calico" ]; then
-            TIGERA_OPERATOR_IMAGE=$(grep 'image:' "${UTIL_DIR}/tigera-operator.yaml" | awk '{print $2}' | head -1)
-            [ -z "$TIGERA_OPERATOR_IMAGE" ] && TIGERA_OPERATOR_IMAGE="quay.io/tigera/operator:v1.40.0"
-            CALICO_IMAGES=(
-                "$TIGERA_OPERATOR_IMAGE"
-                "quay.io/calico/cni:${CALICO_VERSION}"
-                "quay.io/calico/node:${CALICO_VERSION}"
-                "quay.io/calico/kube-controllers:${CALICO_VERSION}"
-                "quay.io/calico/typha:${CALICO_VERSION}"
-                "quay.io/calico/pod2daemon-flexvol:${CALICO_VERSION}"
-                "quay.io/calico/csi:${CALICO_VERSION}"
-                "quay.io/calico/node-driver-registrar:${CALICO_VERSION}"
-                "quay.io/calico/apiserver:${CALICO_VERSION}"
-            )
-            for img in "${CALICO_IMAGES[@]}"; do
-                pull_and_save_image "$img" || true
-            done
-        fi
-
-        if [ "$CNI_CHOICE" = "cilium" ]; then
-            CILIUM_IMAGES=(
-                "quay.io/cilium/cilium:${CILIUM_VERSION}"
-                "quay.io/cilium/operator-generic:${CILIUM_VERSION}"
-                "quay.io/cilium/hubble-relay:${CILIUM_VERSION}"
-                "quay.io/cilium/hubble-ui:v0.13.3"
-                "quay.io/cilium/hubble-ui-backend:v0.13.3"
-                "quay.io/cilium/cilium-envoy:v1.36.6-1776000132-2437d2edeaf4d9b56ef279bd0d71127440c067aa"
-            )
-            for img in "${CILIUM_IMAGES[@]}"; do
-                pull_and_save_image "$img" || true
-            done
-        fi
-
-        if [ "${#FAILED_IMAGES[@]}" -gt 0 ]; then
-            echo "  ⚠ pull 실패 목록:"
-            for img in "${FAILED_IMAGES[@]}"; do
-                echo "    - $img"
-            done
-        fi
+        download_common_binaries
+        download_common_manifests
+        download_common_images
         ;;
     *)
-        fail "현재는 ubuntu24.04 만 지원합니다: $TARGET_OS"
+        fail "현재는 ubuntu24.04 또는 rocky9.6 만 지원합니다: $TARGET_OS"
         ;;
 esac
 
 echo ""
 echo "[6/6] 결과 요약"
 echo "  DEB        : $(ls -1 "$DEB_DIR"/*.deb 2>/dev/null | wc -l) 개"
+echo "  RPM        : $(ls -1 "$RPM_DIR"/*.rpm 2>/dev/null | wc -l) 개"
 echo "  바이너리   : $(ls -1 "$BIN_DIR"/*.tar.gz 2>/dev/null | wc -l) 개"
 echo "  이미지     : $(ls -1 "$IMG_DIR"/*.tar 2>/dev/null | wc -l) 개"
 echo "  매니페스트 : $(ls -1 "$UTIL_DIR"/*.yaml 2>/dev/null | wc -l) 개"

@@ -1,11 +1,11 @@
 # Copy this file to ../install.conf and adjust values.
 
 K8S_VERSION="v1.33.11"
-TARGET_OS="ubuntu24.04"
+TARGET_OS="ubuntu24.04"  # ubuntu24.04 또는 rocky9.6
 ARCH="amd64"
 
 CONTAINER_RUNTIME="containerd"
-CONTAINERD_VERSION="auto"
+CONTAINERD_VERSION="auto"  # rocky9.6에서는 auto 입력 시 2.1.* 로 정규화
 
 CNI_CHOICE="calico"
 CALICO_VERSION="v3.31.0"

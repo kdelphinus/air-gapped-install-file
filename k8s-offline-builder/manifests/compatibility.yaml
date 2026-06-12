@@ -13,12 +13,14 @@ policy:
     - v1.33
   targetOS:
     - ubuntu24.04
+    - rocky9.6
   arch:
     - amd64
   containerRuntime:
     - containerd
   containerdVersions:
     - auto
+    - 2.1.*
   cni:
     - calico
     - cilium
@@ -35,11 +37,15 @@ policy:
     - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.0|manifest"
     - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.0|operator"
     - "v1.33|ubuntu24.04|amd64|containerd|auto|cilium|v1.19.3|helm"
+    - "v1.33|rocky9.6|amd64|containerd|2.1.*|calico|v3.31.0|manifest"
+    - "v1.33|rocky9.6|amd64|containerd|2.1.*|calico|v3.31.0|operator"
+    - "v1.33|rocky9.6|amd64|containerd|2.1.*|cilium|v1.19.3|helm"
 
 kubernetes:
   versionFormat: "v<major>.<minor>.<patch>"
   supportedTargetOS:
     - ubuntu24.04
+    - rocky9.6
   supportedArch:
     - amd64
   componentSkewPolicy:

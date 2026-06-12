@@ -18,6 +18,7 @@ NC='\033[0m'
 BASE_DIR="$(pwd)"
 CONF_FILE="${BASE_DIR}/install.conf"
 DEB_DIR="${BASE_DIR}/k8s/debs"
+RPM_DIR="${BASE_DIR}/k8s/rpms"
 BIN_DIR="${BASE_DIR}/k8s/binaries"
 IMG_DIR="${BASE_DIR}/k8s/images"
 UTIL_DIR="${BASE_DIR}/k8s/utils"
@@ -50,8 +51,8 @@ if [[ "$K8S_VERSION" != v* ]]; then
     K8S_VERSION="v${K8S_VERSION}"
 fi
 
-if [ "$TARGET_OS" != "ubuntu24.04" ]; then
-    echo -e "${RED}[오류] 현재 생성 번들 설치 스크립트는 ubuntu24.04 대상만 지원합니다: $TARGET_OS${NC}"
+if [[ "$TARGET_OS" != "ubuntu24.04" && "$TARGET_OS" != "rocky9.6" ]]; then
+    echo -e "${RED}[오류] 현재 생성 번들 설치 스크립트는 ubuntu24.04 또는 rocky9.6 대상만 지원합니다: $TARGET_OS${NC}"
     exit 1
 fi
 
@@ -234,6 +235,59 @@ EOF
         update-alternatives --set iptables /usr/sbin/iptables-legacy >/dev/null 2>&1 || true
         update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy >/dev/null 2>&1 || true
     fi
+}
+
+install_rpms_and_prepare_node() {
+    echo -e "${CYAN}RPM 설치 및 OS 사전 설정...${NC}"
+    if ! ls "$RPM_DIR"/*.rpm >/dev/null 2>&1; then
+        echo -e "${RED}[오류] $RPM_DIR 에 RPM 파일이 없습니다.${NC}"
+        exit 1
+    fi
+
+    dnf localinstall -y --disablerepo='*' "$RPM_DIR"/*.rpm
+    systemctl enable kubelet
+
+    if command -v setenforce >/dev/null 2>&1; then
+        setenforce 0 2>/dev/null || true
+    fi
+    if [ -f /etc/selinux/config ]; then
+        sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+    fi
+
+    systemctl stop firewalld 2>/dev/null || true
+    systemctl disable firewalld 2>/dev/null || true
+
+    modprobe overlay || true
+    modprobe br_netfilter || true
+    cat > /etc/modules-load.d/k8s.conf <<EOF
+overlay
+br_netfilter
+EOF
+
+    cat > /etc/sysctl.d/k8s.conf <<EOF
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+    sysctl --system >/dev/null
+
+    disable_swap_completely
+    configure_system_limits
+}
+
+install_packages_and_prepare_node() {
+    case "$TARGET_OS" in
+        ubuntu24.04)
+            install_debs_and_prepare_node
+            ;;
+        rocky9.6)
+            install_rpms_and_prepare_node
+            ;;
+        *)
+            echo -e "${RED}[오류] 지원하지 않는 TARGET_OS: $TARGET_OS${NC}"
+            exit 1
+            ;;
+    esac
 }
 
 install_binaries() {
@@ -466,7 +520,7 @@ run_join() {
 
     NODE_ROLE=$([ "$join_is_cp" -eq 1 ] && echo "control-plane" || echo "worker")
     check_time_sync
-    install_debs_and_prepare_node
+    install_packages_and_prepare_node
     configure_containerd
     load_images
 
@@ -521,6 +575,11 @@ fi
 if [ "$ENV_TYPE" = "wsl2" ] && ! pidof systemd >/dev/null 2>&1; then
     echo -e "${RED}[오류] WSL2 systemd 가 활성화되어 있지 않습니다.${NC}"
     echo "       먼저 sudo ./scripts/wsl2_prep.sh 실행 후 wsl --shutdown 재기동하세요."
+    exit 1
+fi
+
+if [ "$TARGET_OS" = "rocky9.6" ] && [ "$ENV_TYPE" = "wsl2" ]; then
+    echo -e "${RED}[오류] rocky9.6 번들은 VM/베어메탈 계열만 지원합니다. WSL2는 ubuntu24.04 번들을 사용하세요.${NC}"
     exit 1
 fi
 
@@ -593,7 +652,7 @@ _GO="${_GO:-Y}"
 
 save_conf
 check_time_sync
-install_debs_and_prepare_node
+install_packages_and_prepare_node
 install_binaries
 configure_containerd
 load_images

@@ -11,6 +11,8 @@ fi
 
 AUTO_YES=0
 PURGE=0
+TARGET_OS="ubuntu24.04"
+[ -f install.conf ] && source install.conf
 for arg in "$@"; do
     case "$arg" in
         --yes|-y) AUTO_YES=1 ;;
@@ -70,8 +72,16 @@ echo "[7/7] install.conf 보존..."
 echo "번들 재사용을 위해 install.conf 파일은 삭제하지 않습니다."
 
 if [ "$PURGE" -eq 1 ]; then
-    apt-get remove -y --purge kubeadm kubelet kubectl cri-tools containerd.io 2>/dev/null || true
-    apt-get autoremove -y 2>/dev/null || true
+    case "$TARGET_OS" in
+        ubuntu24.04)
+            apt-get remove -y --purge kubeadm kubelet kubectl cri-tools containerd.io 2>/dev/null || true
+            apt-get autoremove -y 2>/dev/null || true
+            ;;
+        rocky9.6)
+            dnf remove -y kubeadm kubelet kubectl cri-tools containerd.io 2>/dev/null || true
+            dnf autoremove -y 2>/dev/null || true
+            ;;
+    esac
 fi
 
 echo "언인스톨 완료"

@@ -40,6 +40,9 @@ normalize_builder_config() {
     ARCH="${ARCH:-amd64}"
     CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-containerd}"
     CONTAINERD_VERSION="${CONTAINERD_VERSION:-auto}"
+    if [ "$TARGET_OS" = "rocky9.6" ] && [ "$CONTAINERD_VERSION" = "auto" ]; then
+        CONTAINERD_VERSION="2.1.*"
+    fi
     CNI_CHOICE="${CNI_CHOICE:-calico}"
     CALICO_VERSION="${CALICO_VERSION:-v3.31.0}"
     CALICO_INSTALL_METHOD="${CALICO_INSTALL_METHOD:-manifest}"
@@ -141,7 +144,7 @@ validate_compatibility_policy() {
 }
 
 validate_builder_config() {
-    validate_choice "TARGET_OS" "$TARGET_OS" "ubuntu24.04"
+    validate_choice "TARGET_OS" "$TARGET_OS" "ubuntu24.04" "rocky9.6"
     validate_choice "ARCH" "$ARCH" "amd64"
     validate_choice "CONTAINER_RUNTIME" "$CONTAINER_RUNTIME" "containerd"
     validate_choice "CNI_CHOICE" "$CNI_CHOICE" "calico" "cilium"

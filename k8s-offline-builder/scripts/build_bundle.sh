@@ -32,6 +32,7 @@ echo "[1/4] 번들 디렉터리 구조 생성..."
 mkdir -p \
     "$STAGING_DIR/scripts" \
     "$STAGING_DIR/k8s/debs" \
+    "$STAGING_DIR/k8s/rpms" \
     "$STAGING_DIR/k8s/binaries" \
     "$STAGING_DIR/k8s/images" \
     "$STAGING_DIR/k8s/utils" \
@@ -76,8 +77,7 @@ cat > "$STAGING_DIR/README.md" <<EOF
 sudo ./scripts/install.sh
 \`\`\`
 
-현재 번들 설치 스크립트는 Ubuntu 24.04 + containerd + Calico/Cilium 조합의 kubeadm init/join 설치를 지원합니다.
-Rocky/RHEL 계열은 후속 구현 대상입니다.
+현재 번들 설치 스크립트는 Ubuntu 24.04 또는 Rocky 9.6 + containerd + Calico/Cilium 조합의 kubeadm init/join 설치를 지원합니다.
 EOF
 
 echo "[4/4] tar.gz 패키징..."

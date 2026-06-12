@@ -4,12 +4,12 @@
 
 ## 1. 전제 조건
 
-- 온라인 Ubuntu 24.04 호스트
+- 온라인 Ubuntu 24.04 또는 Rocky Linux 9.6 호스트
 - root 또는 sudo 권한
 - 인터넷 접근 가능
 - `curl`, `tar`, `bash`, `apt-get` 사용 가능
 
-> Rocky/RHEL 계열 지원은 다음 단계에서 추가합니다.
+> Rocky/RHEL 계열은 현재 `rocky9.6`을 1차 검증 대상으로 지원합니다.
 
 ## 2. 설정 파일
 
@@ -27,6 +27,7 @@ vi install.conf
 | `K8S_VERSION` | 생성할 Kubernetes patch 버전 |
 | `TARGET_OS` | 대상 OS 식별자 |
 | `CONTAINER_RUNTIME` | 컨테이너 런타임 |
+| `CONTAINERD_VERSION` | containerd 버전 정책. Ubuntu는 `auto`, Rocky 9.6은 `auto` 입력 시 `2.1.*`로 정규화 |
 | `CNI_CHOICE` | CNI 선택값 |
 | `CALICO_VERSION` | Calico 버전 |
 | `CALICO_INSTALL_METHOD` | `manifest` 또는 `operator` |
@@ -45,19 +46,19 @@ sudo ./scripts/download.sh
 
 - Kubernetes minor repo 자동 계산
 - kubeadm/kubelet/kubectl 패키지와 의존성 수집
-- containerd 패키지 수집
+- containerd 패키지 수집. Rocky 9.6은 Kubernetes 1.33 호환성 기준으로 `containerd.io-2.1.*` 라인을 사용합니다.
 - kubeadm 기준 core image 목록 생성 및 export
 - CNI 매니페스트, Helm chart, 이미지 수집
 - 번들 생성용 staging 디렉터리 구성
 
-현재 구현은 Ubuntu 24.04 기준으로 실제 수집을 수행합니다. 외부 네트워크와 APT repo 등록이 필요하므로 `sudo`로 실행합니다.
+현재 구현은 Ubuntu 24.04와 Rocky Linux 9.6 기준으로 실제 수집을 수행합니다. 외부 네트워크와 APT/DNF repo 등록이 필요하므로 `sudo`로 실행합니다.
 
 ### 설정값 검증
 
 `scripts/download.sh`와 `scripts/build_bundle.sh`는 공통 함수 파일 `scripts/lib/common.sh`를 통해 다음 항목을 먼저 검증합니다.
 
 - `K8S_VERSION`: `v1.33.11` 형식. `1.33.11`처럼 `v`를 생략하면 자동으로 `v1.33.11`로 보정합니다.
-- `TARGET_OS`: 현재 `ubuntu24.04`만 허용합니다.
+- `TARGET_OS`: 현재 `ubuntu24.04` 또는 `rocky9.6`을 허용합니다.
 - `ARCH`: 현재 `amd64`만 허용합니다.
 - `CONTAINER_RUNTIME`: 현재 `containerd`만 허용합니다.
 - `CNI_CHOICE`: `calico` 또는 `cilium`
@@ -95,6 +96,8 @@ sudo ./scripts/download.sh
 ```text
 bundles/k8s-v1.33.11-ubuntu24.04/
 bundles/k8s-v1.33.11-ubuntu24.04.tar.gz
+bundles/k8s-v1.33.11-rocky9.6/
+bundles/k8s-v1.33.11-rocky9.6.tar.gz
 ```
 
 `build_bundle.sh`는 staging 디렉터리를 만들고, 수집된 자산, 번들 내부용 스크립트와 `install.conf`를 배치한 뒤 tar.gz 아카이브를 생성합니다.
@@ -113,6 +116,7 @@ bundles/k8s-v1.33.11-ubuntu24.04.tar.gz
 현재 번들 설치 지원 범위:
 
 - Ubuntu 24.04
+- Rocky Linux 9.6
 - containerd
 - kubeadm 기반 control-plane init
 - worker/control-plane join
@@ -140,5 +144,5 @@ bash -n scripts/build_bundle.sh
 
 ## 7. 다음 구현 단계
 
-1. Rocky/RHEL 계열 RPM 수집 및 설치 경로 추가
+1. Rocky 9.6 실환경 RPM 수집/설치 스모크 테스트
 2. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증
