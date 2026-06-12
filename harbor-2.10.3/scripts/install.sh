@@ -222,9 +222,20 @@ fi
 echo ""
 read -p "Control Plane(Master) 노드의 Taint를 허용하여 Pod을 스케줄링하겠습니까? (y/N): " ALLOW_CP_TAINT
 ENABLE_CP_TOLERATIONS="false"
+MASTER_NODE_NAME=""
 if [[ "$ALLOW_CP_TAINT" =~ ^[yY]([eE][sS])?$ ]]; then
     ENABLE_CP_TOLERATIONS="true"
     echo "Control Plane Taint 허용(Tolerations)이 활성화되었습니다."
+    
+    # 마스터 노드 이름 자동 감지 (nodeSelector용)
+    DETECTED_MASTER_NAME=$($KUBECTL_CMD get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || $KUBECTL_CMD get nodes -l node-role.kubernetes.io/master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    if [ -n "$DETECTED_MASTER_NAME" ]; then
+        MASTER_NODE_NAME="$DETECTED_MASTER_NAME"
+        echo "마스터 노드 감지 완료: $MASTER_NODE_NAME (모든 파드를 이 노드로 고정합니다.)"
+    else
+        read -p "마스터 노드 이름을 입력해주세요 (파드 고정용): " INPUT_MASTER_NAME
+        MASTER_NODE_NAME="$INPUT_MASTER_NAME"
+    fi
 fi
 
 # 4. 관리자 비밀번호 직접 입력받기
@@ -510,9 +521,11 @@ EOF
 
 # Control Plane Taint Tolerations 추가 주입
 if [[ "$ENABLE_CP_TOLERATIONS" == "true" ]]; then
-    cat >> "$VALUES_FILE" <<'EOF'
+    cat >> "$VALUES_FILE" <<EOF
 
 nginx:
+  nodeSelector:
+    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -521,6 +534,8 @@ nginx:
       operator: "Exists"
       effect: "NoSchedule"
 portal:
+  nodeSelector:
+    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -529,6 +544,8 @@ portal:
       operator: "Exists"
       effect: "NoSchedule"
 core:
+  nodeSelector:
+    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -537,6 +554,8 @@ core:
       operator: "Exists"
       effect: "NoSchedule"
 jobservice:
+  nodeSelector:
+    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -545,6 +564,8 @@ jobservice:
       operator: "Exists"
       effect: "NoSchedule"
 registry:
+  nodeSelector:
+    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -553,6 +574,8 @@ registry:
       operator: "Exists"
       effect: "NoSchedule"
 trivy:
+  nodeSelector:
+    kubernetes.io/hostname: "${MASTER_NODE_NAME}"
   tolerations:
     - key: "node-role.kubernetes.io/control-plane"
       operator: "Exists"
@@ -562,6 +585,8 @@ trivy:
       effect: "NoSchedule"
 database:
   internal:
+    nodeSelector:
+      kubernetes.io/hostname: "${MASTER_NODE_NAME}"
     tolerations:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
@@ -571,6 +596,8 @@ database:
         effect: "NoSchedule"
 redis:
   internal:
+    nodeSelector:
+      kubernetes.io/hostname: "${MASTER_NODE_NAME}"
     tolerations:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
