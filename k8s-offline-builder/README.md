@@ -83,3 +83,7 @@ k8s-offline-builder/
 
 현재 정책은 `policy.validatedTuples`에 명시된 조합만 허용하는 strict 방식입니다.
 새 Kubernetes minor 또는 CNI 버전을 추가하려면 공식 문서와 실환경 검증 결과를 확인한 뒤 정책 파일에 해당 조합을 추가합니다.
+
+## 재현성 검증
+
+기존 고정 산출물 `k8s-1.33.11-ubuntu24.04`와 builder 생성 번들의 기능 비교는 `docs/reproducibility-check-k8s-1.33.11-ubuntu24.04.md`를 참고합니다.
