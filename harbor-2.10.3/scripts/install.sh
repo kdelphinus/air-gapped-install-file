@@ -218,6 +218,15 @@ else
     fi
 fi
 
+# 3-2. Control Plane Taint 허용 여부 확인
+echo ""
+read -p "Control Plane(Master) 노드의 Taint를 허용하여 Pod을 스케줄링하겠습니까? (y/N): " ALLOW_CP_TAINT
+ENABLE_CP_TOLERATIONS="false"
+if [[ "$ALLOW_CP_TAINT" =~ ^[yY]([eE][sS])?$ ]]; then
+    ENABLE_CP_TOLERATIONS="true"
+    echo "Control Plane Taint 허용(Tolerations)이 활성화되었습니다."
+fi
+
 # 4. 관리자 비밀번호 직접 입력받기
 while true; do
     read -sp "Harbor 관리자('admin') 비밀번호를 입력하세요: " ADMIN_PASSWORD
@@ -498,6 +507,79 @@ ${PERSISTENCE_CONFIG}
   imageChartStorage:
     type: filesystem
 EOF
+
+# Control Plane Taint Tolerations 추가 주입
+if [[ "$ENABLE_CP_TOLERATIONS" == "true" ]]; then
+    cat >> "$VALUES_FILE" <<'EOF'
+
+nginx:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+portal:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+core:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+jobservice:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+registry:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+trivy:
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+database:
+  internal:
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+redis:
+  internal:
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+fi
 
 helm upgrade --install "$HARBOR_RELEASE_NAME" "$HELM_CHART_PATH" \
     --namespace "$HARBOR_NAMESPACE" \
