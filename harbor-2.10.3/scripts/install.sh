@@ -523,109 +523,99 @@ ${PERSISTENCE_CONFIG}
     type: filesystem
 EOF
 
-# Control Plane Taint Tolerations 추가 주입
-if [[ "$ENABLE_CP_TOLERATIONS" == "true" ]]; then
+# Control Plane Taint Tolerations 및 nodeSelector 추가 주입
+if [[ "$ENABLE_CP_TOLERATIONS" == "true" || -n "$TARGET_NODE_NAME" ]]; then
     cat >> "$VALUES_FILE" <<EOF
 
 nginx:
-  tolerations:
-    - key: "node-role.kubernetes.io/control-plane"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
+    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
+    - key: \"node-role.kubernetes.io/control-plane\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+    - key: \"node-role.kubernetes.io/master\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"")
+
 portal:
-  tolerations:
-    - key: "node-role.kubernetes.io/control-plane"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
+    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
+    - key: \"node-role.kubernetes.io/control-plane\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+    - key: \"node-role.kubernetes.io/master\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"")
+
 core:
-  tolerations:
-    - key: "node-role.kubernetes.io/control-plane"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
+    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
+    - key: \"node-role.kubernetes.io/control-plane\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+    - key: \"node-role.kubernetes.io/master\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"")
+
 jobservice:
-  tolerations:
-    - key: "node-role.kubernetes.io/control-plane"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
+    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
+    - key: \"node-role.kubernetes.io/control-plane\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+    - key: \"node-role.kubernetes.io/master\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"")
+
 registry:
-  tolerations:
-    - key: "node-role.kubernetes.io/control-plane"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
+    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
+    - key: \"node-role.kubernetes.io/control-plane\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+    - key: \"node-role.kubernetes.io/master\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"")
+
 trivy:
-  tolerations:
-    - key: "node-role.kubernetes.io/control-plane"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
+    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
+    - key: \"node-role.kubernetes.io/control-plane\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+    - key: \"node-role.kubernetes.io/master\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"")
+
 database:
   internal:
-    tolerations:
-      - key: "node-role.kubernetes.io/control-plane"
-        operator: "Exists"
-        effect: "NoSchedule"
-      - key: "node-role.kubernetes.io/master"
-        operator: "Exists"
-        effect: "NoSchedule"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "    nodeSelector:
+      kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "    tolerations:
+      - key: \"node-role.kubernetes.io/control-plane\"
+        operator: \"Exists\"
+        effect: \"NoSchedule\"
+      - key: \"node-role.kubernetes.io/master\"
+        operator: \"Exists\"
+        effect: \"NoSchedule\"")
+
 redis:
   internal:
-    tolerations:
-      - key: "node-role.kubernetes.io/control-plane"
-        operator: "Exists"
-        effect: "NoSchedule"
-      - key: "node-role.kubernetes.io/master"
-        operator: "Exists"
-        effect: "NoSchedule"
-EOF
-fi
-
-# 특정 노드에 파드 고정(nodeSelector) 추가 주입
-if [ -n "$TARGET_NODE_NAME" ]; then
-    cat >> "$VALUES_FILE" <<EOF
-
-nginx:
-  nodeSelector:
-    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
-portal:
-  nodeSelector:
-    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
-core:
-  nodeSelector:
-    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
-jobservice:
-  nodeSelector:
-    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
-registry:
-  nodeSelector:
-    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
-trivy:
-  nodeSelector:
-    kubernetes.io/hostname: "${TARGET_NODE_NAME}"
-database:
-  internal:
-    nodeSelector:
-      kubernetes.io/hostname: "${TARGET_NODE_NAME}"
-redis:
-  internal:
-    nodeSelector:
-      kubernetes.io/hostname: "${TARGET_NODE_NAME}"
+$([[ -n "$TARGET_NODE_NAME" ]] && echo "    nodeSelector:
+      kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
+$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "    tolerations:
+      - key: \"node-role.kubernetes.io/control-plane\"
+        operator: \"Exists\"
+        effect: \"NoSchedule\"
+      - key: \"node-role.kubernetes.io/master\"
+        operator: \"Exists\"
+        effect: \"NoSchedule\"")
 EOF
 fi
 
