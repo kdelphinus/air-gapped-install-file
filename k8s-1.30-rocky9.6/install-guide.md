@@ -714,6 +714,16 @@ sudo journalctl -u haproxy -n 20 --no-pager
 >   value: "<YOUR_POD_CIDR>"
 > ```
 
+!!! warning "멀티 홈 IP 환경 대응 (BGP 피어링 오동작 방지)"
+    노드에 네트워크 카드가 여러 개 장착되어 있거나 가상 인터페이스가 많아 IP가 여러 개 할당된 경우, Calico가 BGP 통신에 적합하지 않은 IP를 자동 감지하여 노드 간 Pod 통신이 단절될 수 있습니다. 이를 방지하기 위해 다음 조치가 적극 권장됩니다.
+
+    `k8s/utils/calico.yaml` 파일 내 `calico-node` DaemonSet 환경 변수 설정에 `IP_AUTODETECTION_METHOD`를 추가하고 주 대역을 필터링하도록 구성합니다.
+    ```yaml
+    # k8s/utils/calico.yaml 내 calico-node env 섹션에 아래 설정 추가
+    - name: IP_AUTODETECTION_METHOD
+      value: "cidr=10.10.10.0/24"  # 주 인터페이스 대역 지정 (또는 interface=eth0)
+    ```
+
 ```bash
 kubectl apply -f k8s/utils/calico.yaml
 

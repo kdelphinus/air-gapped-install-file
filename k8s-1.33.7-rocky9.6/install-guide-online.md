@@ -823,6 +823,41 @@ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/
 
 > **Pod CIDR을 변경한 경우 (방식 2)**: `calico.yaml`을 다운로드하여 `CALICO_IPV4POOL_CIDR` 항목의 주석을 해제하고 값을 수정한 뒤 적용해야 합니다.
 
+!!! warning "멀티 홈 IP 환경 대응 (BGP 피어링 오동작 방지)"
+    노드에 네트워크 카드가 여러 개 장착되어 있거나 가상 인터페이스가 많아 IP가 여러 개 할당된 경우, Calico가 BGP 통신에 적합하지 않은 IP를 자동 감지하여 노드 간 Pod 통신이 단절될 수 있습니다. 이를 방지하기 위해 다음 조치가 적극 권장됩니다.
+    
+    * **방식 1 (Tigera Operator) 적용 시**:
+      `custom-resources.yaml`을 다운로드한 후, `Installation` 리소스에 `nodeAddressAutodetectionV4` 설정을 지정하여 주 네트워킹 대역을 고정합니다.
+      ```yaml
+      apiVersion: operator.tigera.io/v1
+      kind: Installation
+      metadata:
+        name: default
+      spec:
+        calicoNetwork:
+          ipPools:
+          - blockSize: 26
+            cidr: 192.168.0.0/16
+            encapsulation: VXLANCrossSubnet
+            natOutgoing: Enabled
+            nodeSelector: all()
+          # 아래 블록을 추가하여 감지할 주 대역을 고정 (예: 10.10.10.0/24 대역만 사용)
+          nodeAddressAutodetectionV4:
+            cidrs:
+            - 10.10.10.0/24
+      ```
+      
+    * **방식 2 (Manifest) 적용 시**:
+      `calico.yaml`을 다운로드한 후, `calico-node` DaemonSet 환경 변수에 `IP_AUTODETECTION_METHOD`를 직접 주입합니다.
+      ```bash
+      # 1. Manifest 다운로드
+      curl -O https://raw.githubusercontent.com/projectcalico/calico/v3.31.5/manifests/calico.yaml
+      
+      # 2. calico.yaml 내 calico-node env 섹션에 아래 설정 추가
+      # - name: IP_AUTODETECTION_METHOD
+      #   value: "cidr=10.10.10.0/24"  # 또는 "interface=eth0"
+      ```
+
 ---
 
 ### 옵션 B: Cilium (Helm)

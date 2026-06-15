@@ -964,6 +964,29 @@ cd ../envoy-1.37.2
 > Pod CIDR을 기본(`192.168.0.0/16`)에서 변경한 경우
 > `k8s/utils/calico-custom-resources.yaml`의 `cidr:` 값을 수정한 뒤 적용합니다.
 
+!!! warning "멀티 홈 IP 환경 대응 (BGP 피어링 오동작 방지)"
+    노드에 네트워크 카드가 여러 개 장착되어 있거나 가상 인터페이스가 많아 IP가 여러 개 할당된 경우, Calico가 BGP 통신에 적합하지 않은 IP를 자동 감지하여 노드 간 Pod 통신이 단절될 수 있습니다. 이를 방지하기 위해 다음 조치가 적극 권장됩니다.
+    
+    * **옵션 A-1 (manifest) 적용 시**:
+      `k8s/utils/calico.yaml` 내 `calico-node` DaemonSet 환경 변수에 `IP_AUTODETECTION_METHOD` 설정을 추가합니다.
+      ```yaml
+      - name: IP_AUTODETECTION_METHOD
+        value: "cidr=10.10.10.0/24"  # 주 인터페이스 대역 지정
+      ```
+      
+    * **옵션 A-2 (operator) 적용 시**:
+      `k8s/utils/calico-custom-resources.yaml` 내 `Installation` 리소스에 `nodeAddressAutodetectionV4` 설정을 지정합니다.
+      ```yaml
+      spec:
+        calicoNetwork:
+          ipPools:
+          - cidr: 192.168.0.0/16
+            # ... 생략 ...
+          nodeAddressAutodetectionV4:
+            cidrs:
+            - 10.10.10.0/24  # 주 인터페이스 대역 지정
+      ```
+
 ### 옵션 B: Cilium
 
 ```bash
