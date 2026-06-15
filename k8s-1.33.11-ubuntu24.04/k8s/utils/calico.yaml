@@ -7215,6 +7215,9 @@ spec:
             # no effect. This should fall within `--cluster-cidr`.
             # - name: CALICO_IPV4POOL_CIDR
             #   value: "192.168.0.0/16"
+            # [수정 포인트] 멀티 홈 IP 환경(인터페이스가 여러 개인 경우) BGP 피어링 오동작 방지
+            # - name: IP_AUTODETECTION_METHOD
+            #   value: "cidr=10.10.10.0/24" # 실제 주 인터페이스 대역으로 변경
             # Disable file logging so `kubectl logs` works.
             - name: CALICO_DISABLE_FILE_LOGGING
               value: "true"

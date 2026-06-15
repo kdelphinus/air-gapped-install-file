@@ -14,6 +14,10 @@ spec:
         encapsulation: VXLANCrossSubnet
         natOutgoing: Enabled
         nodeSelector: all()
+    # [수정 포인트] 멀티 홈 IP 환경(인터페이스가 여러 개인 경우) BGP 피어링 오동작 방지
+    # nodeAddressAutodetectionV4:
+    #   cidrs:
+    #     - 10.10.10.0/24 # 실제 주 인터페이스 대역으로 변경
 
 ---
 # This section configures the Calico API server.
