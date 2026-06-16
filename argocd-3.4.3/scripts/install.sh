@@ -34,6 +34,7 @@ SVC_TYPE="${SVC_TYPE}"
 TLS_ENABLED="${TLS_ENABLED}"
 REDIS_HA_ENABLED="${REDIS_HA_ENABLED}"
 DOMAIN="${DOMAIN}"
+NODE_PORT="${NODE_PORT}"
 REDIS_SIZE="${REDIS_SIZE}"
 REPO_SIZE="${REPO_SIZE}"
 NAS_SERVER="${NAS_SERVER}"
@@ -101,6 +102,7 @@ if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     [ -n "$IMAGE_SOURCE" ] && echo "     - 이미지 소스  : $IMAGE_SOURCE"
     [ -n "$STORAGE_TYPE" ] && echo "     - 스토리지 타입: $STORAGE_TYPE"
     [ -n "$SVC_TYPE" ] && echo "     - 서비스 노출  : $SVC_TYPE"
+    [ "$SVC_TYPE" == "NodePort" ] && [ -n "$NODE_PORT" ] && echo "     - NodePort 포트 : $NODE_PORT"
     [ -n "$DOMAIN" ] && echo "     - 도메인 주소  : $DOMAIN"
     [ -n "$REDIS_HA_ENABLED" ] && echo "     - Redis HA 활성: $REDIS_HA_ENABLED"
 
@@ -208,6 +210,8 @@ if [ "$DO_UPGRADE" != "true" ]; then
         SVC_TYPE="ClusterIP"
     else
         SVC_TYPE="NodePort"
+        read -p "ArgoCD Server NodePort 포트 지정 (기본 30001): " NODE_PORT
+        NODE_PORT="${NODE_PORT:-30001}"
     fi
 
     # TLS 활성화 여부
@@ -273,10 +277,10 @@ server:
     type: "${SVC_TYPE}"
 EOF
 
-# NodePort 설정 시 포트 지정 추가 (디폴트 30001 유지)
+# NodePort 설정 시 포트 지정 추가
 if [ "$SVC_TYPE" == "NodePort" ]; then
 cat >> ./values-infra.yaml <<EOF
-    nodePort: 30001
+    nodePort: ${NODE_PORT}
 EOF
 fi
 
@@ -422,7 +426,7 @@ echo -e "🎉 구성 완료! (ArgoCD v3.4.3 / Chart v9.5.21)"
 echo "설정 파일 : $CONF_FILE"
 echo "도메인    : $PROTOCOL://$DOMAIN"
 if [ "$SVC_TYPE" == "NodePort" ]; then
-    echo "접속 포트 : 30001 (NodePort)"
+    echo "접속 포트 : ${NODE_PORT} (NodePort)"
 fi
 echo "========================================================"
 echo "⏳ 초기 관리자(admin) 비밀번호 확인 방법:"
