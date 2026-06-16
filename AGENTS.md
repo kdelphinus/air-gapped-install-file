@@ -68,6 +68,24 @@ by OS:
 - **Commit Strategy**: When performing multiple independent tasks, always
   separate them into multiple logical commits instead of a single monolithic
   commit. **All git commit messages must be written in Korean.**
+  Every commit message must strictly adhere to the following format:
+  ```text
+  <type>: <title>
+
+  - <detail description line 1>
+  - <detail description line 2>
+
+  Co-Authored-By: Antigravity <noreply@google.com>
+  ```
+  Example:
+  ```text
+  fix: MetalLB v0.16.1 설치 스크립트 내 \$@ 변수 확장 방지를 위한 이스케이프 추가
+
+  - install.sh 내 sed 치환 명령에서 @ 구분자를 도입하면서 \$@ 형태로 쉘 특수 변수가 구성되어 빈 인자로 자동 확장 및 삭제되던 버그 수정
+  - 정규식의 끝을 타겟팅하는 \$ 문자 앞에 역슬래시(\\\$) 이스케이프를 추가하여 온전한 문자열로 해석되도록 조치
+
+  Co-Authored-By: Antigravity <noreply@google.com>
+  ```
 - **Engineering Standards**: All infrastructure component creation, script development, and documentation MUST strictly adhere to the project standards defined in [INFRA_STANDARD_GUIDE.md](INFRA_STANDARD_GUIDE.md). This includes:
   - **Directory Structure**: Standardized folder layout for all services.
   - **Scripting Standards**: Stateful `install.sh` logic with `install.conf` and `sed`-based sync.
@@ -75,3 +93,10 @@ by OS:
 - Handle OS-specific package management:
   - RHEL/Rocky: `dnf localinstall` / `yum`
   - Ubuntu/Debian: `dpkg -i` / `apt install`
+- **Markdown Standards**: All markdown files created or modified MUST comply with markdownlint rules:
+  - Headers must be ATX style (`#`), and levels must increment sequentially (h1 → h2 → h3).
+  - List indentation must be 2 spaces; ordered lists can use `1.` consistently.
+  - Code blocks must specify their language (e.g., ` ```bash `, ` ```yaml `).
+  - Blank lines: 1 blank line before and after headers, lists, and code blocks.
+  - No trailing spaces at the end of lines, and exactly 1 newline at the end of the file.
+  - Raw HTML tags are prohibited.
