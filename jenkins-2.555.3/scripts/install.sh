@@ -72,7 +72,7 @@ function cleanup_resources() {
 
   if [ "$RESET_MODE" == "reset" ]; then
       rm -f "$CONF_FILE"
-      rm -f "./values-infra.yaml"
+      rm -f "./values-override.yaml"
       cp -f ./values.yaml.orig ./values.yaml 2>/dev/null || true
       echo -e "🗑️  설정 파일 및 백업 복원 완료 (Reset)."
   fi
@@ -212,7 +212,7 @@ fi
 save_conf
 
 # ==========================================
-# [3] YAML 동기화 (values.yaml, values-infra.yaml)
+# [3] YAML 동기화 (values.yaml, values-override.yaml)
 # ==========================================
 echo ""
 echo "🔧 설정 파일 동기화 진행 중..."
@@ -243,11 +243,11 @@ if [ "$USE_CUSTOM_IMAGE" == "true" ]; then
     sed -i "s|tag: \"2.555.3-jdk21\"|tag: \"2.555.3\"|g" ./values.yaml
 fi
 
-# 4. values-infra.yaml 동적 작성
+# 4. values-override.yaml 동적 작성
 PROTOCOL="http"
 [ "$TLS_ENABLED" == "true" ] && PROTOCOL="https"
 
-cat > ./values-infra.yaml <<EOF
+cat > ./values-override.yaml <<EOF
 # Jenkins 2.555.3 Infrastructure Configurations
 # install.sh 에 의해 자동 생성되는 파일입니다. 수동 변경 시 주의하세요.
 
@@ -257,21 +257,21 @@ EOF
 
 # NodePort 설정 시 포트 지정
 if [ "$SVC_TYPE" == "NodePort" ]; then
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
   nodePort: 30000
 EOF
 fi
 
 # 스토리지 볼륨 설정 추가
 if [ "$STORAGE_TYPE" == "hostpath" ]; then
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
   persistence:
     enabled: true
     storageClass: "manual"
     size: "20Gi"
 EOF
 else
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
   persistence:
     enabled: true
     storageClass: "${STORAGE_CLASS}"
@@ -281,7 +281,7 @@ fi
 
 # 노드 고정 배치(nodeSelector) 추가
 if [ -n "$TARGET_NODE" ]; then
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
   nodeSelector:
     kubernetes.io/hostname: "${TARGET_NODE}"
 EOF
@@ -319,7 +319,7 @@ if [ -d "$CHART_PATH" ]; then
     helm upgrade --install jenkins "$CHART_PATH" \
         -n "$NAMESPACE" \
         -f ./values.yaml \
-        -f ./values-infra.yaml
+        -f ./values-override.yaml
 else
     echo -e "${RED}[오류] Helm 차트 디렉토리('${CHART_PATH}')가 존재하지 않습니다.${NC}"
     exit 1

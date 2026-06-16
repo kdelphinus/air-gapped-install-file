@@ -42,7 +42,7 @@ fi
 
 if [ "$RESET_MODE" == "reset" ]; then
     rm -f "$CONF_FILE"
-    rm -f "./values-infra.yaml"
+    rm -f "./values-override.yaml"
     cp -f ./values.yaml.orig ./values.yaml 2>/dev/null || true
     echo -e "🗑️  설정 파일 및 백업 복원 완료 (Reset)."
 fi

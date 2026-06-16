@@ -75,7 +75,7 @@ sudo ./scripts/install.sh
   * `hostpath` 선택 시 워커 노드의 특정 로컬 디바이스 경로(기본 `/data/jenkins`)를 영구 마운트하며, `manifests/pv-volume.yaml` 리소스를 먼저 생성해줍니다.
   * `dynamic` 선택 시 사전에 준비된 `StorageClass`(예: NFS dynamic provisioner) 이름을 입력받아 동적으로 PVC를 구성합니다.
 * **YAML 동기화**:
-  * 입력된 설정은 `--set` 인자를 사용하는 대신 `values-infra.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
+  * 입력된 설정은 `--set` 인자를 사용하는 대신 `values-override.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
 
 ---
 
@@ -104,7 +104,7 @@ kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-password
 ### 5.1. 수동 설치 진행
 1. `values.yaml` 내의 이미지 레지스트리 주소(예: `jenkins/jenkins` 등)를 사내 사설 Harbor 도메인 주소로 교체합니다.
    * OpenTofu 커스텀 이미지를 쓸 경우 `cmp-jenkins-full`로 변경합니다.
-2. `values-infra.yaml` 파일을 작성하여 로컬 사양(스토리지, NodePort 노출 사양)을 지정합니다.
+2. `values-override.yaml` 파일을 작성하여 로컬 사양(스토리지, NodePort 노출 사양)을 지정합니다.
    ```yaml
    controller:
      serviceType: "NodePort"
@@ -126,7 +126,7 @@ kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-password
    helm upgrade --install jenkins ./charts/jenkins \
      -n jenkins --create-namespace \
      -f ./values.yaml \
-     -f ./values-infra.yaml
+     -f ./values-override.yaml
    ```
 
 ---

@@ -56,7 +56,7 @@ jenkins-2.555.3/
 │   ├── build-tofu-jenkins.sh      # 대화형 빌드 제어 스크립트 (CSP/Tofu 버전 가변)
 │   └── bundle-providers.sh        # 통합형 프로바이더 및 툴 다운로더
 ├── scripts/         # 설치 및 운영 스크립트 (루트 상대 경로 실행 필수)
-│   ├── install.sh                 # 표준 대화형 설치 스크립트 (values-infra.yaml 동기화)
+│   ├── install.sh                 # 표준 대화형 설치 스크립트 (values-override.yaml 동기화)
 │   ├── uninstall.sh               # clean up 스크립트
 │   ├── download_assets_offline.sh # 오프라인 이미지/차트 획득용 도구
 │   └── upload_images_to_harbor_v3-lite.sh # Harbor 업로드 도구 (skopeo copy 지원)

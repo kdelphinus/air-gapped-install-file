@@ -79,7 +79,7 @@ function cleanup_resources() {
 
   if [ "$RESET_MODE" == "reset" ]; then
       rm -f "$CONF_FILE"
-      rm -f "./values-infra.yaml"
+      rm -f "./values-override.yaml"
       cp -f ./values.yaml.orig ./values.yaml 2>/dev/null || true
       echo -e "🗑️  설정 파일 및 백업 복원 완료."
   fi
@@ -242,7 +242,7 @@ save_conf
 # [3] YAML 동기화 (Single Source of Truth)
 # ==========================================
 echo ""
-echo "🔧 설정 파일(values.yaml, values-infra.yaml) 생성 및 업데이트 중..."
+echo "🔧 설정 파일(values.yaml, values-override.yaml) 생성 및 업데이트 중..."
 
 # 1. values.yaml 원본 복사 (멱등성 보장)
 cp -f ./values.yaml.orig ./values.yaml
@@ -260,11 +260,11 @@ if [ "$IMAGE_SOURCE" == "harbor" ]; then
     sed -i "s|repository: \"quay.io/argoprojlabs/argocd-extension-installer\"|repository: \"${HARBOR_PREFIX}/argocd-extension-installer\"|g" ./values.yaml
 fi
 
-# 3. values-infra.yaml 생성 (스토리지, Redis HA, 서비스 타입, 도메인 주소 등 기록)
+# 3. values-override.yaml 생성 (스토리지, Redis HA, 서비스 타입, 도메인 주소 등 기록)
 PROTOCOL="http"
 [ "$TLS_ENABLED" == "true" ] && PROTOCOL="https"
 
-cat > ./values-infra.yaml <<EOF
+cat > ./values-override.yaml <<EOF
 # ArgoCD 3.4.3 Infrastructure Configurations
 # install.sh 에 의해 자동 생성되는 파일입니다. 수동 변경 시 주의하세요.
 
@@ -279,14 +279,14 @@ EOF
 
 # NodePort 설정 시 포트 지정 추가
 if [ "$SVC_TYPE" == "NodePort" ]; then
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
     nodePort: ${NODE_PORT}
 EOF
 fi
 
 # Redis HA 활성화 분기
 if [ "$REDIS_HA_ENABLED" == "true" ]; then
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
 
 redis:
   enabled: false
@@ -295,7 +295,7 @@ redis-ha:
   enabled: true
 EOF
 else
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
 
 redis:
   enabled: true
@@ -307,7 +307,7 @@ fi
 
 # 스토리지 볼륨 설정 추가
 if [ "$STORAGE_TYPE" == "hostpath" ]; then
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
 
 redis:
   volumes:
@@ -330,7 +330,7 @@ repoServer:
       mountPath: /home/argocd/cmp-server/cache
 EOF
 elif [ "$STORAGE_TYPE" == "nas" ] || [ "$STORAGE_TYPE" == "nfs-dynamic" ]; then
-cat >> ./values-infra.yaml <<EOF
+cat >> ./values-override.yaml <<EOF
 
 redis:
   volumes:
@@ -414,7 +414,7 @@ if [ -d "$CHART_PATH" ]; then
     helm upgrade --install argocd "$CHART_PATH" \
         -n "$NAMESPACE" \
         -f ./values.yaml \
-        -f ./values-infra.yaml
+        -f ./values-override.yaml
 else
     echo -e "${RED}[오류] Helm 차트 디렉토리('${CHART_PATH}')가 존재하지 않습니다.${NC}"
     exit 1
