@@ -1,0 +1,62 @@
+# ArgoCD NAS (NFS) Persistence Manifest
+# Usage: Change 'server' and 'path', then run 'kubectl apply -f nas-pv.yaml'
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argocd-redis-pv
+spec:
+  capacity:
+    storage: <REDIS_SIZE>
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 192.168.1.100  # <--- NAS Server IP 변경
+    path: /nas/argocd/redis # <--- NAS 경로 변경
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argocd-redis-pvc
+  namespace: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: <REDIS_SIZE>
+  volumeName: argocd-redis-pv
+  storageClassName: "" # Static binding
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: argocd-repo-pv
+spec:
+  capacity:
+    storage: <REPO_SIZE>
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 192.168.1.100  # <--- NAS Server IP 변경
+    path: /nas/argocd/repo  # <--- NAS 경로 변경
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argocd-repo-pvc
+  namespace: argocd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: <REPO_SIZE>
+  volumeName: argocd-repo-pv
+  storageClassName: "" # Static binding
