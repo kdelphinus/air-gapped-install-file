@@ -42,7 +42,7 @@ controller:
     # -- Controller image registry
     registry: "docker.io"
     # -- Controller image repository
-    repository: "jenkins/jenkins"
+    repository: "<HARBOR_REGISTRY>/<HARBOR_PROJECT>/jenkins"
 
     # -- Controller image tag override; i.e., tag: "2.440.1-jdk21"
     tag:
@@ -581,7 +581,7 @@ controller:
         # -- Registry for the image that triggers the reload
         registry: docker.io
         # -- Repository of the image that triggers the reload
-        repository: kiwigrid/k8s-sidecar
+        repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/k8s-sidecar
         # -- Tag for the image that triggers the reload
         tag: 2.7.3
       imagePullPolicy: IfNotPresent
@@ -1010,7 +1010,7 @@ agent:
     # -- Registry to pull the agent jnlp image from
     registry: ""
     # -- Repository to pull the agent jnlp image from
-    repository: "jenkins/inbound-agent"
+    repository: "<HARBOR_REGISTRY>/<HARBOR_PROJECT>/inbound-agent"
     # -- Tag of the image to pull
     tag: "3355.v388858a_47b_33-22"
   # -- Configure working directory for default agent

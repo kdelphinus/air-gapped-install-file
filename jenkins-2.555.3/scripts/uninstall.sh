@@ -42,9 +42,8 @@ fi
 
 if [ "$RESET_MODE" == "reset" ]; then
     rm -f "$CONF_FILE"
-    rm -f "./values-override.yaml"
-    cp -f ./values.yaml.orig ./values.yaml 2>/dev/null || true
-    echo -e "🗑️  설정 파일 및 백업 복원 완료 (Reset)."
+    rm -f "./values-temp.yaml"
+    echo -e "🗑️  설정 파일 및 임시 파일 삭제 완료 (Reset)."
 fi
 
 echo -e "${GREEN}✅ 삭제 완료!${NC}"
