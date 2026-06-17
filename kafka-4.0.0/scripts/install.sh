@@ -238,11 +238,12 @@ cat >> ./values-temp.yaml <<EOF
 kraft:
   enabled: true
 
-controller:
-  replicaCount: 0 # Separated controller 사용 안 함 (co-located 모드로 구성)
-
 broker:
-  replicaCount: 3
+  replicaCount: 0 # 별도의 broker-only 노드는 사용 안 함
+
+controller:
+  replicaCount: 3 # co-located (broker + controller) 노드 3개 사용
+  controllerOnly: false
   persistence:
     enabled: true
     size: 20Gi

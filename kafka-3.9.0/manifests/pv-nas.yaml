@@ -11,7 +11,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   claimRef:
-    name: data-kafka-0
+    name: data-kafka-controller-0
     namespace: kafka
   nfs:
     server: <NFS_SERVER>
@@ -30,7 +30,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   claimRef:
-    name: data-kafka-1
+    name: data-kafka-controller-1
     namespace: kafka
   nfs:
     server: <NFS_SERVER>
@@ -49,7 +49,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   claimRef:
-    name: data-kafka-2
+    name: data-kafka-controller-2
     namespace: kafka
   nfs:
     server: <NFS_SERVER>

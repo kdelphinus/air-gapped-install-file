@@ -62,7 +62,7 @@
 
 ### 3.1. 1:1 바인딩 정적 PV 수동 배포
 
-Kubernetes StatefulSet은 `volumeClaimTemplates`에 의해 각 복제본 파드마다 고유한 PVC(`data-kafka-0`, `data-kafka-1`, `data-kafka-2`)를 자동 요구합니다. PVC와 PV의 바인딩은 **1:1 Exclusive Binding**이므로, 정적 스토리지 구성 시 이에 대응하는 3개의 PV가 사전에 준비되어야 합니다.
+Kubernetes StatefulSet은 `volumeClaimTemplates`에 의해 각 복제본 파드마다 고유한 PVC(`data-kafka-controller-0`, `data-kafka-controller-1`, `data-kafka-controller-2`)를 자동 요구합니다. PVC와 PV의 바인딩은 **1:1 Exclusive Binding**이므로, 정적 스토리지 구성 시 이에 대응하는 3개의 PV가 사전에 준비되어야 합니다.
 
 #### HostPath 다중 노드 테스트용 PV 구성 예시
 
