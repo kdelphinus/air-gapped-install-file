@@ -47,6 +47,7 @@ NAS_REPO_PATH="${NAS_REPO_PATH}"
 STORAGE_CLASS="${STORAGE_CLASS}"
 HOSTPATH_REDIS="${HOSTPATH_REDIS}"
 HOSTPATH_REPO="${HOSTPATH_REPO}"
+TARGET_NODE="${TARGET_NODE}"
 INSTALLED_VERSION="v3.4.3"
 EOF
     echo -e "  ✅ 설정이 ${GREEN}${CONF_FILE}${NC} 에 저장되었습니다."
@@ -108,6 +109,7 @@ if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     [ "$SVC_TYPE" == "NodePort" ] && [ -n "$NODE_PORT" ] && echo "     - NodePort 포트 : $NODE_PORT"
     [ -n "$DOMAIN" ] && echo "     - 도메인 주소  : $DOMAIN"
     [ -n "$REDIS_HA_ENABLED" ] && echo "     - Redis HA 활성: $REDIS_HA_ENABLED"
+    [ -n "$TARGET_NODE" ] && echo "     - 노드 고정 배치: $TARGET_NODE"
 
     echo ""
     echo "동작을 선택하세요:"
@@ -229,7 +231,12 @@ if [ "$DO_UPGRADE" != "true" ]; then
     read -p "ArgoCD 접속 도메인 (기본: argocd.devops.internal): " DOMAIN
     DOMAIN="${DOMAIN:-argocd.devops.internal}"
 
-    # 2-4. Redis HA (Sentinel) 활성화 여부
+    # 2-4. 노드 고정 배치 지정
+    echo ""
+    kubectl get nodes -o wide
+    read -p "ArgoCD를 고정 배치할 노드 이름 (없으면 비워둠): " TARGET_NODE
+
+    # 2-5. Redis HA (Sentinel) 활성화 여부
     echo ""
     read -p "Redis HA (Sentinel 고가용성) 구성을 활성화하시겠습니까? (y/n, 기본 n): " _HA_YN
     if [[ "${_HA_YN:-n}" =~ ^[Yy]$ ]]; then
@@ -342,6 +349,17 @@ repoServer:
   volumes: ${REPO_VOLUMES}
   volumeMounts: ${REPO_MOUNTS}
 EOF
+
+# 노드 고정 배치(global.nodeSelector) 추가
+if [ -n "$TARGET_NODE" ]; then
+    cat >> ./values-temp.yaml <<EOF
+
+global:
+  nodeSelector:
+    kubernetes.io/os: linux
+    kubernetes.io/hostname: "${TARGET_NODE}"
+EOF
+fi
 
 # ==========================================
 # [4] Kubernetes 리소스 준비 및 설치
