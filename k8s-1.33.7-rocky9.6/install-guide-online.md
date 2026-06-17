@@ -51,7 +51,7 @@ sudo ./scripts/prepare-online.sh
 ```
 
 > 스크립트는 VM/베어메탈 전용입니다. WSL2 환경이라면 먼저 Phase 0 을 수행하고,
-> `/etc/hosts` 등록·Harbor insecure registry·containerd 데이터 경로 변경 같은
+> `/etc/hosts` 등록·Harbor TLS 인증서 등록·containerd 데이터 경로 변경 같은
 > 환경 의존 단계는 스크립트가 다루지 않으므로 본 가이드의 해당 절을 참고해 수동 적용하세요.
 > 스크립트 완료 후에는 곧바로 Phase 4(HA 구성 시) 또는 Phase 5(`kubeadm init`)로 진행할 수 있습니다.
 
@@ -220,8 +220,43 @@ sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/conf
 # 3. Sandbox 이미지 설정 (v1.33 호환 pause:3.10)
 sudo sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
 
-# 4. Harbor(또는 사설 레지스트리) insecure registry 사용 시 config_path 단일화
-sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+# 4. Harbor(또는 사설 레지스트리) 인증서 디렉토리 인식 경로 보장
+cat <<'EOF' | sudo tee /tmp/ensure-containerd-registry-config-path.sh >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+
+config="/etc/containerd/config.toml"
+plugin="io.containerd.grpc.v1.cri"
+
+if containerd --version 2>/dev/null | grep -qE 'containerd .* 2\.'; then
+  plugin="io.containerd.cri.v1.images"
+fi
+
+mkdir -p /etc/containerd/certs.d
+
+if grep -qE '^[[:space:]]*config_path[[:space:]]*=' "$config"; then
+  sed -i 's|^[[:space:]]*config_path[[:space:]]*=.*|  config_path = "/etc/containerd/certs.d"|' "$config"
+elif grep -qF "[plugins.\"${plugin}\".registry]" "$config" || grep -qF "[plugins.'${plugin}'.registry]" "$config"; then
+  awk -v plugin="$plugin" '
+    BEGIN { sq = sprintf("%c", 39); dq = "\""; done = 0 }
+    {
+      print
+      if (!done && ($0 == "[plugins." dq plugin dq ".registry]" || $0 == "[plugins." sq plugin sq ".registry]")) {
+        print "  config_path = \"/etc/containerd/certs.d\""
+        done = 1
+      }
+    }
+  ' "$config" > "${config}.tmp" && mv "${config}.tmp" "$config"
+else
+  cat >> "$config" <<CONFIG
+
+[plugins."${plugin}".registry]
+  config_path = "/etc/containerd/certs.d"
+CONFIG
+fi
+EOF
+sudo bash /tmp/ensure-containerd-registry-config-path.sh
+sudo rm -f /tmp/ensure-containerd-registry-config-path.sh
 
 # 5. containerd 서비스 Limits 설정 (systemd override)
 sudo mkdir -p /etc/systemd/system/containerd.service.d
@@ -261,34 +296,43 @@ sudo systemctl enable --now kubelet
 > EOF
 > ```
 
-### (선택) Harbor insecure registry 등록
+### (선택) Harbor TLS 인증서 등록
 
 > ⚠️ **수동 적용 단계** — Harbor 주소·포트가 환경마다 달라 자동화하지 않았습니다.
 > Harbor 를 사용하는 노드에서 직접 실행하세요.
 
-Harbor 를 HTTP(insecure)로 운영하는 경우 각 노드에 아래 설정을 추가합니다.
+`skip_verify`는 사용하지 않습니다. Harbor 서버 인증서가 중간 CA를 포함한 체인으로
+검증되어야 하므로, Harbor 접속 FQDN과 포트별 디렉토리에 전체 체인 인증서를 배치한 뒤
+`hosts.toml`의 `ca`에 명시합니다.
 
 ```bash
-# Harbor 레지스트리 주소 (예: 192.168.1.10:30002)
-HARBOR_HOST="<NODE_IP>:30002"
+# Harbor 레지스트리 주소와 체인 인증서 파일
+HARBOR_HOST="harbor-product.strato.co.kr:8443"
+HARBOR_SCHEME="https"
+CHAIN_CERT="./strato.co.kr_chain.crt"
 
-sudo mkdir -p /etc/containerd/certs.d/${HARBOR_HOST}
-sudo tee /etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml <<EOF
-server = "http://${HARBOR_HOST}"
+sudo mkdir -p "/etc/containerd/certs.d/${HARBOR_HOST}"
+sudo cp "${CHAIN_CERT}" "/etc/containerd/certs.d/${HARBOR_HOST}/strato.co.kr_chain.crt"
+sudo tee "/etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml" <<EOF
+server = "${HARBOR_SCHEME}://${HARBOR_HOST}"
 
-[host."http://${HARBOR_HOST}"]
+[host."${HARBOR_SCHEME}://${HARBOR_HOST}"]
   capabilities = ["pull", "resolve", "push"]
-  skip_verify = true
+  ca = ["strato.co.kr_chain.crt"]
 EOF
 
 sudo systemctl restart containerd
+
+# TLS 검증을 유지한 상태로 이미지 pull 확인
+sudo ctr -n k8s.io image pull \
+  harbor-product.strato.co.kr:8443/lgcns/strato-landing-frontend:10.0.0
 ```
 
 > **containerd v1.x vs v2.x 플러그인 키 차이**
 >
-> `containerd config default` 로 생성한 `config.toml` 에 `config_path` 가 비어 있다면
-> containerd 버전에 따라 추가해야 할 플러그인 키 이름이 다릅니다. 본 가이드는
-> containerd 2.1.x 라인이므로 **v2 키** 가 기본입니다.
+> `containerd config default` 로 생성한 `config.toml` 에 `config_path`가 없으면
+> 위 Phase 3 스크립트가 containerd 버전에 맞는 플러그인 키를 추가합니다. 본 가이드는
+> containerd 2.1.x 라인이므로 **v2 키**가 기본입니다.
 >
 > ```bash
 > # containerd 버전 확인

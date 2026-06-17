@@ -96,6 +96,42 @@ reset_runtime_conf() {
     CONTROL_PLANE_ENDPOINT=""
 }
 
+ensure_containerd_registry_config_path() {
+    local config="/etc/containerd/config.toml"
+    local plugin="io.containerd.grpc.v1.cri"
+
+    if containerd --version 2>/dev/null | grep -qE 'containerd .* 2\.'; then
+        plugin="io.containerd.cri.v1.images"
+    fi
+
+    mkdir -p /etc/containerd/certs.d
+
+    if grep -qE '^[[:space:]]*config_path[[:space:]]*=' "$config"; then
+        sed -i 's|^[[:space:]]*config_path[[:space:]]*=.*|  config_path = "/etc/containerd/certs.d"|' "$config"
+        return
+    fi
+
+    if grep -qF "[plugins.\"${plugin}\".registry]" "$config" || grep -qF "[plugins.'${plugin}'.registry]" "$config"; then
+        awk -v plugin="$plugin" '
+            BEGIN { sq = sprintf("%c", 39); dq = "\""; done = 0 }
+            {
+                print
+                if (!done && ($0 == "[plugins." dq plugin dq ".registry]" || $0 == "[plugins." sq plugin sq ".registry]")) {
+                    print "  config_path = \"/etc/containerd/certs.d\""
+                    done = 1
+                }
+            }
+        ' "$config" > "${config}.tmp" && mv "${config}.tmp" "$config"
+        return
+    fi
+
+    cat >> "$config" <<EOF
+
+[plugins."${plugin}".registry]
+  config_path = "/etc/containerd/certs.d"
+EOF
+}
+
 disable_swap_completely() {
     echo -e "${YELLOW}Swap 비활성화 및 영구 설정 정리...${NC}"
     swapoff -a || true
@@ -321,7 +357,7 @@ configure_containerd() {
     containerd config default > /etc/containerd/config.toml
     sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
     sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
-    sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+    ensure_containerd_registry_config_path
     systemctl enable --now containerd
     systemctl restart containerd
     sleep 2

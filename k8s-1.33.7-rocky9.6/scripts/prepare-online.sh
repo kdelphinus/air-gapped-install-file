@@ -28,6 +28,42 @@ K8S_MINOR="v1.33"
 K8S_PATCH="1.33.7"
 CONTAINERD_LINE="2.1.*"
 
+ensure_containerd_registry_config_path() {
+    local config="/etc/containerd/config.toml"
+    local plugin="io.containerd.grpc.v1.cri"
+
+    if containerd --version 2>/dev/null | grep -qE 'containerd .* 2\.'; then
+        plugin="io.containerd.cri.v1.images"
+    fi
+
+    mkdir -p /etc/containerd/certs.d
+
+    if grep -qE '^[[:space:]]*config_path[[:space:]]*=' "$config"; then
+        sed -i 's|^[[:space:]]*config_path[[:space:]]*=.*|  config_path = "/etc/containerd/certs.d"|' "$config"
+        return
+    fi
+
+    if grep -qF "[plugins.\"${plugin}\".registry]" "$config" || grep -qF "[plugins.'${plugin}'.registry]" "$config"; then
+        awk -v plugin="$plugin" '
+            BEGIN { sq = sprintf("%c", 39); dq = "\""; done = 0 }
+            {
+                print
+                if (!done && ($0 == "[plugins." dq plugin dq ".registry]" || $0 == "[plugins." sq plugin sq ".registry]")) {
+                    print "  config_path = \"/etc/containerd/certs.d\""
+                    done = 1
+                }
+            }
+        ' "$config" > "${config}.tmp" && mv "${config}.tmp" "$config"
+        return
+    fi
+
+    cat >> "$config" <<EOF
+
+[plugins."${plugin}".registry]
+  config_path = "/etc/containerd/certs.d"
+EOF
+}
+
 echo -e "${CYAN}============================================================${NC}"
 echo -e "${CYAN} Kubernetes ${K8S_PATCH} 온라인 사전 준비 (Phase 1~3)${NC}"
 echo -e "${CYAN} 대상 OS : Rocky Linux 9.6${NC}"
@@ -230,8 +266,8 @@ sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.to
 echo -e "  → sandbox_image = registry.k8s.io/pause:3.10"
 sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
 
-echo -e "  → registry config_path 단일화 (/etc/containerd/certs.d)"
-sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+echo -e "  → registry config_path 보장 (/etc/containerd/certs.d)"
+ensure_containerd_registry_config_path
 
 echo -e "  → containerd enable & restart"
 systemctl enable --now containerd
@@ -262,7 +298,7 @@ echo -e "${GREEN}============================================================${N
 echo ""
 echo -e "${YELLOW}다음 단계 (수동):${NC}"
 echo "  • /etc/hosts 에 마스터/워커 노드 등록 (Phase 2-6)"
-echo "  • (선택) Harbor insecure registry 등록 — install-guide-online.md '(선택) Harbor insecure registry 등록' 참조"
+echo "  • (선택) Harbor TLS 인증서 등록 — install-guide-online.md 'Harbor TLS 인증서 등록' 참조"
 echo "  • (선택) containerd 데이터 경로 변경 — install-guide-online.md '(선택) containerd 데이터 경로 변경' 참조"
 echo "  • HA 구성이면 Phase 4 (HAProxy/Keepalived)"
 echo "  • Phase 5: kubeadm init (Master-1)"

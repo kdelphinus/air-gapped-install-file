@@ -415,8 +415,43 @@ sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/conf
 # pause 이미지 3.10으로 통일 (k8s 1.33 기본)
 sudo sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
 
-# Harbor 인증서 경로 정리
-sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+# Harbor(또는 사설 레지스트리) 인증서 디렉토리 인식 경로 보장
+cat <<'EOF' | sudo tee /tmp/ensure-containerd-registry-config-path.sh >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+
+config="/etc/containerd/config.toml"
+plugin="io.containerd.grpc.v1.cri"
+
+if containerd --version 2>/dev/null | grep -qE 'containerd .* 2\.'; then
+  plugin="io.containerd.cri.v1.images"
+fi
+
+mkdir -p /etc/containerd/certs.d
+
+if grep -qE '^[[:space:]]*config_path[[:space:]]*=' "$config"; then
+  sed -i 's|^[[:space:]]*config_path[[:space:]]*=.*|  config_path = "/etc/containerd/certs.d"|' "$config"
+elif grep -qF "[plugins.\"${plugin}\".registry]" "$config" || grep -qF "[plugins.'${plugin}'.registry]" "$config"; then
+  awk -v plugin="$plugin" '
+    BEGIN { sq = sprintf("%c", 39); dq = "\""; done = 0 }
+    {
+      print
+      if (!done && ($0 == "[plugins." dq plugin dq ".registry]" || $0 == "[plugins." sq plugin sq ".registry]")) {
+        print "  config_path = \"/etc/containerd/certs.d\""
+        done = 1
+      }
+    }
+  ' "$config" > "${config}.tmp" && mv "${config}.tmp" "$config"
+else
+  cat >> "$config" <<CONFIG
+
+[plugins."${plugin}".registry]
+  config_path = "/etc/containerd/certs.d"
+CONFIG
+fi
+EOF
+sudo bash /tmp/ensure-containerd-registry-config-path.sh
+sudo rm -f /tmp/ensure-containerd-registry-config-path.sh
 
 # 4. containerd 서비스 Limits 설정 (systemd override)
 sudo mkdir -p /etc/systemd/system/containerd.service.d
@@ -436,6 +471,35 @@ sudo systemctl status containerd --no-pager
 > `/etc/security/limits.d`는 주로 로그인 세션에 적용됩니다. `kubelet`과
 > `containerd`처럼 systemd가 직접 띄우는 서비스는 위 systemd override까지
 > 적용해야 FD/프로세스 limits가 일관되게 반영됩니다.
+
+### (선택) Harbor TLS 인증서 등록
+
+`skip_verify`는 사용하지 않습니다. Harbor 서버 인증서가 중간 CA를 포함한 체인으로
+검증되어야 하므로, Harbor 접속 FQDN과 포트별 디렉토리에 전체 체인 인증서를 배치한 뒤
+`hosts.toml`의 `ca`에 명시합니다.
+
+```bash
+# Harbor 레지스트리 주소와 체인 인증서 파일
+HARBOR_HOST="harbor-product.strato.co.kr:8443"
+HARBOR_SCHEME="https"
+CHAIN_CERT="./strato.co.kr_chain.crt"
+
+sudo mkdir -p "/etc/containerd/certs.d/${HARBOR_HOST}"
+sudo cp "${CHAIN_CERT}" "/etc/containerd/certs.d/${HARBOR_HOST}/strato.co.kr_chain.crt"
+sudo tee "/etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml" <<EOF
+server = "${HARBOR_SCHEME}://${HARBOR_HOST}"
+
+[host."${HARBOR_SCHEME}://${HARBOR_HOST}"]
+  capabilities = ["pull", "resolve", "push"]
+  ca = ["strato.co.kr_chain.crt"]
+EOF
+
+sudo systemctl restart containerd
+
+# TLS 검증을 유지한 상태로 이미지 pull 확인
+sudo ctr -n k8s.io image pull \
+  harbor-product.strato.co.kr:8443/lgcns/strato-landing-frontend:10.0.0
+```
 
 ## Phase 4: 이미지 로드 (전체 노드)
 

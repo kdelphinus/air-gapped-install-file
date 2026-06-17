@@ -136,8 +136,43 @@ sudo containerd config default | sudo tee /etc/containerd/config.toml
 # cgroup driver를 systemd로 변경 (필수)
 sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
-# Harbor(또는 사설 레지스트리) insecure registry 사용 시 config_path 설정
-sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+# Harbor(또는 사설 레지스트리) 인증서 디렉토리 인식 경로 보장
+cat <<'EOF' | sudo tee /tmp/ensure-containerd-registry-config-path.sh >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+
+config="/etc/containerd/config.toml"
+plugin="io.containerd.grpc.v1.cri"
+
+if containerd --version 2>/dev/null | grep -qE 'containerd .* 2\.'; then
+  plugin="io.containerd.cri.v1.images"
+fi
+
+mkdir -p /etc/containerd/certs.d
+
+if grep -qE '^[[:space:]]*config_path[[:space:]]*=' "$config"; then
+  sed -i 's|^[[:space:]]*config_path[[:space:]]*=.*|  config_path = "/etc/containerd/certs.d"|' "$config"
+elif grep -qF "[plugins.\"${plugin}\".registry]" "$config" || grep -qF "[plugins.'${plugin}'.registry]" "$config"; then
+  awk -v plugin="$plugin" '
+    BEGIN { sq = sprintf("%c", 39); dq = "\""; done = 0 }
+    {
+      print
+      if (!done && ($0 == "[plugins." dq plugin dq ".registry]" || $0 == "[plugins." sq plugin sq ".registry]")) {
+        print "  config_path = \"/etc/containerd/certs.d\""
+        done = 1
+      }
+    }
+  ' "$config" > "${config}.tmp" && mv "${config}.tmp" "$config"
+else
+  cat >> "$config" <<CONFIG
+
+[plugins."${plugin}".registry]
+  config_path = "/etc/containerd/certs.d"
+CONFIG
+fi
+EOF
+sudo bash /tmp/ensure-containerd-registry-config-path.sh
+sudo rm -f /tmp/ensure-containerd-registry-config-path.sh
 
 # containerd 서비스 Limits 설정 (systemd override)
 sudo mkdir -p /etc/systemd/system/containerd.service.d
@@ -165,30 +200,39 @@ sudo systemctl status containerd
 > grep SystemdCgroup /etc/containerd/config.toml
 > ```
 
-### (선택) Harbor insecure registry 등록
+### (선택) Harbor TLS 인증서 등록
 
-Harbor를 HTTP(insecure)로 운영하는 경우 각 노드에 아래 설정을 추가합니다.
+`skip_verify`는 사용하지 않습니다. Harbor 서버 인증서가 중간 CA를 포함한 체인으로
+검증되어야 하므로, Harbor 접속 FQDN과 포트별 디렉토리에 전체 체인 인증서를 배치한 뒤
+`hosts.toml`의 `ca`에 명시합니다.
 
 ```bash
-# Harbor 레지스트리 주소 (예: 192.168.1.10:30002)
-HARBOR_HOST="<NODE_IP>:30002"
+# Harbor 레지스트리 주소와 체인 인증서 파일
+HARBOR_HOST="harbor-product.strato.co.kr:8443"
+HARBOR_SCHEME="https"
+CHAIN_CERT="./strato.co.kr_chain.crt"
 
-sudo mkdir -p /etc/containerd/certs.d/${HARBOR_HOST}
-sudo tee /etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml <<EOF
-server = "http://${HARBOR_HOST}"
+sudo mkdir -p "/etc/containerd/certs.d/${HARBOR_HOST}"
+sudo cp "${CHAIN_CERT}" "/etc/containerd/certs.d/${HARBOR_HOST}/strato.co.kr_chain.crt"
+sudo tee "/etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml" <<EOF
+server = "${HARBOR_SCHEME}://${HARBOR_HOST}"
 
-[host."http://${HARBOR_HOST}"]
+[host."${HARBOR_SCHEME}://${HARBOR_HOST}"]
   capabilities = ["pull", "resolve", "push"]
-  skip_verify = true
+  ca = ["strato.co.kr_chain.crt"]
 EOF
 
 sudo systemctl restart containerd
+
+# TLS 검증을 유지한 상태로 이미지 pull 확인
+sudo ctr -n k8s.io image pull \
+  harbor-product.strato.co.kr:8443/lgcns/strato-landing-frontend:10.0.0
 ```
 
 > **containerd v1.x vs v2.x 플러그인 키 차이**
 >
-> `containerd config default`로 생성한 `config.toml`에서 `config_path`가 없을 경우
-> containerd 버전에 따라 키 이름이 다릅니다.
+> `containerd config default`로 생성한 `config.toml`에 `config_path`가 없으면
+> 위 Phase 3 스크립트가 containerd 버전에 맞는 플러그인 키를 추가합니다.
 >
 > ```bash
 > # containerd 버전 확인
@@ -810,8 +854,8 @@ nerdctl --version
 # containerd k8s.io 네임스페이스 이미지 목록 확인
 sudo nerdctl -n k8s.io images
 
-# Harbor에서 이미지 pull (insecure registry)
-sudo nerdctl -n k8s.io pull --insecure-registry <NODE_IP>:30002/library/myapp:1.0.0
+# Harbor에서 이미지 pull (TLS 검증)
+sudo nerdctl -n k8s.io pull harbor-product.strato.co.kr:8443/library/myapp:1.0.0
 ```
 
 ## Phase 8-2: skopeo 설치 (선택, 전체 노드)
@@ -828,16 +872,16 @@ skopeo --version
 주요 사용 예시:
 
 ```bash
-# Harbor 이미지 목록 조회 (insecure registry)
-skopeo list-tags --tls-verify=false docker://<NODE_IP>:30002/library/myapp
+# Harbor 이미지 목록 조회 (TLS 검증)
+skopeo list-tags docker://harbor-product.strato.co.kr:8443/library/myapp
 
 # 레지스트리 간 이미지 복사
-skopeo copy --src-tls-verify=false --dest-tls-verify=false \
+skopeo copy \
   docker://<SRC_REGISTRY>/myapp:1.0.0 \
-  docker://<NODE_IP>:30002/library/myapp:1.0.0
+  docker://harbor-product.strato.co.kr:8443/library/myapp:1.0.0
 
 # 이미지 메타데이터 확인
-skopeo inspect --tls-verify=false docker://<NODE_IP>:30002/library/myapp:1.0.0
+skopeo inspect docker://harbor-product.strato.co.kr:8443/library/myapp:1.0.0
 ```
 
 ## Phase 9: 워커 노드 조인

@@ -172,8 +172,43 @@ sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/conf
 # v1.33 호환 pause 이미지
 sudo sed -i 's|sandbox_image = ".*"|sandbox_image = "registry.k8s.io/pause:3.10"|' /etc/containerd/config.toml
 
-# Harbor(또는 사설 레지스트리) insecure registry 사용 시 config_path 단일화
-sudo sed -i "s|config_path = '/etc/containerd/certs.d:/etc/docker/certs.d'|config_path = '/etc/containerd/certs.d'|g" /etc/containerd/config.toml
+# Harbor(또는 사설 레지스트리) 인증서 디렉토리 인식 경로 보장
+cat <<'EOF' | sudo tee /tmp/ensure-containerd-registry-config-path.sh >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+
+config="/etc/containerd/config.toml"
+plugin="io.containerd.grpc.v1.cri"
+
+if containerd --version 2>/dev/null | grep -qE 'containerd .* 2\.'; then
+  plugin="io.containerd.cri.v1.images"
+fi
+
+mkdir -p /etc/containerd/certs.d
+
+if grep -qE '^[[:space:]]*config_path[[:space:]]*=' "$config"; then
+  sed -i 's|^[[:space:]]*config_path[[:space:]]*=.*|  config_path = "/etc/containerd/certs.d"|' "$config"
+elif grep -qF "[plugins.\"${plugin}\".registry]" "$config" || grep -qF "[plugins.'${plugin}'.registry]" "$config"; then
+  awk -v plugin="$plugin" '
+    BEGIN { sq = sprintf("%c", 39); dq = "\""; done = 0 }
+    {
+      print
+      if (!done && ($0 == "[plugins." dq plugin dq ".registry]" || $0 == "[plugins." sq plugin sq ".registry]")) {
+        print "  config_path = \"/etc/containerd/certs.d\""
+        done = 1
+      }
+    }
+  ' "$config" > "${config}.tmp" && mv "${config}.tmp" "$config"
+else
+  cat >> "$config" <<CONFIG
+
+[plugins."${plugin}".registry]
+  config_path = "/etc/containerd/certs.d"
+CONFIG
+fi
+EOF
+sudo bash /tmp/ensure-containerd-registry-config-path.sh
+sudo rm -f /tmp/ensure-containerd-registry-config-path.sh
 
 # containerd 서비스 Limits 설정 (systemd override)
 sudo mkdir -p /etc/systemd/system/containerd.service.d
@@ -200,37 +235,46 @@ sudo systemctl enable containerd
 > grep SystemdCgroup /etc/containerd/config.toml
 > ```
 
-### (선택) Harbor insecure registry 등록
+### (선택) Harbor TLS 인증서 등록
 
 > ⚠️ **`scripts/install.sh` 자동화 범위 밖 — 수동 적용 필요**
 >
-> `install.sh` 는 SystemdCgroup / sandbox_image / config_path 단일화까지만 처리합니다.
+> `install.sh` 는 SystemdCgroup / sandbox_image / config_path 보장까지만 처리합니다.
 > 아래 hosts.toml 등록은 환경별로 Harbor 주소가 다르므로 의도적으로 수동 단계로 남겨둔 것이며,
 > **`install.sh` 실행 후 Harbor 를 사용하는 노드에서 별도로 실행**해야 합니다.
 
-Harbor 를 HTTP(insecure)로 운영하는 경우 각 노드에 아래 설정을 추가합니다.
+`skip_verify`는 사용하지 않습니다. Harbor 서버 인증서가 중간 CA를 포함한 체인으로
+검증되어야 하므로, Harbor 접속 FQDN과 포트별 디렉토리에 전체 체인 인증서를 배치한 뒤
+`hosts.toml`의 `ca`에 명시합니다.
 
 ```bash
-# Harbor 레지스트리 주소 (예: 192.168.1.10:30002)
-HARBOR_HOST="<NODE_IP>:30002"
+# Harbor 레지스트리 주소와 체인 인증서 파일
+HARBOR_HOST="harbor-product.strato.co.kr:8443"
+HARBOR_SCHEME="https"
+CHAIN_CERT="./strato.co.kr_chain.crt"
 
-sudo mkdir -p /etc/containerd/certs.d/${HARBOR_HOST}
-sudo tee /etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml <<EOF
-server = "http://${HARBOR_HOST}"
+sudo mkdir -p "/etc/containerd/certs.d/${HARBOR_HOST}"
+sudo cp "${CHAIN_CERT}" "/etc/containerd/certs.d/${HARBOR_HOST}/strato.co.kr_chain.crt"
+sudo tee "/etc/containerd/certs.d/${HARBOR_HOST}/hosts.toml" <<EOF
+server = "${HARBOR_SCHEME}://${HARBOR_HOST}"
 
-[host."http://${HARBOR_HOST}"]
+[host."${HARBOR_SCHEME}://${HARBOR_HOST}"]
   capabilities = ["pull", "resolve", "push"]
-  skip_verify = true
+  ca = ["strato.co.kr_chain.crt"]
 EOF
 
 sudo systemctl restart containerd
+
+# TLS 검증을 유지한 상태로 이미지 pull 확인
+sudo ctr -n k8s.io image pull \
+  harbor-product.strato.co.kr:8443/lgcns/strato-landing-frontend:10.0.0
 ```
 
 > **containerd v1.x vs v2.x 플러그인 키 차이**
 >
-> `containerd config default` 로 생성한 `config.toml` 에 `config_path` 가 비어 있다면
-> containerd 버전에 따라 추가해야 할 플러그인 키 이름이 다릅니다. 본 가이드는
-> containerd 2.2.x 라인이므로 **v2 키** 가 기본입니다.
+> `containerd config default` 로 생성한 `config.toml` 에 `config_path`가 없으면
+> 위 Phase 3 스크립트가 containerd 버전에 맞는 플러그인 키를 추가합니다. 본 가이드는
+> containerd 2.2.x 라인이므로 **v2 키**가 기본입니다.
 >
 > ```bash
 > # containerd 버전 확인
