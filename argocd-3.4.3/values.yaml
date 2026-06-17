@@ -58,7 +58,7 @@ global:
   # Default image used by all components
   image:
     # -- If defined, a repository applied to all Argo CD deployments
-    repository: quay.io/argoproj/argocd
+    repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/argocd
     # -- Overrides the global Argo CD image tag whose default is the chart appVersion
     tag: ""
     # -- If defined, a imagePullPolicy applied to all Argo CD deployments
@@ -1207,7 +1207,7 @@ dex:
   ## Dex image
   image:
     # -- Dex image repository
-    repository: ghcr.io/dexidp/dex
+    repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/dex
     # -- Dex image tag
     tag: v2.45.1
     # -- Dex imagePullPolicy
@@ -1506,7 +1506,7 @@ redis:
   ## Redis image
   image:
     # -- Redis repository
-    repository: ecr-public.aws.com/docker/library/redis
+    repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/redis
     # -- Redis tag
     ## Do not use 7.4.0 <= v < 8.0.0, otherwise you are no longer using an open source version of Redis
     tag: 8.2.3-alpine
@@ -1523,7 +1523,7 @@ redis:
     ## Prometheus redis-exporter image
     image:
       # -- Repository to use for the redis-exporter
-      repository: ghcr.io/oliver006/redis_exporter
+      repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/redis_exporter
       # -- Tag to use for the redis-exporter
       tag: v1.86.0
       # -- Image pull policy for the redis-exporter
@@ -1802,7 +1802,7 @@ redis-ha:
   ## Redis image
   image:
     # -- Redis repository
-    repository: ecr-public.aws.com/docker/library/redis
+    repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/redis
     # -- Redis tag
     ## Do not upgrade to >= 7.4.0, otherwise you are no longer using an open source version of Redis
     tag: 8.2.3-alpine
@@ -1836,7 +1836,7 @@ redis-ha:
       app.kubernetes.io/name: argocd-redis-ha-haproxy
     image:
       # -- HAProxy Image Repository
-      repository: ecr-public.aws.com/docker/library/haproxy
+      repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/haproxy
     metrics:
       # -- HAProxy enable prometheus metric scraping
       enabled: true
@@ -2120,7 +2120,7 @@ server:
     ## Argo CD extension installer image
     image:
       # -- Repository to use for extension installer image
-      repository: "quay.io/argoprojlabs/argocd-extension-installer"
+      repository: "<HARBOR_REGISTRY>/<HARBOR_PROJECT>/argocd-extension-installer"
       # -- Tag to use for extension installer image
       tag: "v1.0.1"
       # -- Image pull policy for extensions

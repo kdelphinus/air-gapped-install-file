@@ -12,6 +12,10 @@ CHART_PATH="./charts/argo-cd"
 CONF_FILE="./install.conf"
 NAS_PV_FILE="./manifests/nas-pv.yaml"
 
+# 임시 파일 자동 클린업 trap 설정
+trap 'rm -f ./values-temp.yaml' EXIT
+
+
 # 색상 코드
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -79,9 +83,8 @@ function cleanup_resources() {
 
   if [ "$RESET_MODE" == "reset" ]; then
       rm -f "$CONF_FILE"
-      rm -f "./values-override.yaml"
-      cp -f ./values.yaml.orig ./values.yaml 2>/dev/null || true
-      echo -e "🗑️  설정 파일 및 백업 복원 완료."
+      rm -f "./values-temp.yaml"
+      echo -e "🗑️  설정 파일 및 임시 파일 삭제 완료 (Reset)."
   fi
 
   echo -e "${GREEN}✅ 초기화 작업이 완료되었습니다.${NC}"
@@ -242,51 +245,57 @@ save_conf
 # [3] YAML 동기화 (Single Source of Truth)
 # ==========================================
 echo ""
-echo "🔧 설정 파일(values.yaml, values-override.yaml) 생성 및 업데이트 중..."
+echo "🔧 임시 설정 파일(values-temp.yaml) 생성 및 치환 중..."
 
-# 1. values.yaml 원본 복사 (멱등성 보장)
-cp -f ./values.yaml.orig ./values.yaml
-
-# 2. Harbor 이미지 경로 변경 (values.yaml 내 sed 치환)
-if [ "$IMAGE_SOURCE" == "harbor" ]; then
-    HARBOR_PREFIX="${HARBOR_REGISTRY}/${HARBOR_PROJECT}"
-    echo "   → Harbor 이미지 프리픽스 설정: $HARBOR_PREFIX"
-
-    sed -i "s|repository: quay.io/argoproj/argocd|repository: ${HARBOR_PREFIX}/argocd|g" ./values.yaml
-    sed -i "s|repository: ghcr.io/dexidp/dex|repository: ${HARBOR_PREFIX}/dex|g" ./values.yaml
-    sed -i "s|repository: ecr-public.aws.com/docker/library/redis|repository: ${HARBOR_PREFIX}/redis|g" ./values.yaml
-    sed -i "s|repository: ghcr.io/oliver006/redis_exporter|repository: ${HARBOR_PREFIX}/redis_exporter|g" ./values.yaml
-    sed -i "s|repository: public.ecr.aws/docker/library/haproxy|repository: ${HARBOR_PREFIX}/haproxy|g" ./values.yaml
-    sed -i "s|repository: \"quay.io/argoprojlabs/argocd-extension-installer\"|repository: \"${HARBOR_PREFIX}/argocd-extension-installer\"|g" ./values.yaml
+# 1. 템플릿 복사 분기
+if [ "${IMAGE_SOURCE}" = "local" ]; then
+    cp -f ./values-local.yaml ./values-temp.yaml
+else
+    cp -f ./values.yaml ./values-temp.yaml
+    # Harbor 사용 시 이미지 레지스트리 주소 치환
+    sed -i \
+        -e "s|<HARBOR_REGISTRY>|${HARBOR_REGISTRY}|g" \
+        -e "s|<HARBOR_PROJECT>|${HARBOR_PROJECT}|g" \
+        ./values-temp.yaml
 fi
 
-# 3. values-override.yaml 생성 (스토리지, Redis HA, 서비스 타입, 도메인 주소 등 기록)
+# 2. 인프라 가변 설정 오버라이드 덧붙이기
 PROTOCOL="http"
 [ "$TLS_ENABLED" == "true" ] && PROTOCOL="https"
+ARGOCD_URL="${PROTOCOL}://${DOMAIN}"
 
-cat > ./values-override.yaml <<EOF
-# ArgoCD 3.4.3 Infrastructure Configurations
-# install.sh 에 의해 자동 생성되는 파일입니다. 수동 변경 시 주의하세요.
+cat >> ./values-temp.yaml <<EOF
 
+# ---------------------------------------------
+# Dynamic Configurations Added by install.sh
+# ---------------------------------------------
 configs:
   cm:
-    url: "${PROTOCOL}://${DOMAIN}"
+    url: "${ARGOCD_URL}"
 
 server:
   service:
     type: "${SVC_TYPE}"
 EOF
 
-# NodePort 설정 시 포트 지정 추가
+# NodePort 설정 시 포트 상세 매핑
 if [ "$SVC_TYPE" == "NodePort" ]; then
-cat >> ./values-override.yaml <<EOF
-    nodePort: ${NODE_PORT}
+    if [ "$TLS_ENABLED" == "true" ]; then
+        cat >> ./values-temp.yaml <<EOF
+    nodePortHttp: null
+    nodePortHttps: ${NODE_PORT}
 EOF
+    else
+        cat >> ./values-temp.yaml <<EOF
+    nodePortHttp: ${NODE_PORT}
+    nodePortHttps: null
+EOF
+    fi
 fi
 
 # Redis HA 활성화 분기
 if [ "$REDIS_HA_ENABLED" == "true" ]; then
-cat >> ./values-override.yaml <<EOF
+    cat >> ./values-temp.yaml <<EOF
 
 redis:
   enabled: false
@@ -295,7 +304,7 @@ redis-ha:
   enabled: true
 EOF
 else
-cat >> ./values-override.yaml <<EOF
+    cat >> ./values-temp.yaml <<EOF
 
 redis:
   enabled: true
@@ -305,52 +314,34 @@ redis-ha:
 EOF
 fi
 
-# 스토리지 볼륨 설정 추가
+# 스토리지 볼륨 설정 분기 (안전한 JSON 포맷 한 줄 치환)
+REDIS_VOLUMES="[]"
+REDIS_MOUNTS="[]"
+REPO_VOLUMES="[]"
+REPO_MOUNTS="[]"
+
 if [ "$STORAGE_TYPE" == "hostpath" ]; then
-cat >> ./values-override.yaml <<EOF
-
-redis:
-  volumes:
-    - name: redis-data
-      hostPath:
-        path: "${HOSTPATH_REDIS}"
-        type: DirectoryOrCreate
-  volumeMounts:
-    - name: redis-data
-      mountPath: /data
-
-repoServer:
-  volumes:
-    - name: argocd-repo-cache
-      hostPath:
-        path: "${HOSTPATH_REPO}"
-        type: DirectoryOrCreate
-  volumeMounts:
-    - name: argocd-repo-cache
-      mountPath: /home/argocd/cmp-server/cache
-EOF
+    REDIS_VOLUMES="[{\"name\":\"redis-data\",\"hostPath\":{\"path\":\"${HOSTPATH_REDIS}\",\"type\":\"DirectoryOrCreate\"}}]"
+    REDIS_MOUNTS="[{\"name\":\"redis-data\",\"mountPath\":\"/data\"}]"
+    REPO_VOLUMES="[{\"name\":\"argocd-repo-cache\",\"hostPath\":{\"path\":\"${HOSTPATH_REPO}\",\"type\":\"DirectoryOrCreate\"}}]"
+    REPO_MOUNTS="[{\"name\":\"argocd-repo-cache\",\"mountPath\":\"/home/argocd/cmp-server/cache\"}]"
 elif [ "$STORAGE_TYPE" == "nas" ] || [ "$STORAGE_TYPE" == "nfs-dynamic" ]; then
-cat >> ./values-override.yaml <<EOF
+    REDIS_VOLUMES="[{\"name\":\"redis-data\",\"persistentVolumeClaim\":{\"claimName\":\"argocd-redis-pvc\"}}]"
+    REDIS_MOUNTS="[{\"name\":\"redis-data\",\"mountPath\":\"/data\"}]"
+    REPO_VOLUMES="[{\"name\":\"argocd-repo-cache\",\"persistentVolumeClaim\":{\"claimName\":\"argocd-repo-pvc\"}}]"
+    REPO_MOUNTS="[{\"name\":\"argocd-repo-cache\",\"mountPath\":\"/home/argocd/cmp-server/cache\"}]"
+fi
+
+cat >> ./values-temp.yaml <<EOF
 
 redis:
-  volumes:
-    - name: redis-data
-      persistentVolumeClaim:
-        claimName: argocd-redis-pvc
-  volumeMounts:
-    - name: redis-data
-      mountPath: /data
+  volumes: ${REDIS_VOLUMES}
+  volumeMounts: ${REDIS_MOUNTS}
 
 repoServer:
-  volumes:
-    - name: argocd-repo-cache
-      persistentVolumeClaim:
-        claimName: argocd-repo-pvc
-  volumeMounts:
-    - name: argocd-repo-cache
-      mountPath: /home/argocd/cmp-server/cache
+  volumes: ${REPO_VOLUMES}
+  volumeMounts: ${REPO_MOUNTS}
 EOF
-fi
 
 # ==========================================
 # [4] Kubernetes 리소스 준비 및 설치
@@ -413,8 +404,7 @@ echo -e "🚀 [3/3] ArgoCD Helm 차트 배포 중... (${DO_UPGRADE:+업그레이
 if [ -d "$CHART_PATH" ]; then
     helm upgrade --install argocd "$CHART_PATH" \
         -n "$NAMESPACE" \
-        -f ./values.yaml \
-        -f ./values-override.yaml
+        -f ./values-temp.yaml
 else
     echo -e "${RED}[오류] Helm 차트 디렉토리('${CHART_PATH}')가 존재하지 않습니다.${NC}"
     exit 1
