@@ -65,9 +65,9 @@
 - **Nexus**: `nexus-3.70.1`
 - **Jenkins**: `jenkins-2.528.3`
 - **Gitea**: `gitea-1.25.5`
-- **Monitoring**: `monitoring-82.12.0`
+- **Monitoring**: `monitoring-0.89.0`
 - **NGINX Ingress Controller**: `nginx-nic-5.3.1`
-- **Falco**: `falco-8.0.1`
+- **Falco**: `falco-0.43.0`
 - **Tetragon**: `tetragon-1.6.0`
 - **Tekton**: `tekton-1.9.0`
 - **Redis Stream**: `redis-stream-8.6.2-official`

@@ -1,4 +1,4 @@
-# OpenTelemetry Collector v0.158.0 / v0.153.0 오프라인 설치 가이드
+# OpenTelemetry Collector v0.153.0 오프라인 설치 가이드
 
 폐쇄망 환경에서 OpenTelemetry Collector를 Kubernetes(K8s) 위에 설치하는 절차를 안내합니다.
 
@@ -79,7 +79,7 @@ chmod +x scripts/install.sh
 자동화 스크립트 실행이 불가능하거나 디버깅 등의 특수한 제어가 필요한 환경에서는 아래 수동 절차를 따라 배포합니다.
 
 #### 1) `values.yaml` 환경 설정
-`opentelemetry-collector-0.158.0/values.yaml` 파일을 텍스트 에디터로 엽니다. 오프라인 이미지 소스에 맞춰 수정합니다.
+`opentelemetry-collector-0.153.0/values.yaml` 파일을 텍스트 에디터로 엽니다. 오프라인 이미지 소스에 맞춰 수정합니다.
 
 * **Harbor 레지스트리 주소를 사용하는 경우:**
   ```yaml

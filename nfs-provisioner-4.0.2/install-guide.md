@@ -1,4 +1,4 @@
-# NFS Provisioner v4.0.18 설치 가이드
+# NFS Provisioner v4.0.2 설치 가이드
 
 본 문서는 **Rocky Linux 9.6 / K8s v1.33.7** 환경에서 NetApp NFS v4.1을 백엔드로 연동하는 절차를 설명합니다.
 
@@ -28,7 +28,7 @@ sudo ./download_assets_offline.sh
 ### 1. (온라인인 경우) 헬름 차트 다운로드
 설치 스크립트 실행 전, 공식 차트를 아래 명령어로 확보해야 합니다.
 ```bash
-cd nfs-provisioner-4.0.18/charts
+cd nfs-provisioner-4.0.2/charts
 helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
 helm pull nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --version 4.0.18 --untar
 ```
