@@ -1,0 +1,223 @@
+#!/bin/bash
+
+cd "$(dirname "$0")/.." || exit 1
+
+set -euo pipefail
+
+find_binary() {
+    local name=$1
+    local path
+    path=$(command -v "$name" 2>/dev/null || true)
+    echo "${path:-$name}"
+}
+
+KUBECTL=$(find_binary kubectl)
+HELM=$(find_binary helm)
+CTR=$(find_binary ctr)
+
+NAMESPACE="gatekeeper-system"
+RELEASE="gatekeeper"
+CHART="./charts/gatekeeper"
+VALUES_FILE="./values.yaml"
+VALUES_LOCAL_FILE="./values-local.yaml"
+VALUES_TEMP_FILE="./values-temp.yaml"
+CONF_FILE="./install.conf"
+INSTALLED_VERSION="v3.17.0"
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+load_conf() {
+    [ -f "$CONF_FILE" ] && source "$CONF_FILE"
+}
+
+save_conf() {
+    cat > "$CONF_FILE" <<EOF
+# Gatekeeper ${INSTALLED_VERSION} install configuration. Managed by scripts/install.sh.
+IMAGE_SOURCE="${IMAGE_SOURCE}"
+HARBOR_REGISTRY="${HARBOR_REGISTRY:-}"
+HARBOR_PROJECT="${HARBOR_PROJECT:-}"
+NAMESPACE="${NAMESPACE}"
+REPLICAS="${REPLICAS}"
+AUDIT_INTERVAL="${AUDIT_INTERVAL}"
+INSTALLED_VERSION="${INSTALLED_VERSION}"
+EOF
+    echo -e "${GREEN}  - Saved configuration to ${CONF_FILE}.${NC}"
+}
+
+cleanup_resources() {
+    local reset_mode=$1
+
+    echo -e "${YELLOW}[Clean Up] Removing existing Gatekeeper release...${NC}"
+    $HELM uninstall "$RELEASE" -n "$NAMESPACE" --wait=false 2>/dev/null || true
+
+    echo "Waiting for webhook resources to disappear..."
+    $KUBECTL delete validatingwebhookconfiguration gatekeeper-validating-webhook-configuration \
+        --ignore-not-found=true 2>/dev/null || true
+    $KUBECTL delete mutatingwebhookconfiguration gatekeeper-mutating-webhook-configuration \
+        --ignore-not-found=true 2>/dev/null || true
+
+    if [ "$reset_mode" = "reset" ]; then
+        $KUBECTL delete ns "$NAMESPACE" --ignore-not-found=true --timeout=30s 2>/dev/null || true
+        rm -f "$CONF_FILE"
+        echo "  - Removed ${CONF_FILE}."
+    fi
+}
+
+ensure_chart() {
+    if [ -d "$CHART" ]; then
+        return
+    fi
+
+    local tgz
+    tgz=$(find ./charts -maxdepth 1 -name 'gatekeeper-*.tgz' -print -quit 2>/dev/null || true)
+    if [ -n "$tgz" ]; then
+        echo "Found chart archive: $tgz"
+        tar -xzf "$tgz" -C ./charts
+        return
+    fi
+
+    echo -e "${RED}[ERROR] Gatekeeper chart is missing.${NC}"
+    echo "Place the chart under ./charts/gatekeeper or run ./scripts/download_assets_offline.sh on an internet-connected host."
+    exit 1
+}
+
+import_local_images() {
+    echo "Importing local image tar files into containerd namespace k8s.io..."
+    shopt -s nullglob
+    for tar_file in ./images/*.tar*; do
+        echo "  - $(basename "$tar_file")"
+        $CTR -n k8s.io images import "$tar_file" >/dev/null
+    done
+    shopt -u nullglob
+}
+
+load_conf
+
+EXIST_HELM=$($HELM status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1 && echo "yes" || echo "no")
+DO_UPGRADE=false
+
+if [ "$EXIST_HELM" = "yes" ] || [ -f "$CONF_FILE" ]; then
+    echo ""
+    echo -e "${YELLOW}Existing Gatekeeper installation or configuration detected.${NC}"
+    [ -f "$CONF_FILE" ] && echo "  - Config file: $CONF_FILE"
+    [ -n "${IMAGE_SOURCE:-}" ] && echo "  - Image source: $IMAGE_SOURCE"
+    [ -n "${HARBOR_REGISTRY:-}" ] && echo "  - Harbor: ${HARBOR_REGISTRY}/${HARBOR_PROJECT}"
+    [ -n "${NAMESPACE:-}" ] && echo "  - Namespace: $NAMESPACE"
+    [ -n "${REPLICAS:-}" ] && echo "  - Replicas: $REPLICAS"
+    [ -n "${AUDIT_INTERVAL:-}" ] && echo "  - Audit interval: $AUDIT_INTERVAL"
+
+    echo ""
+    echo "작업을 선택하십시오."
+    echo "  1) 업그레이드 (저장된 설정 유지, Helm upgrade)"
+    echo "  2) 재설치 (기존 릴리스 제거 후 새 설정 입력)"
+    echo "  3) 초기화 (릴리스, 네임스페이스, install.conf 제거)"
+    echo "  4) 취소"
+    read -r -p "선택 [1/2/3/4, 기본값 4]: " ACTION
+    ACTION="${ACTION:-4}"
+
+    case "$ACTION" in
+        1) DO_UPGRADE=true ;;
+        2)
+            cleanup_resources "reinstall"
+            IMAGE_SOURCE="" HARBOR_REGISTRY="" HARBOR_PROJECT=""
+            REPLICAS="" AUDIT_INTERVAL=""
+            ;;
+        3)
+            cleanup_resources "reset"
+            echo "초기화가 완료되었습니다."
+            exit 0
+            ;;
+        *)
+            echo "설치를 취소했습니다."
+            exit 0
+            ;;
+    esac
+fi
+
+if [ -z "${IMAGE_SOURCE:-}" ]; then
+    echo ""
+    echo "이미지 소스를 선택하십시오."
+    echo "  1) Harbor 레지스트리 사용"
+    echo "  2) 로컬 이미지 tar 직접 사용"
+    read -r -p "선택 [1/2, 기본값 1]: " IMG_SRC
+    IMG_SRC="${IMG_SRC:-1}"
+    IMAGE_SOURCE=$([ "$IMG_SRC" = "2" ] && echo "local" || echo "harbor")
+fi
+
+if [ "$IMAGE_SOURCE" = "harbor" ]; then
+    if [ -z "${HARBOR_REGISTRY:-}" ]; then
+        read -r -p "Harbor 레지스트리 주소 (예: 172.30.235.20:30002): " HARBOR_REGISTRY
+    fi
+    if [ -z "${HARBOR_PROJECT:-}" ]; then
+        read -r -p "Harbor 프로젝트 (예: library): " HARBOR_PROJECT
+        HARBOR_PROJECT="${HARBOR_PROJECT:-library}"
+    fi
+else
+    import_local_images
+fi
+
+if [ -z "${NAMESPACE:-}" ]; then
+    read -r -p "Namespace [기본값 gatekeeper-system]: " NAMESPACE
+    NAMESPACE="${NAMESPACE:-gatekeeper-system}"
+fi
+
+if [ -z "${REPLICAS:-}" ]; then
+    read -r -p "controller-manager replicas [기본값 3]: " REPLICAS
+    REPLICAS="${REPLICAS:-3}"
+fi
+
+if [ -z "${AUDIT_INTERVAL:-}" ]; then
+    read -r -p "audit interval seconds [기본값 60]: " AUDIT_INTERVAL
+    AUDIT_INTERVAL="${AUDIT_INTERVAL:-60}"
+fi
+
+save_conf
+ensure_chart
+
+echo ""
+echo "Preparing Helm values..."
+if [ "$IMAGE_SOURCE" = "local" ]; then
+    cp "$VALUES_LOCAL_FILE" "$VALUES_TEMP_FILE"
+    sed -i -e "s|^replicas:.*|replicas: ${REPLICAS}|g" "$VALUES_LOCAL_FILE"
+    sed -i -e "s|^  interval:.*|  interval: ${AUDIT_INTERVAL}|g" "$VALUES_LOCAL_FILE"
+else
+    GATEKEEPER_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/gatekeeper"
+    GATEKEEPER_CRDS_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/gatekeeper-crds"
+    cp "$VALUES_FILE" "$VALUES_TEMP_FILE"
+    sed -i -e "s|^  repository:.*|  repository: ${GATEKEEPER_IMAGE}|g" "$VALUES_FILE"
+    sed -i -e "s|^  crdRepository:.*|  crdRepository: ${GATEKEEPER_CRDS_IMAGE}|g" "$VALUES_FILE"
+    sed -i -e "s|^replicas:.*|replicas: ${REPLICAS}|g" "$VALUES_FILE"
+    sed -i -e "s|^  interval:.*|  interval: ${AUDIT_INTERVAL}|g" "$VALUES_FILE"
+    
+    sed -i -e "s|^  repository:.*|  repository: ${GATEKEEPER_IMAGE}|g" "$VALUES_TEMP_FILE"
+    sed -i -e "s|^  crdRepository:.*|  crdRepository: ${GATEKEEPER_CRDS_IMAGE}|g" "$VALUES_TEMP_FILE"
+fi
+
+sed -i -e "s|^replicas:.*|replicas: ${REPLICAS}|g" "$VALUES_TEMP_FILE"
+sed -i -e "s|^  interval:.*|  interval: ${AUDIT_INTERVAL}|g" "$VALUES_TEMP_FILE"
+
+if [ "$DO_UPGRADE" = true ]; then
+    ACTION_TEXT="upgrade"
+else
+    ACTION_TEXT="install"
+fi
+
+echo "Running Gatekeeper Helm ${ACTION_TEXT}..."
+$HELM upgrade --install "$RELEASE" "$CHART" \
+    -n "$NAMESPACE" \
+    --create-namespace \
+    -f "$VALUES_TEMP_FILE" \
+    --wait
+
+rm -f "$VALUES_TEMP_FILE"
+
+echo ""
+echo "========================================================"
+echo -e "${GREEN}Gatekeeper ${INSTALLED_VERSION} installation complete.${NC}"
+echo "Namespace : $NAMESPACE"
+echo "Config    : $CONF_FILE"
+echo "========================================================"
+$KUBECTL get pods -n "$NAMESPACE"
