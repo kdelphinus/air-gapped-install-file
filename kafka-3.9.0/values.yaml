@@ -25,7 +25,7 @@ global:
   ##
   security:
     ## @param global.security.allowInsecureImages Allows skipping image verification
-    allowInsecureImages: false
+    allowInsecureImages: true
   ## Compatibility adaptations for Kubernetes platforms
   ##
   compatibility:
@@ -95,8 +95,8 @@ diagnosticMode:
 ## @param image.debug Specify if debug values should be set
 ##
 image:
-  registry: docker.io
-  repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/kafka
+  registry: <HARBOR_REGISTRY>
+  repository: <HARBOR_PROJECT>/kafka
   tag: 3.9.0-debian-12-r10
   digest: ""
   ## Specify a imagePullPolicy
@@ -1520,9 +1520,9 @@ externalAccess:
     ## @param externalAccess.autoDiscovery.image.pullSecrets Init container auto-discovery image pull secrets
     ##
     image:
-      registry: docker.io
-      repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/kubectl
-      tag: 1.32.2-debian-12-r2
+      registry: <HARBOR_REGISTRY>
+      repository: <HARBOR_PROJECT>/kubectl
+      tag: 1.33.4-debian-12-r0
       digest: ""
       ## Specify a imagePullPolicy
       ## ref: https://kubernetes.io/docs/concepts/containers/images/#pre-pulled-images
@@ -1838,9 +1838,9 @@ volumePermissions:
   ## @param volumePermissions.image.pullSecrets Init container volume-permissions image pull secrets
   ##
   image:
-    registry: docker.io
-    repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/os-shell
-    tag: 12-debian-12-r38
+    registry: <HARBOR_REGISTRY>
+    repository: <HARBOR_PROJECT>/os-shell
+    tag: 12-debian-12-r51
     digest: ""
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
@@ -1932,9 +1932,9 @@ metrics:
     ## @param metrics.jmx.image.pullSecrets Specify docker-registry secret names as an array
     ##
     image:
-      registry: docker.io
-      repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/jmx-exporter
-      tag: 1.1.0-debian-12-r6
+      registry: <HARBOR_REGISTRY>
+      repository: <HARBOR_PROJECT>/jmx-exporter
+      tag: 1.4.0-debian-12-r0
       digest: ""
       ## Specify a imagePullPolicy
       ## ref: https://kubernetes.io/docs/concepts/containers/images/#pre-pulled-images

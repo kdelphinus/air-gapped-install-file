@@ -22,7 +22,7 @@ global:
   ##
   security:
     ## @param global.security.allowInsecureImages Allows skipping image verification
-    allowInsecureImages: false
+    allowInsecureImages: true
   ## Compatibility adaptations for Kubernetes platforms
   ##
   compatibility:
@@ -95,8 +95,8 @@ serviceBindings:
 ## @param image.debug Specify if debug values should be set
 ##
 image:
-  registry: docker.io
-  repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/kafka
+  registry: <HARBOR_REGISTRY>
+  repository: <HARBOR_PROJECT>/kafka
   tag: 4.0.0-debian-12-r10
   digest: ""
   ## Specify a imagePullPolicy
@@ -486,8 +486,8 @@ defaultInitContainers:
     ## @param defaultInitContainers.volumePermissions.image.pullSecrets "volume-permissions" init-containers' image pull secrets
     ##
     image:
-      registry: docker.io
-      repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/os-shell
+      registry: <HARBOR_REGISTRY>
+      repository: <HARBOR_PROJECT>/os-shell
       tag: 12-debian-12-r51
       digest: ""
       pullPolicy: IfNotPresent
@@ -607,8 +607,8 @@ defaultInitContainers:
     ## @param defaultInitContainers.autoDiscovery.image.pullSecrets "auto-discovery" init-containers' image pull secrets
     ##
     image:
-      registry: docker.io
-      repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/kubectl
+      registry: <HARBOR_REGISTRY>
+      repository: <HARBOR_PROJECT>/kubectl
       tag: 1.33.4-debian-12-r0
       digest: ""
       ## Specify a imagePullPolicy
@@ -1999,8 +1999,8 @@ metrics:
     ## @param metrics.jmx.image.pullSecrets Specify docker-registry secret names as an array
     ##
     image:
-      registry: docker.io
-      repository: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/jmx-exporter
+      registry: <HARBOR_REGISTRY>
+      repository: <HARBOR_PROJECT>/jmx-exporter
       tag: 1.4.0-debian-12-r0
       digest: ""
       ## Specify a imagePullPolicy
