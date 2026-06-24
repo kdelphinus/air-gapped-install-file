@@ -6,7 +6,9 @@ RELEASE_NAME="velero"
 CONF_FILE="./install.conf"
 
 # install.conf 에서 스토리지 경로 정보 로드
-[ -f "$CONF_FILE" ] && source "$CONF_FILE"
+if [ -f "$CONF_FILE" ]; then
+    source "$CONF_FILE"
+fi
 
 echo "==========================================="
 echo " Uninstalling Velero & MinIO 1.18.0"

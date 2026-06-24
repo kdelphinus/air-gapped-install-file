@@ -91,7 +91,7 @@ ensure_chart() {
     if [[ "$DOWNLOAD_CHART_ONLINE" =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "Gatekeeper Helm chart ${INSTALLED_VERSION#v} 다운로드 중..."
         mkdir -p ./charts
-        $HELM repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts >/dev/null 2>&1 || true
+        $HELM repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts --force-update >/dev/null 2>&1 || true
         $HELM repo update
         $HELM pull gatekeeper/gatekeeper --version "${INSTALLED_VERSION#v}" --untar -d ./charts
         return

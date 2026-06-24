@@ -38,7 +38,7 @@ if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
     # Sonatype 공식 Helm 저장소 사용 (chart version 64.2.0 = appVersion 3.64.0)
     # 더 높은 Nexus 버전이 필요한 경우: helm search repo sonatype/nexus-repository-manager --versions
-    helm repo add sonatype https://sonatype.github.io/helm3-charts/
+    helm repo add sonatype https://sonatype.github.io/helm3-charts/ --force-update
     helm repo update
     helm pull sonatype/nexus-repository-manager --version 64.2.0 --untar -d "$CHART_DIR" || true
 fi

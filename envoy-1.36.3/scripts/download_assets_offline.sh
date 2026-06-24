@@ -36,7 +36,7 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
-    helm repo add envoygateway https://helm.envoygateway.ai
+    helm repo add envoygateway https://helm.envoygateway.ai --force-update
     helm repo update
     # Controller 차트
     helm pull envoygateway/gateway --version v1.6.1 -d "$CHART_DIR"

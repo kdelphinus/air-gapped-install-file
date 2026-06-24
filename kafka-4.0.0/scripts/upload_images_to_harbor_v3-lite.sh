@@ -15,7 +15,9 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # 기존 설정 로드
-[ -f "$CONF_FILE" ] && source "$CONF_FILE"
+if [ -f "$CONF_FILE" ]; then
+    source "$CONF_FILE"
+fi
 
 echo -e "${CYAN}===========================================${NC}"
 echo -e "${CYAN}   Kafka 에어갭 이미지 Harbor 업로드 도구  ${NC}"

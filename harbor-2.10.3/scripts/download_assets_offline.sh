@@ -44,7 +44,7 @@ select_download_scope
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo ""
     echo "📦 [1/2] Harbor Helm 차트 다운로드 중..."
-    helm repo add harbor https://helm.goharbor.io > /dev/null 2>&1 || true
+    helm repo add harbor https://helm.goharbor.io --force-update > /dev/null 2>&1 || true
     helm repo update > /dev/null 2>&1 || true
     helm pull harbor/harbor --version "$HARBOR_CHART_VERSION" -d "$CHART_DIR"
     echo "   ✅ Helm 차트 다운로드 완료: harbor-${HARBOR_CHART_VERSION}.tgz"

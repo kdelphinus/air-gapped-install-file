@@ -14,7 +14,9 @@ GITLAB_VERSION="16.11.2-ee.0"
 
 # ── install.conf 로드 / 저장 ──────────────────────────────
 load_conf() {
-    [ -f "$CONF_FILE" ] && source "$CONF_FILE"
+    if [ -f "$CONF_FILE" ]; then
+        source "$CONF_FILE"
+    fi
 }
 
 save_conf() {

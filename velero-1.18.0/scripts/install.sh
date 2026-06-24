@@ -12,7 +12,9 @@ MC_TAG="RELEASE.2024-11-21T17-21-54Z"
 
 # ── install.conf 로드 / 저장 ──────────────────────────────
 load_conf() {
-    [ -f "$CONF_FILE" ] && source "$CONF_FILE"
+    if [ -f "$CONF_FILE" ]; then
+        source "$CONF_FILE"
+    fi
 }
 
 save_conf() {

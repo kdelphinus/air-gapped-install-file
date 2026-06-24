@@ -31,7 +31,7 @@ mkdir -p "$CHART_DIR"
 # 1. Helm Chart 다운로드
 echo -e "\n${YELLOW}📦 [1/2] Bitnami Kafka Helm Chart 다운로드 중...${NC}"
 if command -v helm &> /dev/null; then
-    helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+    helm repo add bitnami https://charts.bitnami.com/bitnami --force-update 2>/dev/null || true
     helm repo update 2>/dev/null || true
     helm pull bitnami/kafka --version "$CHART_VERSION" --untar --untardir "$CHART_DIR"
     echo -e "${GREEN}✅ Helm 차트 다운로드 완료.${NC}"

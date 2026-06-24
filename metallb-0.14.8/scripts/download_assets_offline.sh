@@ -36,7 +36,7 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
-    helm repo add metallb https://metallb.github.io/metallb
+    helm repo add metallb https://metallb.github.io/metallb --force-update
     helm repo update
     helm pull metallb/metallb --version 0.14.8 -d "$CHART_DIR"
 fi

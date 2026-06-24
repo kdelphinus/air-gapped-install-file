@@ -8,7 +8,9 @@ HTTPROUTE_FILE="./manifests/gitlab-omnibus-httproute-temp.yaml"
 CONF_FILE="./install.conf"
 
 # install.conf에서 HOSTPATH_DIR / STORAGE_TYPE 같은 정보 가져오기
-[ -f "$CONF_FILE" ] && source "$CONF_FILE"
+if [ -f "$CONF_FILE" ]; then
+    source "$CONF_FILE"
+fi
 
 echo "========================================================"
 echo "🗑️  GitLab Omnibus 제거"

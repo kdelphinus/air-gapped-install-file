@@ -36,7 +36,7 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
-    helm repo add netapp-trident https://netapp.github.io/trident-helm-chart
+    helm repo add netapp-trident https://netapp.github.io/trident-helm-chart --force-update
     helm repo update
     helm pull netapp-trident/trident-operator --version 100.2506.3 -d "$CHART_DIR"
 fi

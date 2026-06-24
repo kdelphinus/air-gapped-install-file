@@ -12,7 +12,9 @@ fi
 AUTO_YES=0
 PURGE=0
 TARGET_OS="ubuntu24.04"
-[ -f install.conf ] && source install.conf
+if [ -f install.conf ]; then
+    source install.conf
+fi
 for arg in "$@"; do
     case "$arg" in
         --yes|-y) AUTO_YES=1 ;;

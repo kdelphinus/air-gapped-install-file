@@ -36,7 +36,7 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
-    helm repo add cilium https://helm.cilium.io/
+    helm repo add cilium https://helm.cilium.io/ --force-update
     helm repo update
     helm pull cilium/cilium --version 1.19.3 -d "$CHART_DIR"
 fi

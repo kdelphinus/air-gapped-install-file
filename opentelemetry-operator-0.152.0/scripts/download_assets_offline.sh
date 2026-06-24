@@ -30,7 +30,7 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
-    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update
     helm repo update
     helm pull open-telemetry/opentelemetry-operator --version 0.114.1 -d "$CHART_DIR"
 fi

@@ -40,7 +40,7 @@ select_download_scope
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo ""
     echo "📦 [1/2] Jenkins Helm 차트 다운로드 중..."
-    helm repo add jenkins https://charts.jenkins.io > /dev/null 2>&1 || true
+    helm repo add jenkins https://charts.jenkins.io --force-update > /dev/null 2>&1 || true
     helm repo update > /dev/null 2>&1 || true
 
     # 5.9.26 차트를 CHART_DIR에 풀 받음

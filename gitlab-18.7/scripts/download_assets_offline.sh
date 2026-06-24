@@ -36,7 +36,7 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
-    helm repo add gitlab https://charts.gitlab.io/
+    helm repo add gitlab https://charts.gitlab.io/ --force-update
     helm repo update
     helm pull gitlab/gitlab --version 18.7.0 -d "$CHART_DIR"
 fi

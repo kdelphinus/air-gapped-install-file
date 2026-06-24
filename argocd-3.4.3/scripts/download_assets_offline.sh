@@ -40,7 +40,7 @@ select_download_scope
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo ""
     echo "📦 [1/2] ArgoCD Helm 차트 다운로드 중..."
-    helm repo add argo https://argoproj.github.io/argo-helm > /dev/null 2>&1 || true
+    helm repo add argo https://argoproj.github.io/argo-helm --force-update > /dev/null 2>&1 || true
     helm repo update > /dev/null 2>&1 || true
 
     # 9.5.21 차트를 CHART_DIR에 풀 받음
