@@ -11,8 +11,8 @@
 ### 0.1. 기본 이미지 및 Helm 차트 다운로드
 ```bash
 cd jenkins-2.555.3/scripts/
-chmod +x download_assets_offline.sh
-sudo ./download_assets_offline.sh
+chmod +x ./scripts/download_assets_offline.sh
+sudo ./scripts/download_assets_offline.sh
 ```
 실행이 끝나면 `charts/`와 `images/` 폴더에 기본 헬름 차트 및 이미지 3종이 저장됩니다.
 

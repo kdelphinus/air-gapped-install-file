@@ -564,7 +564,7 @@ echo ""
 echo -e "${CYAN}[5/10] DEB 설치...${NC}"
 if ! ls "$DEB_DIR"/*.deb >/dev/null 2>&1; then
     echo -e "${RED}[오류] $DEB_DIR 에 DEB 파일이 없습니다.${NC}"
-    echo "       인터넷 호스트에서 scripts/download.sh 실행 후 재시도하세요."
+    echo "       인터넷 호스트에서 scripts/download_assets_offline.sh 실행 후 재시도하세요."
     exit 1
 fi
 dpkg -i "$DEB_DIR"/*.deb 2>/dev/null || apt-get install -f -y --no-download || true
@@ -714,7 +714,7 @@ install_calico_operator() {
 
 install_calico_manifest() {
     [ ! -f "$UTIL_DIR/calico.yaml" ] && \
-        { echo -e "${RED}[오류] $UTIL_DIR/calico.yaml 파일이 없습니다. 인터넷 호스트에서 scripts/download.sh 를 다시 실행하세요.${NC}"; exit 1; }
+        { echo -e "${RED}[오류] $UTIL_DIR/calico.yaml 파일이 없습니다. 인터넷 호스트에서 scripts/download_assets_offline.sh 를 다시 실행하세요.${NC}"; exit 1; }
 
     echo -e "${CYAN}  → Calico calico.yaml 단일 매니페스트 설치${NC}"
     if [ "$POD_CIDR" = "192.168.0.0/16" ]; then

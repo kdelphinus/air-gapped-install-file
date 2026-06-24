@@ -27,7 +27,7 @@ containerd v2.2.x를 컨테이너 런타임으로, CNI는 **Calico(+ Envoy Gatew
 
 | 스크립트 | 실행 위치 | 설명 |
 | --- | --- | --- |
-| `scripts/download.sh` | 인터넷 호스트 (root) | 오프라인 설치 파일 수집 → `k8s/` 채움 |
+| `scripts/download_assets_offline.sh` | 인터넷 호스트 (root) | 오프라인 설치 파일 수집 → `k8s/` 채움 |
 | `scripts/wsl2_prep.sh` | WSL2 노드 (root) | systemd 활성화 + iptables-legacy 전환 |
 | `scripts/install.sh` | Master-1 (root) | 컨트롤 플레인 설치 (CNI·Gateway 포함) |
 | `scripts/install.sh --join <token> <hash> <ep>` | Worker (root) | 워커 노드 합류 |
@@ -95,7 +95,7 @@ containerd v2.2.x를 컨테이너 런타임으로, CNI는 **Calico(+ Envoy Gatew
 
 ```bash
 cd k8s-1.33.11-ubuntu24.04
-sudo ./scripts/download.sh
+sudo ./scripts/download_assets_offline.sh
 # 완료 후 tar 묶음 생성 안내가 출력됨
 
 cd ..
@@ -220,7 +220,7 @@ sudo ./scripts/uninstall.sh --purge  # 바이너리까지 완전 제거
 | `k8s/binaries/` | helm, nerdctl tarball |
 | `k8s/images/` | kubeadm 코어 + Calico 이미지 `.tar` |
 | `k8s/utils/` | `calico.yaml`, `tigera-operator.yaml`, `calico-custom-resources.yaml`, `local-path-storage.yaml` 등 매니페스트 |
-| `scripts/` | `download.sh`, `install.sh`, `uninstall.sh`, `wsl2_prep.sh` |
+| `scripts/` | `download_assets_offline.sh`, `install.sh`, `uninstall.sh`, `wsl2_prep.sh` |
 
 ## Phase 0: 설치 파일 배포 (Bastion → 전체 노드)
 
@@ -588,7 +588,7 @@ sudo sysctl --system
 Master 3대와 가상 IP(VIP) 환경을 가정합니다.
 
 > Ubuntu 24.04에서는 `haproxy` / `keepalived` DEB를 `k8s/debs/`에 포함시켜 두었어야 합니다.
-> `scripts/download.sh`가 `apt-get download haproxy keepalived` + 의존성을 함께 수집합니다.
+> `scripts/download_assets_offline.sh`가 `apt-get download haproxy keepalived` + 의존성을 함께 수집합니다.
 
 #### 5-B-1. (FQDN 방식 선택 시) FQDN 등록 (전체 노드)
 

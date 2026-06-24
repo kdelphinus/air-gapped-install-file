@@ -35,15 +35,15 @@ while read image; do
 
     echo "⬇️  Pulling: $image"
     docker pull "$image"
-    
+
     if [ $? -ne 0 ]; then
         echo "⚠️  [경고] 다운로드 실패: $image (네트워크 일시적 문제일 수 있음)"
         continue
     fi
-    
+
     # 파일명 변환 (/ -> _)
     filename=$(echo $image | tr '/:' '_').tar
-    
+
     echo "📦 Saving to $IMAGE_DIR/$filename"
     docker save "$image" -o "$IMAGE_DIR/$filename"
 done < $OUTPUT_FILE

@@ -59,7 +59,7 @@ for img in "${IMAGES[@]}"; do
     # 파일명 생성: 레지스트리 주소를 제외하고 이름과 태그만 추출하여 하이픈으로 연결
     # 예: docker.io/nginx/nginx-ingress:5.3.1 -> nginx-ingress-5.3.1.tar
     filename=$(echo "$img" | awk -F/ '{print $NF}' | sed 's/:/-/').tar
-    
+
     echo -e "\n처리 중: $img"
     echo "저장 파일: $IMAGE_DIR/$filename"
 

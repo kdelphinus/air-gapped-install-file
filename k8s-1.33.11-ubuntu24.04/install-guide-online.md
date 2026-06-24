@@ -1101,5 +1101,5 @@ kubectl get pods -n kube-system
 
 ## 참고
 
-- 폐쇄망 배포용 파일은 `scripts/download.sh`로 수집합니다.
+- 폐쇄망 배포용 파일은 `scripts/download_assets_offline.sh`로 수집합니다.
 - 오프라인 설치 절차와 동일한 HA 구성이 `install-guide.md` 에 상세히 기술되어 있습니다.

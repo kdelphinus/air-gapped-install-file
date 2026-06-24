@@ -14,10 +14,10 @@
 cd argocd-3.4.3/scripts/
 
 # 실행 권한 부여
-chmod +x download_assets_offline.sh
+chmod +x ./scripts/download_assets_offline.sh
 
 # 자산 다운로드 스크립트 실행 (sudo 권한 필요)
-sudo ./download_assets_offline.sh
+sudo ./scripts/download_assets_offline.sh
 ```
 
 스크립트가 완료되면 `charts/` 디렉토리에 `.tgz` 차트 파일이, `images/` 디렉토리에 필수 컨테이너 이미지 6종의 `.tar` 파일이 생성됩니다. 이 전체 디렉토리를 압축하여 폐쇄망 내부로 반입하십시오.

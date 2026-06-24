@@ -19,7 +19,7 @@ Kubernetes 버전과 OS 버전을 고정하지 않고, 온라인 호스트에서
 - 공통 설정 파일: `install.conf`
 - 예시 설정 템플릿: `templates/install.conf.example`
 - 스크립트 진입점:
-  - `scripts/download.sh`
+  - `scripts/download_assets_offline.sh`
   - `scripts/build_bundle.sh`
   - `scripts/install.sh`
   - `scripts/uninstall.sh`
@@ -28,7 +28,7 @@ Kubernetes 버전과 OS 버전을 고정하지 않고, 온라인 호스트에서
 - 번들 내부 스크립트 템플릿: `templates/scripts/`
 - 산출물 루트: `bundles/`
 
-현재 `download.sh`는 Ubuntu 24.04 기준 DEB, Rocky 9.6 기준 RPM, 공통 바이너리, 매니페스트, Helm chart, Kubernetes core image, Calico/Cilium image를 수집합니다.
+현재 `download_assets_offline.sh`는 Ubuntu 24.04 기준 DEB, Rocky 9.6 기준 RPM, 공통 바이너리, 매니페스트, Helm chart, Kubernetes core image, Calico/Cilium image를 수집합니다.
 `build_bundle.sh`는 staging 디렉터리에 수집 자산, 번들 스크립트, 설정을 배치하고 tar.gz 파일을 생성합니다.
 
 번들 내부 `scripts/install.sh`는 Ubuntu 24.04 또는 Rocky 9.6 + containerd + Calico/Cilium 조합의 kubeadm init/join 설치를 수행합니다.
@@ -42,7 +42,7 @@ cd k8s-offline-builder
 vi install.conf
 
 # 2. 온라인 호스트에서 설치 자산 수집
-sudo ./scripts/download.sh
+sudo ./scripts/download_assets_offline.sh
 
 # 3. 폐쇄망 전달용 번들 생성
 ./scripts/build_bundle.sh
@@ -71,7 +71,7 @@ k8s-offline-builder/
 - 온라인 수집과 오프라인 설치를 분리합니다.
 - 생성된 번들은 항상 버전과 OS가 이름에 드러나야 합니다.
 - 스크립트는 컴포넌트 루트 기준으로 실행되도록 `cd "$(dirname "$0")/.."` 패턴을 사용합니다.
-- 외부 네트워크 접근은 `download.sh` 단계에만 존재해야 합니다.
+- 외부 네트워크 접근은 `download_assets_offline.sh` 단계에만 존재해야 합니다.
 - Rocky 9.6에서는 Kubernetes 1.33 호환성을 위해 `CONTAINERD_VERSION=auto`를 `2.1.*` 라인으로 정규화합니다.
 
 ## 호환성 체크 방향

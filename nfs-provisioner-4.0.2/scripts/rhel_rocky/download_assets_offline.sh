@@ -34,7 +34,7 @@ echo "   완료: $TARGET_DIR"
 echo ">> 2. Docker 확인 중..."
 if ! command -v docker &> /dev/null; then
     echo "   Docker가 없습니다. 설치를 시작합니다..."
-    
+
     # yum-utils 설치 (config-manager 사용 위해)
     if ! command -v yum-config-manager &> /dev/null; then
         sudo $PKG_MGR install -y yum-utils
@@ -42,10 +42,10 @@ if ! command -v docker &> /dev/null; then
 
     # Docker Repo 추가
     sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-    
+
     # Docker 설치
     sudo $PKG_MGR install -y docker-ce docker-ce-cli containerd.io
-    
+
     sudo systemctl start docker
     sudo systemctl enable docker
     echo "   Docker 설치 완료."
@@ -77,7 +77,7 @@ download_with_docker() {
 
 download_with_skopeo() {
     echo "   [Skopeo] Docker 데몬을 찾을 수 없어 Skopeo로 다운로드합니다..."
-    
+
     if ! command -v skopeo &> /dev/null; then
         echo "   [Skopeo] 설치 중..."
         sudo $PKG_MGR install -y skopeo

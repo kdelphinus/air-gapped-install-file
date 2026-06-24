@@ -8,7 +8,7 @@ source scripts/lib/common.sh
 load_and_validate_config
 
 if [ "$EUID" -ne 0 ]; then
-    fail "download.sh 는 APT repo 등록과 ctr 사용을 위해 root 권한으로 실행해야 합니다."
+    fail "download_assets_offline.sh 는 APT repo 등록과 ctr 사용을 위해 root 권한으로 실행해야 합니다."
 fi
 
 K8S_DEB_VERSION="${K8S_VERSION#v}-1.1"

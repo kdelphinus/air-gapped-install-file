@@ -1,6 +1,6 @@
 #!/bin/bash
 # [폐쇄망] 내부 우분투 서버에서 실행하세요.
-# download_nfs_offline.sh로 받은 nfs-packages 폴더가 필요합니다.
+# download_assets_offline.sh로 받은 nfs-packages 폴더가 필요합니다.
 
 set -e
 

@@ -11,8 +11,8 @@
 cd scripts/
 
 # 실행 권한 부여 및 다운로드 스크립트 실행
-chmod +x download_assets_offline.sh
-sudo ./download_assets_offline.sh
+chmod +x ./scripts/download_assets_offline.sh
+sudo ./scripts/download_assets_offline.sh
 ```
 
 스크립트 실행이 완료되면 `charts/` 디렉토리에 `.tgz` 차트 파일이, `images/` 디렉토리에 `.tar` 이미지 파일들이 생성됩니다. 전체 프로젝트 폴더를 압축하여 폐쇄망 내부로 반입하십시오.

@@ -39,7 +39,7 @@ vi install.conf
 ## 3. 온라인 수집
 
 ```bash
-sudo ./scripts/download.sh
+sudo ./scripts/download_assets_offline.sh
 ```
 
 이 단계는 다음 작업을 수행합니다.
@@ -55,7 +55,7 @@ sudo ./scripts/download.sh
 
 ### 설정값 검증
 
-`scripts/download.sh`와 `scripts/build_bundle.sh`는 공통 함수 파일 `scripts/lib/common.sh`를 통해 다음 항목을 먼저 검증합니다.
+`scripts/download_assets_offline.sh`와 `scripts/build_bundle.sh`는 공통 함수 파일 `scripts/lib/common.sh`를 통해 다음 항목을 먼저 검증합니다.
 
 - `K8S_VERSION`: `v1.33.11` 형식. `1.33.11`처럼 `v`를 생략하면 자동으로 `v1.33.11`로 보정합니다.
 - `TARGET_OS`: 현재 `ubuntu24.04` 또는 `rocky9.6`을 허용합니다.
@@ -75,7 +75,7 @@ sudo ./scripts/download.sh
 - Calico: Tigera/Calico의 Kubernetes 지원 범위 기준
 - Cilium: Cilium의 Kubernetes compatibility matrix 기준
 
-`download.sh`와 `build_bundle.sh`는 실제 수집/생성 전에 다음 값을 정책 파일과 대조합니다.
+`download_assets_offline.sh`와 `build_bundle.sh`는 실제 수집/생성 전에 다음 값을 정책 파일과 대조합니다.
 
 - Kubernetes minor 버전
 - 대상 OS와 아키텍처
@@ -135,7 +135,7 @@ Cilium 선택 시 kube-proxy phase를 건너뛰고 Cilium의 `kubeProxyReplaceme
 
 ```bash
 # 설정 로드 가능 여부 확인
-bash -n scripts/download.sh
+bash -n scripts/download_assets_offline.sh
 bash -n scripts/build_bundle.sh
 
 # 생성 대상 이름 확인

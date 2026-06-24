@@ -83,7 +83,7 @@ echo ""
 
 # 1. 파일 읽기 및 반복 작업
 while IFS= read -r LINE || [ -n "$LINE" ]; do
-    
+
     # 1-1. 공백 제거 (Trim)
     IMAGE_PATH=$(echo "$LINE" | xargs)
 
@@ -94,7 +94,7 @@ while IFS= read -r LINE || [ -n "$LINE" ]; do
     fi
 
     FULL_IMAGE="${REGISTRY_URL}/${IMAGE_PATH}"
-    
+
     # 파일명을 위해 슬래시(/)와 콜론(:)을 언더바(_)로 변경
     SAFE_NAME=$(echo "$IMAGE_PATH" | tr '/:' '__')
     TAR_FILE="${OUTPUT_DIR}/${SAFE_NAME}.tar"

@@ -25,17 +25,17 @@ echo "===================================================="
 
 for img in "${IMAGES[@]}"; do
     echo "🚀 Processing: $img"
-    
+
     # 1. Pull image
     echo "   └─ Pulling..."
     ctr -n k8s.io images pull "$img"
-    
+
     # 2. Export to tar
     # Sanitize image name for filename
     filename=$(echo "$img" | sed 's/\//_/g; s/:/_/g').tar
     echo "   └─ Exporting to $IMAGE_DIR/$filename..."
     ctr -n k8s.io images export "$IMAGE_DIR/$filename" "$img"
-    
+
     if [ $? -eq 0 ]; then
         echo "   ✅ Done: $filename"
     else

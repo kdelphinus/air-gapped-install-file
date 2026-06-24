@@ -42,7 +42,7 @@ if [ "$DOWNLOAD_HELM" = true ]; then
     echo "📦 [1/2] Jenkins Helm 차트 다운로드 중..."
     helm repo add jenkins https://charts.jenkins.io > /dev/null 2>&1 || true
     helm repo update > /dev/null 2>&1 || true
-    
+
     # 5.9.26 차트를 CHART_DIR에 풀 받음
     helm pull jenkins/jenkins --version 5.9.26 -d "$CHART_DIR"
     echo "   ✅ Helm 차트 다운로드 완료: jenkins-5.9.26.tgz"
@@ -58,7 +58,7 @@ IMAGES=(
 if [ "$DOWNLOAD_IMAGES" = true ]; then
     echo ""
     echo "🚀 [2/2] 컨테이너 이미지 다운로드 및 저장 중..."
-    
+
     # 사용 가능한 CLI 자동 감지 (docker -> skopeo -> ctr)
     if command -v docker >/dev/null 2>&1; then
         CLI="docker"

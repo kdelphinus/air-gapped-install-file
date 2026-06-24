@@ -2,7 +2,7 @@
 
 이 문서는 기존 고정 산출물 `k8s-1.33.11-ubuntu24.04`를 기준으로 `k8s-offline-builder`가 동일한 수준의 설치 번들을 재현할 수 있는지 비교한 결과입니다.
 
-검증 기준은 현재 저장소에 포함된 기존 산출물과 builder의 수집/빌드/설치 로직입니다. 아직 외부망 Ubuntu 24.04 호스트에서 builder의 `download.sh`를 끝까지 실행한 것은 아니므로, 최종 DEB/이미지 파일 수량과 목록 일치는 실제 수집 후 다시 확인해야 합니다.
+검증 기준은 현재 저장소에 포함된 기존 산출물과 builder의 수집/빌드/설치 로직입니다. 아직 외부망 Ubuntu 24.04 호스트에서 builder의 `download_assets_offline.sh`를 끝까지 실행한 것은 아니므로, 최종 DEB/이미지 파일 수량과 목록 일치는 실제 수집 후 다시 확인해야 합니다.
 
 ## 기준 산출물 요약
 
@@ -88,7 +88,7 @@
 
 ## 수집 로직 비교
 
-| 수집 대상 | 기존 `download.sh` | builder `download.sh` | 판정 |
+| 수집 대상 | 기존 `download_assets_offline.sh` | builder `download_assets_offline.sh` | 판정 |
 | --- | --- | --- | --- |
 | Kubernetes APT repo | `v1.33` 고정 | `K8S_VERSION`에서 minor 자동 계산 | 개선 |
 | Docker CE repo | Ubuntu codename 기반 | Ubuntu codename 기반 | 일치 |
@@ -119,7 +119,7 @@
 
 ```bash
 cd k8s-offline-builder
-sudo ./scripts/download.sh
+sudo ./scripts/download_assets_offline.sh
 ./scripts/build_bundle.sh
 ```
 

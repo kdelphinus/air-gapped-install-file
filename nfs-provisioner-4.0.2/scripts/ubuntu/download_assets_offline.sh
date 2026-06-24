@@ -62,7 +62,7 @@ download_with_docker() {
     fi
 
     DOCKER_CMD="$DOCKER_BIN"
-    
+
     # 권한 확인 및 sudo 시도
     if ! $DOCKER_CMD ps &> /dev/null; then
         DOCKER_CMD="sudo $DOCKER_BIN"
@@ -80,7 +80,7 @@ download_with_docker() {
 
 download_with_skopeo() {
     echo "   [Skopeo] Docker 데몬을 찾을 수 없어 Skopeo로 다운로드합니다..."
-    
+
     if ! command -v skopeo &> /dev/null; then
         echo "   [Skopeo] 설치 중..."
         sudo apt-get install -y skopeo
