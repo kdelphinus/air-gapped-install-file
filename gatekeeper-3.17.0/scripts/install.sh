@@ -127,6 +127,21 @@ import_local_images() {
         return 0
     fi
 
+    local node_count
+    node_count=$($KUBECTL get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${node_count:-0}" -gt 1 ]; then
+        echo -e "${YELLOW}[WARN] Multi-node cluster detected (${node_count} nodes).${NC}"
+        echo "       ctr import only loads images into the current node runtime."
+        echo "       Gatekeeper Pods may be scheduled onto worker nodes that do not have these images."
+        echo "       For multi-node offline clusters, use Harbor or import the tar files on every schedulable node before installing."
+        read -r -p "Continue importing only on this node? (y/N): " CONTINUE_SINGLE_NODE_IMPORT
+        if [[ ! "$CONTINUE_SINGLE_NODE_IMPORT" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            echo -e "${RED}[ERROR] Local image import cancelled for multi-node safety.${NC}"
+            echo "        Recommended: choose Harbor image source, or run ctr import on every node that can run Gatekeeper Pods."
+            exit 1
+        fi
+    fi
+
     if ! command -v "$CTR" >/dev/null 2>&1; then
         echo -e "${RED}[ERROR] ctr command was not found, so local image import cannot be performed.${NC}"
         echo "        In kind, use: kind load image-archive ./images/<image>.tar --name <cluster-name>"

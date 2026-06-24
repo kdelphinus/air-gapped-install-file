@@ -46,17 +46,33 @@ sudo ./images/upload_images_to_harbor_v3-lite.sh
 - `gatekeeper:v3.17.0`
 - `gatekeeper-crds:v3.17.0`
 
-### 방법 B. 로컬 containerd 이미지 직접 사용
+### 방법 B. 공개 레지스트리 또는 로컬 이미지 사용
 
-단일 노드 또는 모든 노드에 tar 파일을 직접 import할 수 있는 환경에서는 설치 스크립트에서 로컬 방식을 선택합니다.
-수동으로 import하는 경우 다음 명령을 실행합니다.
+인터넷 연결이 가능한 테스트 환경에서는 `images/` 디렉터리가 비어 있어도 설치를 진행할 수 있습니다.
+이 경우 Gatekeeper Pod는 `openpolicyagent/gatekeeper:v3.17.0` 이미지를 공개 레지스트리에서 직접 pull합니다.
+
+로컬 tar 파일을 직접 사용하는 방식은 다음 환경에서만 권장합니다.
+
+- 단일 노드 클러스터
+- `kind` 테스트 클러스터
+- Gatekeeper Pod가 실행될 수 있는 모든 노드에 tar 파일을 직접 import한 멀티 노드 클러스터
+
+일반 Kubernetes 멀티 노드 클러스터에서는 컨트롤 플레인에서 `ctr import`를 실행해도 워커 노드에는 이미지가 배포되지 않습니다.
+폐쇄망 멀티 노드 환경에서는 Harbor 방식을 우선 사용하십시오.
+
+수동으로 모든 대상 노드에 import하는 경우 각 노드에서 다음 명령을 실행합니다.
 
 ```bash
 sudo ctr -n k8s.io images import ./images/openpolicyagent-gatekeeper-v3.17.0.tar
 sudo ctr -n k8s.io images import ./images/openpolicyagent-gatekeeper-crds-v3.17.0.tar
 ```
 
-멀티 노드 클러스터에서는 Gatekeeper Pod가 실행될 수 있는 모든 노드에 이미지를 import해야 합니다.
+`kind` 환경에서는 다음 명령을 사용합니다.
+
+```bash
+kind load image-archive ./images/openpolicyagent-gatekeeper-v3.17.0.tar --name <cluster-name>
+kind load image-archive ./images/openpolicyagent-gatekeeper-crds-v3.17.0.tar --name <cluster-name>
+```
 
 ## 3. 자동 설치 및 업그레이드
 
@@ -68,7 +84,7 @@ sudo ./scripts/install.sh
 
 | 항목 | 설명 |
 | :--- | :--- |
-| 이미지 소스 | Harbor 또는 로컬 tar 직접 사용 |
+| 이미지 소스 | Harbor 또는 공개 레지스트리/로컬 이미지 사용 |
 | Harbor 주소 | 예: `172.30.235.20:30002` |
 | Harbor 프로젝트 | 예: `library` |
 | Namespace | 기본값: `gatekeeper-system` |
