@@ -85,6 +85,18 @@ ensure_chart() {
         return
     fi
 
+    echo -e "${YELLOW}[WARN] ./charts/gatekeeper 경로에 Gatekeeper Helm 차트가 없습니다.${NC}"
+    echo "       폐쇄망 설치는 사전 준비된 차트가 필요하지만, 온라인 테스트 환경에서는 지금 다운로드할 수 있습니다."
+    read -r -p "Gatekeeper 차트를 온라인으로 지금 다운로드할까요? (y/N): " DOWNLOAD_CHART_ONLINE
+    if [[ "$DOWNLOAD_CHART_ONLINE" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "Gatekeeper Helm chart ${INSTALLED_VERSION#v} 다운로드 중..."
+        mkdir -p ./charts
+        $HELM repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts >/dev/null 2>&1 || true
+        $HELM repo update
+        $HELM pull gatekeeper/gatekeeper --version "${INSTALLED_VERSION#v}" --untar -d ./charts
+        return
+    fi
+
     echo -e "${RED}[ERROR] Gatekeeper chart is missing.${NC}"
     echo "Place the chart under ./charts/gatekeeper or run ./scripts/download_assets_offline.sh on an internet-connected host."
     exit 1
@@ -98,8 +110,8 @@ import_local_images() {
 
     if [ ${#image_archives[@]} -eq 0 ]; then
         echo -e "${YELLOW}[WARN] No image archives were found under ./images.${NC}"
-        echo "       Skipping local image import. If the cluster has online registry access, Kubernetes may pull images during Helm install."
-        echo "       For offline use, run ./scripts/download_assets_offline.sh on an internet-connected host and copy the .tar files here."
+        echo "       이미지 import를 건너뜁니다. 클러스터가 인터넷에 접근 가능하면 Helm 설치 중 공개 레지스트리에서 이미지를 pull합니다."
+        echo "       폐쇄망 설치에서는 인터넷 연결 호스트에서 ./scripts/download_assets_offline.sh 실행 후 .tar 파일을 복사하십시오."
         return 0
     fi
 
@@ -175,7 +187,7 @@ if [ -z "${IMAGE_SOURCE:-}" ]; then
     echo ""
     echo "이미지 소스를 선택하십시오."
     echo "  1) Harbor 레지스트리 사용"
-    echo "  2) 로컬 이미지 tar 직접 사용"
+    echo "  2) 공개 레지스트리/로컬 이미지 사용"
     read -r -p "선택 [1/2, 기본값 1]: " IMG_SRC
     IMG_SRC="${IMG_SRC:-1}"
     IMAGE_SOURCE=$([ "$IMG_SRC" = "2" ] && echo "local" || echo "harbor")
@@ -208,8 +220,8 @@ if [ -z "${AUDIT_INTERVAL:-}" ]; then
     AUDIT_INTERVAL="${AUDIT_INTERVAL:-60}"
 fi
 
-save_conf
 ensure_chart
+save_conf
 
 echo ""
 echo "Preparing Helm values..."
