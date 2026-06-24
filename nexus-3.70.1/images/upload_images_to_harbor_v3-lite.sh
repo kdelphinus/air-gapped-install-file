@@ -67,8 +67,19 @@ echo "========================================================================"
 echo " 🏗️  이미지 마이그레이션 v3.2-Lite (Port Auto-Fix & Root Check)"
 echo "========================================================================"
 
-for tar_file in "$IMAGE_DIR"/*.tar*; do
-    [ -e "$tar_file" ] || break
+FAILED_IMAGES=0
+
+shopt -s nullglob
+image_archives=("$IMAGE_DIR"/*.tar*)
+shopt -u nullglob
+
+if [ ${#image_archives[@]} -eq 0 ]; then
+    echo -e "${YELLOW}[WARN] ${IMAGE_DIR} 디렉터리에 이미지 tar 파일이 없습니다.${NC}"
+    echo "       처리할 이미지가 없어 작업을 중단합니다."
+    exit 1
+fi
+
+for tar_file in "${image_archives[@]}"; do
     
     echo ""
     echo -e "${YELLOW}📦 처리 중: $(basename "$tar_file")${NC}"
@@ -83,6 +94,7 @@ for tar_file in "$IMAGE_DIR"/*.tar*; do
             echo -e "${GREEN}[성공 (All-platforms)]${NC}"
         else
             echo -e "${RED}[실패]${NC}"
+            FAILED_IMAGES=$((FAILED_IMAGES + 1))
             continue
         fi
     fi
@@ -94,6 +106,11 @@ for tar_file in "$IMAGE_DIR"/*.tar*; do
 
     # 태그 추출 (jq 없이 표준 도구만 사용)
     repo_tags=$(tar -xOf "$tar_file" manifest.json | grep -o '"RepoTags":\[[^]]*\]' | sed -e 's/"RepoTags":\[//' -e 's/\]//' -e 's/"//g' | tr ',' '\n')
+    if [ -z "$repo_tags" ]; then
+        echo -e "${RED}[실패] manifest.json에서 RepoTags를 찾지 못했습니다.${NC}"
+        FAILED_IMAGES=$((FAILED_IMAGES + 1))
+        continue
+    fi
 
     while read -r source_image; do
         [ -z "$source_image" ] && continue
@@ -123,7 +140,11 @@ for tar_file in "$IMAGE_DIR"/*.tar*; do
 
         if [ $? -ne 0 ]; then
             echo -e "      (Convert 불가 -> 일반 Tag 진행)"
-            ctr -n "$CTR_NAMESPACE" images tag "$source_image" "$target_image" > /dev/null 2>&1
+            if ! ctr -n "$CTR_NAMESPACE" images tag "$source_image" "$target_image" > /dev/null 2>&1; then
+                echo -e "${RED}[실패] 이미지 태그 생성 실패${NC}"
+                FAILED_IMAGES=$((FAILED_IMAGES + 1))
+                continue
+            fi
         fi
         
         # 3. Push
@@ -133,7 +154,15 @@ for tar_file in "$IMAGE_DIR"/*.tar*; do
         else
             echo -e "${RED}[실패]${NC}"
             echo "      [Error Log]"
-            ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image"
+            ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image" || true
+            FAILED_IMAGES=$((FAILED_IMAGES + 1))
         fi
     done <<< "$repo_tags"
 done
+
+if [ "$FAILED_IMAGES" -gt 0 ]; then
+    echo -e "${RED}[ERROR] ${FAILED_IMAGES}개 이미지 처리에 실패했습니다.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}[DONE] 이미지 마이그레이션이 완료되었습니다.${NC}"
