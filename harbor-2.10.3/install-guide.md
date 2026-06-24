@@ -2,12 +2,24 @@
 
 폐쇄망 환경에서 Harbor v2.10.3을 Kubernetes 위에 Helm으로 설치하는 절차를 안내합니다.
 
+## Phase 0: 인터넷 연결 호스트에서 에셋 다운로드
+
+폐쇄망 환경으로 반입하기 전에, 인터넷이 연결된 외부망 호스트에서 아래 스크립트를 실행하여 Helm 차트와 컨테이너 이미지들을 다운로드합니다.
+
+```bash
+# 컴포넌트 루트 디렉토리에서 실행
+sudo ./scripts/download_assets_offline.sh
+```
+
+- 스크립트 실행이 완료되면 `charts/` 폴더에 Helm 차트가, `images/` 폴더에 9개의 Harbor 구동용 컨테이너 이미지 `.tar` 파일이 다운로드됩니다.
+- 다운로드 완료 후 컴포넌트 디렉토리를 압축하여 폐쇄망 내부로 이관합니다.
+
 ## 전제 조건
 
 - Kubernetes 클러스터 구성 완료 (master + worker)
 - Helm v3.14.0 설치 완료
 - `kubectl` CLI 사용 가능
-- Harbor 설치용 이미지 `.tar` 파일 준비 완료
+- Harbor 설치용 이미지 `.tar` 및 Helm 차트 준비 완료 (Phase 0을 통해 다운로드)
 
 ## 설치 전 필수 확인 사항
 

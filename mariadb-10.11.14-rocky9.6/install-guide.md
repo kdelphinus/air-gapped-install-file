@@ -1,21 +1,36 @@
-# MariaDB v10.11.14 오프라인 설치 가이드 (Rocky Linux 9.6)
+# MariaDB v10.11.14 오프라인 설치 가이드 (Rocky Linux 9.6 / Ubuntu)
 
-폐쇄망 환경에서 MariaDB v10.11.14를 Rocky Linux 9.6에 RPM으로 설치하는 절차를 안내합니다.
+폐쇄망 환경에서 MariaDB v10.11.14를 Rocky Linux 계열 또는 Ubuntu/Debian 계열 서버에 오프라인 패키지로 설치하는 절차를 안내합니다.
+
+## Phase 0: 인터넷 연결 호스트에서 에셋 다운로드
+
+폐쇄망 환경으로 반입할 오프라인 설치 파일(RPM/DEB 및 의존성 패키지)을 다운로드하기 위해 인터넷이 작동하는 외부망 호스트에서 다음 스크립트를 먼저 실행합니다.
+
+```bash
+# 컴포넌트 루트 디렉토리에서 실행
+sudo ./scripts/download_assets_offline.sh
+```
+
+- Rocky Linux/RHEL 환경에서 실행 시 `db/rpms/` 및 `common/rpms/`에 RPM이 다운로드됩니다.
+- Ubuntu/Debian 환경에서 실행 시 `db/debs/` 및 `common/debs/`에 DEB이 다운로드됩니다.
+- 감지된 실행 호스트의 OS 버전에 맞춰 패키지가 다운로드되므로, 실제 타겟 노드와 동일한 OS 버전을 갖춘 외부망 호스트에서 구동하는 것을 권장합니다.
+
+다운로드가 완료되면 컴포넌트 디렉토리를 압축하여 폐쇄망 내부 DB 서버로 이관합니다.
 
 ## 전제 조건
 
-- Rocky Linux 9.6 서버 (폐쇄망)
-- `common/rpms/` 및 `db/rpms/` 디렉토리 내 RPM 파일이 서버에 반입되어 있을 것
+- Rocky Linux (RHEL 계열) 또는 Ubuntu (Debian 계열) 서버 (폐쇄망)
+- `common/rpms/` (`common/debs/`) 및 `db/rpms/` (`db/debs/`) 디렉토리 내 설치 파일이 서버에 반입되어 있을 것
 
 ## 디렉토리 구조
 
 | 경로 | 설명 |
 | :--- | :--- |
-| `common/rpms/` | 공통 의존성 RPM |
-| `db/rpms/` | MariaDB 10.11.14 RPM 패키지 |
+| `common/rpms/` / `common/debs/` | 공통 의존성 패키지 |
+| `db/rpms/` / `db/debs/` | MariaDB 10.11.14 패키지 |
 | `backup/` | mariabackup 기반 백업 구성 및 가이드 |
 
-## Phase 1: RPM 설치
+## Phase 1: RPM 설치 (Rocky/RHEL)
 
 ```bash
 # 1. 공통 의존성 RPM 먼저 설치
@@ -23,6 +38,19 @@ sudo dnf localinstall -y --disablerepo='*' --skip-broken common/rpms/*.rpm
 
 # 2. MariaDB RPM 설치
 sudo dnf localinstall -y --disablerepo='*' --skip-broken db/rpms/*.rpm
+```
+
+## Phase 1-1: DEB 설치 (Ubuntu/Debian)
+
+```bash
+# 1. 공통 의존성 DEB 먼저 설치
+sudo dpkg -i common/debs/*.deb
+
+# 2. MariaDB DEB 설치
+sudo dpkg -i db/debs/*.deb
+
+# 3. 의존성 오류가 남은 경우, 반입된 deb만으로 재시도
+sudo apt install -y --no-index common/debs/*.deb db/debs/*.deb
 ```
 
 ## Phase 2: MariaDB 초기 설정
