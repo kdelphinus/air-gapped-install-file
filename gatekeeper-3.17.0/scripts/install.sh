@@ -29,6 +29,10 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+echo "========================================================================"
+echo " Gatekeeper ${INSTALLED_VERSION} offline installer"
+echo "========================================================================"
+
 load_conf() {
     [ -f "$CONF_FILE" ] && source "$CONF_FILE"
 }
@@ -85,13 +89,41 @@ ensure_chart() {
 }
 
 import_local_images() {
-    echo "Importing local image tar files into containerd namespace k8s.io..."
+    echo "Importing local image tar files into the cluster runtime..."
     shopt -s nullglob
-    for tar_file in ./images/*.tar*; do
-        echo "  - $(basename "$tar_file")"
-        $CTR -n k8s.io images import "$tar_file" >/dev/null
-    done
+    local image_archives=(./images/*.tar*)
     shopt -u nullglob
+
+    if [ ${#image_archives[@]} -eq 0 ]; then
+        echo -e "${YELLOW}[WARN] No image archives were found under ./images.${NC}"
+        echo "       Skipping local image import. If the cluster has online registry access, Kubernetes may pull images during Helm install."
+        echo "       For offline use, run ./scripts/download_assets_offline.sh on an internet-connected host and copy the .tar files here."
+        return 0
+    fi
+
+    local current_context
+    current_context=$($KUBECTL config current-context 2>/dev/null || true)
+    if [[ "$current_context" == kind-* ]] && command -v kind >/dev/null 2>&1; then
+        local kind_cluster="${current_context#kind-}"
+        echo "Detected kind context (${current_context}); loading archives with kind load image-archive."
+        for tar_file in "${image_archives[@]}"; do
+            echo "  - $(basename "$tar_file") -> kind cluster ${kind_cluster}"
+            kind load image-archive "$tar_file" --name "$kind_cluster"
+        done
+        return 0
+    fi
+
+    if ! command -v "$CTR" >/dev/null 2>&1; then
+        echo -e "${RED}[ERROR] ctr command was not found, so local image import cannot be performed.${NC}"
+        echo "        In kind, use: kind load image-archive ./images/<image>.tar --name <cluster-name>"
+        echo "        In a normal containerd cluster, install containerd/ctr or choose Harbor image source."
+        exit 1
+    fi
+
+    for tar_file in "${image_archives[@]}"; do
+        echo "  - $(basename "$tar_file")"
+        $CTR -n k8s.io images import "$tar_file"
+    done
 }
 
 load_conf

@@ -9,6 +9,20 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # ==================== 설정 ====================
+IMAGE_DIR="./images"
+
+shopt -s nullglob
+image_archives=("$IMAGE_DIR"/*.tar*)
+shopt -u nullglob
+
+if [ ${#image_archives[@]} -eq 0 ]; then
+    echo -e "\033[1;33m[WARN] ${IMAGE_DIR} 디렉터리에 이미지 tar 파일이 없습니다.\033[0m"
+    echo "       처리할 이미지가 없어 작업을 중단합니다."
+    echo "       온라인 준비 PC에서는 먼저 sudo ./scripts/download_assets_offline.sh 를 실행해 이미지를 받으십시오."
+    echo "       kind 테스트 환경에서는 이미지가 있으면 kind load image-archive ./images/<image>.tar --name <cluster-name> 로 로드할 수 있습니다."
+    exit 1
+fi
+
 # 0. 실행 모드 선택
 echo ""
 echo "실행 모드를 선택하세요:"
@@ -50,7 +64,6 @@ if [ "$EXEC_MODE" == "2" ]; then
 fi
 
 CTR_NAMESPACE="k8s.io"
-IMAGE_DIR="./images"
 TARGET_PLATFORM="linux/amd64" # 고정
 # ==============================================
 
@@ -70,8 +83,15 @@ echo "========================================================================"
 echo " 🏗️  Gatekeeper 이미지 마이그레이션 v3.2-Lite"
 echo "========================================================================"
 
-shopt -s nullglob
-for tar_file in "$IMAGE_DIR"/*.tar*; do
+
+if ! command -v ctr >/dev/null 2>&1; then
+    echo -e "${RED}[ERROR] ctr 명령을 찾을 수 없습니다.${NC}"
+    echo "        일반 containerd 환경에서는 containerd/ctr 설치가 필요합니다."
+    echo "        kind 환경에서는 호스트에 containerd.service가 없는 것이 정상이며, kind load image-archive를 사용하십시오."
+    exit 1
+fi
+
+for tar_file in "${image_archives[@]}"; do
     echo ""
     echo -e "${YELLOW}📦 처리 중: $(basename "$tar_file")${NC}"
 
@@ -134,6 +154,5 @@ for tar_file in "$IMAGE_DIR"/*.tar*; do
         fi
     done <<< "$repo_tags"
 done
-shopt -u nullglob
 
 echo -e "\033[0;32m[DONE] Gatekeeper 이미지 마이그레이션이 완료되었습니다.\033[0m"
