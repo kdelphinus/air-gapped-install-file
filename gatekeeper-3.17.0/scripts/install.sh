@@ -34,7 +34,9 @@ echo " Gatekeeper ${INSTALLED_VERSION} offline installer"
 echo "========================================================================"
 
 load_conf() {
-    [ -f "$CONF_FILE" ] && source "$CONF_FILE"
+    if [ -f "$CONF_FILE" ]; then
+        source "$CONF_FILE"
+    fi
 }
 
 save_conf() {
