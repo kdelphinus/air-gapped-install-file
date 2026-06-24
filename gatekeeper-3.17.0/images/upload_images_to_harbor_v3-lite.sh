@@ -2,6 +2,8 @@
 # 스크립트 위치 기준으로 컴포넌트 루트로 이동
 cd "$(dirname "$0")/.." || exit 1
 
+set -uo pipefail
+
 # Root 권한 체크
 if [ "$EUID" -ne 0 ]; then
     echo -e "\033[0;31m[오류] 이 스크립트는 root 권한(sudo)으로 실행해야 합니다.\033[0m"
@@ -83,6 +85,7 @@ echo "========================================================================"
 echo " 🏗️  Gatekeeper 이미지 마이그레이션 v3.2-Lite"
 echo "========================================================================"
 
+FAILED_IMAGES=0
 
 if ! command -v ctr >/dev/null 2>&1; then
     echo -e "${RED}[ERROR] ctr 명령을 찾을 수 없습니다.${NC}"
@@ -104,6 +107,7 @@ for tar_file in "${image_archives[@]}"; do
             echo -e "${GREEN}[성공 (All-platforms)]${NC}"
         else
             echo -e "${RED}[실패]${NC}"
+            FAILED_IMAGES=$((FAILED_IMAGES + 1))
             continue
         fi
     fi
@@ -115,6 +119,11 @@ for tar_file in "${image_archives[@]}"; do
 
     # 태그 추출 (jq 없이 표준 도구만 사용)
     repo_tags=$(tar -xOf "$tar_file" manifest.json | grep -o '"RepoTags":\[[^]]*\]' | sed -e 's/"RepoTags":\[//' -e 's/\]//' -e 's/"//g' | tr ',' '\n')
+    if [ -z "$repo_tags" ]; then
+        echo -e "${RED}[실패] manifest.json에서 RepoTags를 찾지 못했습니다.${NC}"
+        FAILED_IMAGES=$((FAILED_IMAGES + 1))
+        continue
+    fi
 
     while read -r source_image; do
         [ -z "$source_image" ] && continue
@@ -150,9 +159,15 @@ for tar_file in "${image_archives[@]}"; do
         else
             echo -e "${RED}[실패]${NC}"
             echo "      [Error Log]"
-            ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image"
+            ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image" || true
+            FAILED_IMAGES=$((FAILED_IMAGES + 1))
         fi
     done <<< "$repo_tags"
 done
+
+if [ "$FAILED_IMAGES" -gt 0 ]; then
+    echo -e "${RED}[ERROR] ${FAILED_IMAGES}개 이미지 처리에 실패했습니다.${NC}"
+    exit 1
+fi
 
 echo -e "\033[0;32m[DONE] Gatekeeper 이미지 마이그레이션이 완료되었습니다.\033[0m"

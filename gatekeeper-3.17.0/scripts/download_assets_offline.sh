@@ -35,7 +35,7 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Gatekeeper Helm 차트 다운로드 중..."
-    helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
+    helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts --force-update
     helm repo update
     rm -rf "${CHART_DIR}/gatekeeper"
     helm pull gatekeeper/gatekeeper --version "$VERSION" --untar -d "$CHART_DIR"
