@@ -35,6 +35,32 @@ vi install.conf
 | `ENABLE_HUBBLE` | Cilium Hubble 활성화 여부 |
 | `MTU_VALUE` | Cilium 설치 시 적용할 MTU |
 | `BUNDLE_OUTPUT_DIR` | 생성 산출물 루트 |
+| `KUBELET_NODE_IP` | 생성된 번들에서 노드별로 지정하는 kubelet node-ip. 멀티 IP 노드가 아니면 비워둡니다. |
+
+### 멀티 IP 노드의 kubelet node-ip 고정
+
+노드에 관리망, 서비스망, 스토리지망처럼 IP가 여러 개 있으면 kubelet이 의도하지 않은 주소를 Node InternalIP로 선택할 수 있습니다. 이 경우 생성된 번들을 각 노드에 배포한 뒤, 설치 전에 번들 내부 `install.conf`에서 노드별 IP를 고정합니다.
+
+`KUBELET_NODE_IP`를 비워두면 설치 스크립트 실행 중 선택 입력을 표시합니다. Enter로 넘기면 미설정 상태로 진행하고, 멀티 IP 노드는 감지된 IP를 확인한 뒤 사용할 Node IP를 직접 입력합니다. 자동 설치 또는 조인 명령을 비대화형으로 실행해야 하면 노드별 `install.conf`에 미리 지정합니다.
+
+```bash
+# onb-cl-portal-1
+KUBELET_NODE_IP="192.168.166.20"
+
+# onb-cl-portal-2
+KUBELET_NODE_IP="192.168.166.21"
+
+# onb-cl-portal-3
+KUBELET_NODE_IP="192.168.166.22"
+```
+
+설치 스크립트는 이 값을 기준으로 OS별 kubelet 환경 파일에 다음 설정을 자동 반영합니다.
+
+```bash
+KUBELET_EXTRA_ARGS=--node-ip=192.168.166.20
+```
+
+Ubuntu 24.04는 `/etc/default/kubelet`, Rocky Linux 9.6은 `/etc/sysconfig/kubelet`에 기록합니다.
 
 ## 3. 온라인 수집
 
@@ -133,6 +159,36 @@ Cilium 선택 시 kube-proxy phase를 건너뛰고 Cilium의 `kubeProxyReplaceme
 이 빌더는 Kubernetes 번들을 생성하는 도구이므로 직접 `helm upgrade --install`이나 `kubectl apply`로 배포되는 서비스가 아닙니다.
 
 수동 절차는 생성된 버전 고정 번들의 `install-guide.md`를 따릅니다. 빌더 자체에서 수동으로 확인할 항목은 다음과 같습니다.
+
+### kubelet node-ip 수동 설정
+
+자동 설치 스크립트를 사용하지 않고 kubeadm 절차를 직접 수행할 때는 `kubeadm init` 또는 `kubeadm join` 전에 kubelet 환경 파일을 먼저 작성합니다.
+
+Ubuntu 24.04:
+
+```bash
+cat > /etc/default/kubelet <<'EOF'
+KUBELET_EXTRA_ARGS=--node-ip=192.168.166.20
+EOF
+systemctl daemon-reload
+systemctl restart kubelet 2>/dev/null || true
+```
+
+Rocky Linux 9.6:
+
+```bash
+cat > /etc/sysconfig/kubelet <<'EOF'
+KUBELET_EXTRA_ARGS=--node-ip=192.168.166.20
+EOF
+systemctl daemon-reload
+systemctl restart kubelet 2>/dev/null || true
+```
+
+설치 후에는 다음 명령으로 `INTERNAL-IP`가 기대한 값인지 확인합니다.
+
+```bash
+kubectl get nodes -o wide
+```
 
 ```bash
 # 설정 로드 가능 여부 확인

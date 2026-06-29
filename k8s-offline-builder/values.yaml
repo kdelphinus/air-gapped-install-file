@@ -26,3 +26,6 @@ tools:
 
 bundle:
   outputDir: bundles
+
+runtimeInstall:
+  kubeletNodeIP: ""

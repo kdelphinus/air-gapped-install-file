@@ -44,6 +44,7 @@ source "$CONF_FILE"
 : "${SERVICE_CIDR:=}"
 : "${CONTROL_PLANE_ENDPOINT:=}"
 : "${CRI_SOCKET:=unix:///run/containerd/containerd.sock}"
+: "${KUBELET_NODE_IP:=}"
 : "${ENABLE_HUBBLE:=true}"
 : "${MTU_VALUE:=1500}"
 
@@ -82,6 +83,7 @@ POD_CIDR="${POD_CIDR}"
 SERVICE_CIDR="${SERVICE_CIDR}"
 CONTROL_PLANE_ENDPOINT="${CONTROL_PLANE_ENDPOINT}"
 CRI_SOCKET="${CRI_SOCKET}"
+KUBELET_NODE_IP="${KUBELET_NODE_IP}"
 INSTALLED_VERSION="${K8S_VERSION}"
 EOF
     echo -e "  ${GREEN}설정 저장 완료: ${CONF_FILE}${NC}"
@@ -94,6 +96,7 @@ reset_runtime_conf() {
     POD_CIDR=""
     SERVICE_CIDR=""
     CONTROL_PLANE_ENDPOINT=""
+    KUBELET_NODE_IP=""
 }
 
 ensure_containerd_registry_config_path() {
@@ -161,6 +164,30 @@ disable_swap_completely() {
     if swapon --show | grep -q .; then
         echo -e "${YELLOW}[경고] Swap이 아직 활성 상태입니다. 수동 확인이 필요합니다.${NC}"
     fi
+}
+
+configure_kubelet_node_ip() {
+    [ -n "$KUBELET_NODE_IP" ] || return 0
+
+    if [[ ! "$KUBELET_NODE_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        echo -e "${RED}[오류] KUBELET_NODE_IP는 IPv4 주소 형식이어야 합니다: ${KUBELET_NODE_IP}${NC}"
+        exit 1
+    fi
+
+    echo -e "${CYAN}kubelet node-ip 고정: ${KUBELET_NODE_IP}${NC}"
+    case "$TARGET_OS" in
+        ubuntu24.04)
+            cat > /etc/default/kubelet <<EOF
+KUBELET_EXTRA_ARGS=--node-ip=${KUBELET_NODE_IP}
+EOF
+            ;;
+        rocky9.6)
+            cat > /etc/sysconfig/kubelet <<EOF
+KUBELET_EXTRA_ARGS=--node-ip=${KUBELET_NODE_IP}
+EOF
+            ;;
+    esac
+    systemctl daemon-reload
 }
 
 configure_system_limits() {
@@ -557,6 +584,7 @@ run_join() {
     NODE_ROLE=$([ "$join_is_cp" -eq 1 ] && echo "control-plane" || echo "worker")
     check_time_sync
     install_packages_and_prepare_node
+    configure_kubelet_node_ip
     configure_containerd
     load_images
 
@@ -679,9 +707,21 @@ if [ "$CNI_CHOICE" = "cilium" ]; then
     echo "  Hubble    : $ENABLE_HUBBLE"
     echo "  MTU       : $MTU_VALUE"
 fi
+
+if [ -z "$KUBELET_NODE_IP" ]; then
+    DETECTED_NODE_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}' || true)
+    echo ""
+    echo "노드에 IP가 여러 개 있으면 kubelet node-ip를 고정할 수 있습니다."
+    if [ -n "$DETECTED_NODE_IP" ]; then
+        read -p "kubelet node-ip [선택, 기본: 미설정 / 감지: ${DETECTED_NODE_IP}]: " KUBELET_NODE_IP
+    else
+        read -p "kubelet node-ip [선택, 기본: 미설정]: " KUBELET_NODE_IP
+    fi
+fi
 echo "  Pod CIDR  : $POD_CIDR"
 echo "  Svc CIDR  : $SERVICE_CIDR"
 echo "  Endpoint  : $CONTROL_PLANE_ENDPOINT"
+[ -n "$KUBELET_NODE_IP" ] && echo "  Node IP   : $KUBELET_NODE_IP"
 read -p "위 설정으로 진행할까요? [Y/n]: " _GO
 _GO="${_GO:-Y}"
 [[ "$_GO" =~ ^[Yy]$ ]] || { echo "취소합니다."; exit 0; }
@@ -689,6 +729,7 @@ _GO="${_GO:-Y}"
 save_conf
 check_time_sync
 install_packages_and_prepare_node
+configure_kubelet_node_ip
 install_binaries
 configure_containerd
 load_images

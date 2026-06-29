@@ -73,6 +73,7 @@ k8s-offline-builder/
 - 스크립트는 컴포넌트 루트 기준으로 실행되도록 `cd "$(dirname "$0")/.."` 패턴을 사용합니다.
 - 외부 네트워크 접근은 `download_assets_offline.sh` 단계에만 존재해야 합니다.
 - Rocky 9.6에서는 Kubernetes 1.33 호환성을 위해 `CONTAINERD_VERSION=auto`를 `2.1.*` 라인으로 정규화합니다.
+- 노드에 IP가 여러 개 있으면 생성된 번들의 `install.conf`에서 `KUBELET_NODE_IP`를 노드별로 지정합니다.
 
 ## 호환성 체크 방향
 
