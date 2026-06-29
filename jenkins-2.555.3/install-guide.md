@@ -141,4 +141,36 @@ sudo ./scripts/uninstall.sh
 
 # 완전 초기화 (설정 파일 및 로컬 백업 복원 등 완전 제거)
 sudo ./scripts/uninstall.sh --reset
+```\n\n---\n\n## 7. CI/CD Buildah agent 구성
+
+Jenkins에서 애플리케이션 컨테이너 이미지를 빌드하려면 기본 설치 이후
+`cicd-buildah-guide.md` 절차를 적용합니다.
+
+기본 구성은 Kubernetes agent Pod에서 Buildah rootless 런타임을 사용합니다.
+Kaniko와 Docker-in-Docker는 기본 경로에서 제외합니다.
+
+```bash
+# 온라인 준비 환경에서 Buildah agent 이미지 생성
+cd jenkins-2.555.3/jenkins-build/buildah-agent
+chmod +x build-buildah-agent.sh
+./build-buildah-agent.sh
+
+# 폐쇄망에서 Harbor 업로드
+cd ../../
+sudo ./scripts/upload_images_to_harbor_v3-lite.sh
+
+# Jenkins에 Buildah agent podTemplate 적용
+cp values-cicd-buildah.yaml values-cicd-buildah.local.yaml
+sed -i \
+  -e 's|<HARBOR_REGISTRY>|harbor.devops.internal:30002|g' \
+  -e 's|<HARBOR_PROJECT>|devops|g' \
+  values-cicd-buildah.local.yaml
+
+helm upgrade --install jenkins ./charts/jenkins \
+  -n jenkins --create-namespace \
+  -f values.yaml \
+  -f values-cicd-buildah.local.yaml
 ```
+
+표준 Jenkinsfile 예시는 `examples/Jenkinsfile.buildah`를 사용합니다.
+Argo CD Application 예시는 `examples/argocd-application-sample.yaml`을 사용합니다.

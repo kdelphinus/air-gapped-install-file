@@ -53,6 +53,7 @@ IMAGES=(
     "docker.io/jenkins/jenkins:2.555.3-jdk21"
     "docker.io/jenkins/inbound-agent:3355.v388858a_47b_33-22"
     "docker.io/kiwigrid/k8s-sidecar:2.7.3"
+    "quay.io/buildah/stable:v1.41.4"
 )
 
 if [ "$DOWNLOAD_IMAGES" = true ]; then

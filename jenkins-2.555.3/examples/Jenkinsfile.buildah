@@ -1,0 +1,79 @@
+pipeline {
+  agent {
+    label 'buildah'
+  }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
+  environment {
+    APP_NAME = 'sample-app'
+    HARBOR_REGISTRY = 'harbor.devops.internal:30002'
+    HARBOR_PROJECT = 'devops'
+    MANIFEST_REPO_URL = 'http://gitlab.devops.internal/root/sample-app-manifests.git'
+    MANIFEST_PATH = 'deploy/overlays/prod/deployment.yaml'
+    HARBOR_CREDENTIALS = 'harbor-jenkins-credential'
+    GITLAB_CREDENTIALS = 'gitlab-jenkins-token'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          env.IMAGE_TAG = env.GIT_COMMIT.take(8)
+          env.IMAGE = "${env.HARBOR_REGISTRY}/${env.HARBOR_PROJECT}/${env.APP_NAME}:${env.IMAGE_TAG}"
+        }
+      }
+    }
+
+    stage('Build Image') {
+      steps {
+        container('buildah') {
+          sh '''
+            set -eu
+            buildah bud -t "${IMAGE}" .
+          '''
+        }
+      }
+    }
+
+    stage('Push Image') {
+      steps {
+        container('buildah') {
+          withCredentials([usernamePassword(credentialsId: env.HARBOR_CREDENTIALS, usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASSWORD')]) {
+            sh '''
+              set -eu
+              buildah login --username "${HARBOR_USER}" --password "${HARBOR_PASSWORD}" "${HARBOR_REGISTRY}"
+              buildah push "${IMAGE}"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Update Manifest') {
+      steps {
+        container('buildah') {
+          withCredentials([usernamePassword(credentialsId: env.GITLAB_CREDENTIALS, usernameVariable: 'GITLAB_USER', passwordVariable: 'GITLAB_TOKEN')]) {
+            sh '''
+              set -eu
+              rm -rf manifests
+              AUTH_REPO_URL="$(printf '%s' "${MANIFEST_REPO_URL}" | sed "s#://#://${GITLAB_USER}:${GITLAB_TOKEN}@#")"
+              git clone "${AUTH_REPO_URL}" manifests
+              cd manifests
+              git config user.name "Jenkins CI"
+              git config user.email "jenkins@devops.internal"
+              sed -i -E "s#image: .*${APP_NAME}:.*#image: ${IMAGE}#g" "${MANIFEST_PATH}"
+              git add "${MANIFEST_PATH}"
+              git commit -m "ci: ${APP_NAME} image ${IMAGE_TAG}" || exit 0
+              git push origin HEAD
+            '''
+          }
+        }
+      }
+    }
+  }
+}

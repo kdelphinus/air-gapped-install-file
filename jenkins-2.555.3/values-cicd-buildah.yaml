@@ -1,0 +1,42 @@
+# Jenkins CI/CD Buildah agent override
+# Replace <HARBOR_REGISTRY> and <HARBOR_PROJECT> with the local Harbor address
+# and project before applying this file.
+
+agent:
+  imagePullSecretName: harbor-regcred
+  podTemplates:
+    buildah: |
+      - name: buildah
+        label: buildah
+        serviceAccount: jenkins-agent
+        containers:
+          - name: buildah
+            image: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/jenkins-buildah-agent:1.41.4
+            command: "/bin/sh -c"
+            args: "mkdir -p /tmp/run-1000 && chmod 700 /tmp/run-1000 && cat"
+            ttyEnabled: true
+            privileged: false
+            resourceRequestCpu: "500m"
+            resourceRequestMemory: "1Gi"
+            resourceLimitCpu: "2"
+            resourceLimitMemory: "4Gi"
+            envVars:
+              - envVar:
+                  key: BUILDAH_ISOLATION
+                  value: chroot
+              - envVar:
+                  key: STORAGE_DRIVER
+                  value: vfs
+              - envVar:
+                  key: XDG_RUNTIME_DIR
+                  value: /tmp/run-1000
+        volumes:
+          - emptyDirVolume:
+              mountPath: /home/jenkins/.local/share/containers
+              memory: false
+          - emptyDirVolume:
+              mountPath: /tmp
+              memory: false
+
+serviceAccountAgent:
+  imagePullSecretName: harbor-regcred
