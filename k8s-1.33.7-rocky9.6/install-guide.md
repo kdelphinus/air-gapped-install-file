@@ -26,6 +26,45 @@ sudo ./scripts/download_assets_offline.sh
 - 모든 노드에서 아래 설치 파일 접근 가능
 - swap 비활성화 완료 (`swapoff -a` 및 `/etc/fstab` 주석 처리)
 
+## 설치 전 체크리스트
+
+아래 항목은 단일 구성과 HA 구성 모두 설치 전에 확정합니다. 확정한 값은 `/etc/hosts`, 로드밸런서 설정, `kubeadm init` 인자에 동일하게 반영해야 합니다.
+
+### 1. 구성 및 작업 범위
+
+- [ ] 구성 유형 확정: 단일 컨트롤 플레인, HA 3중화, 물리 서버, 가상 서버 여부
+- [ ] 노드별 역할, hostname, 관리 IP, Kubernetes 통신 NIC, gateway, DNS, NTP 서버 확정
+- [ ] 작업 가능 시간과 금지 작업 확인: reboot, 네트워크 서비스 재시작, 방화벽 reload, Docker/containerd 재시작, OS 전체 업데이트
+- [ ] 기존 서비스, 기존 컨테이너, 6443 포트 사용 서비스, NodePort 사용 서비스, HAProxy/keepalived 사용 여부 확인
+
+### 2. 네트워크 대역 및 엔드포인트
+
+- [ ] Pod CIDR 확정: `/20` 권장, 최소 `/22` 수준으로 환경 규모에 맞게 조정
+- [ ] Service CIDR 확정: `/24` 가능, 여유가 필요하면 `/22` 권장
+- [ ] Pod CIDR과 Service CIDR이 서버 실제 IP, 사내망, VPN, DB망, 관리망, 백업망, 스토리지망과 겹치지 않음 확인
+- [ ] API endpoint 확정: 단일 노드 IP, VIP, FQDN 중 선택하고 인증서 SAN, DNS 또는 `/etc/hosts` 반영 방식 확정
+- [ ] VIP 사용 시 미사용 IP 여부, 로드밸런서 방식, keepalived VRRP protocol 112 허용 여부, HAProxy 6443 bind 충돌 여부 확인
+
+### 3. 방화벽 및 포트
+
+- [ ] Control Plane 포트 허용: 6443/TCP, 2379-2380/TCP, 10250/TCP, 10257/TCP, 10259/TCP
+- [ ] Worker 포트 허용: 10250/TCP, 10256/TCP, NodePort 기본 범위 30000-32767/TCP,UDP
+- [ ] CNI, Ingress, 스토리지, Harbor, DNS, NTP 등 부가 구성에서 필요한 추가 포트 확인
+- [ ] 방화벽 flush, iptables/nftables 초기화, firewalld reload가 금지된 환경이면 허용 규칙 방식으로 사전 합의
+
+### 4. 런타임, OS, 폐쇄망 자산
+
+- [ ] Docker/containerd 설치 상태, 기존 컨테이너 사용 여부, containerd 또는 Docker 재시작 가능 여부 확인
+- [ ] kubelet과 containerd의 cgroup driver를 `systemd`로 맞출 수 있는지 확인
+- [ ] OS 버전, 커널 버전, Kubernetes 버전, containerd 버전, CNI 버전의 호환성 확인
+- [ ] swap 비활성화 가능 여부, 시간 동기화 상태, 디스크 여유 공간, inode 여유, hostname/MAC address/product UUID 중복 없음 확인
+- [ ] 폐쇄망 반입 자산 확인: RPM/DEB, 바이너리, 이미지, 매니페스트, Helm chart, Harbor 인증서와 레지스트리 접속 정보
+
+### 5. 설치 진행 판단
+
+- [ ] 미확정 항목이 없고, 운영 영향이 있는 조치의 승인 범위가 명확한지 확인
+- [ ] 장애 발생 시 되돌릴 범위와 담당자 연락 경로 확인
+
 ## 디렉토리 구조
 
 | 경로 | 설명 |
