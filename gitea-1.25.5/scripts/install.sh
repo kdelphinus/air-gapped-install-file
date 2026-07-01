@@ -112,6 +112,7 @@ if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     [ "$IMAGE_SOURCE" == "harbor" ] && echo "     - Harbor 주소  : $HARBOR_REGISTRY/$HARBOR_PROJECT"
     [ -n "$DB_TYPE" ] && echo "     - DB 타입      : $DB_TYPE (1=SQLite, 2=PostgreSQL)"
     [ -n "$DOMAIN" ] && echo "     - 도메인       : $DOMAIN"
+    [ -n "$ADMIN_USERNAME" ] && echo "     - 관리자 계정  : $ADMIN_USERNAME"
     [ -n "$TARGET_NODE" ] && echo "     - 고정 노드    : $TARGET_NODE"
 
     echo ""
@@ -193,7 +194,21 @@ if [ "$DO_UPGRADE" != "true" ]; then
     kubectl get nodes -o custom-columns="NAME:.metadata.name,STATUS:.status.conditions[-1].type,ROLES:.metadata.labels.node-role\.kubernetes\.io/worker"
     echo ""
     read -p "Gitea 를 배치할 노드 이름 (엔터 = 자동 배치): " TARGET_NODE
+
+    # 2-5. 관리자 계정 설정
+    echo ""
+    read -p "초기 관리자 계정 (기본값: gitea-admin): " ADMIN_USERNAME
+    ADMIN_USERNAME="${ADMIN_USERNAME:-gitea-admin}"
+
+    read -sp "초기 관리자 비밀번호 (엔터 시 임의 자동 생성): " ADMIN_PASSWORD; echo
+    if [ -z "${ADMIN_PASSWORD}" ]; then
+        ADMIN_PASSWORD=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 12)
+        echo "  - 관리자 비밀번호가 자동으로 생성되었습니다."
+    fi
 fi
+
+ADMIN_USERNAME="${ADMIN_USERNAME:-gitea-admin}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 12)}"
 
 save_conf
 
@@ -213,6 +228,10 @@ fi
 
 sed -i '/^image:/,/^service:/ s|registry: .*|registry: '"$GITEA_REGISTRY"'|' "${VALUES_FILE}"
 sed -i '/^image:/,/^service:/ s|repository: .*|repository: '"$GITEA_REPOSITORY"'|' "${VALUES_FILE}"
+
+# 관리자 계정 설정 동기화
+sed -i '/admin:/,/^$/ s|username: .*|username: '"$ADMIN_USERNAME"'|' "${VALUES_FILE}"
+sed -i '/admin:/,/^$/ s|password: .*|password: "'"$ADMIN_PASSWORD"'"|' "${VALUES_FILE}"
 
 # DB 및 PostgreSQL 동기화
 if [ "${DB_TYPE}" = "2" ]; then
@@ -375,8 +394,8 @@ echo " NodePort HTTP : http://<NODE_IP>:${NODEPORT_HTTP}"
 echo " NodePort SSH  : ssh://git@<NODE_IP>:${NODEPORT_SSH}"
 [ -n "${DOMAIN}" ] && echo " 도메인       : http://${DOMAIN}"
 echo ""
-echo " 초기 관리자 비밀번호 확인:"
-echo "   kubectl get secret gitea-admin-secret -n ${NAMESPACE} -o jsonpath='{.data.password}' | base64 -d"
-echo "   (없으면 values.yaml 의 adminPassword 항목 참조)"
+echo " 초기 관리자 로그인 정보:"
+echo "   아이디(ID)   : ${ADMIN_USERNAME}"
+echo "   비밀번호(PW) : ${ADMIN_PASSWORD}"
 echo "==========================================="
 kubectl get pods -n "${NAMESPACE}"

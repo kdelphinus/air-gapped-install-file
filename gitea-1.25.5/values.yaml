@@ -24,6 +24,10 @@ service:
 
 # 폐쇄망 설정
 gitea:
+  admin:
+    username: gitea-admin
+    password: giteaAdmin123!
+    email: admin@devops.internal
   config:
     server:
       OFFLINE_MODE: "true"
@@ -53,10 +57,6 @@ persistence:
     - ReadWriteOnce
   size: 20Gi
   claimName: gitea-data-pvc
-
-# 초기 관리자 계정
-adminUser: gitea-admin
-adminEmail: admin@devops.internal
 
 # 의존 서브차트 기본 비활성화 (SQLite 기본 구성)
 # PostgreSQL 사용 시 install.sh 에서 --set postgresql.enabled=true 로 전환
