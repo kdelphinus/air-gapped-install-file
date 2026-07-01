@@ -26,6 +26,8 @@ HELM_CHART_PATH="./charts/harbor"
 
 # 3. 외부 접속 설정 (TLS 사용 시 인증서의 domain과 일치 해야함)
 EXTERNAL_HOSTNAME="" # 환경에 맞게 설정 (예: 172.31.63.195 또는 harbor.example.com)
+HTTP_NODEPORT="30002"
+HTTPS_NODEPORT="30003"
 
 # 4. 영구 저장소 설정
 STORAGE_SIZE="50Gi"
@@ -101,31 +103,31 @@ if [ ! -e "$HELM_CHART_PATH" ]; then
     exit 1
 fi
 
-# EXTERNAL_HOSTNAME 미설정 시 자동 감지 또는 입력 프롬프트
-if [ -z "$EXTERNAL_HOSTNAME" ]; then
-    # 1번(로컬 로드) 선택 시 현재 노드 IP 자동 감지 시도
-    if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
-        DETECTED_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')
-        if [ -z "$DETECTED_IP" ]; then
-            DETECTED_IP=$(hostname -I | awk '{print $1}')
-        fi
-        
-        echo -e "${YELLOW}➡️ Harbor 접속 주소(Domain 또는 VIP)를 입력해주세요.${NC}"
-        echo -e "${YELLOW}   (예: harbor.devops.internal 또는 직접 NodePort 사용 시 172.30.235.20:30002)${NC}"
-        read -p "Harbor 접속 주소 [기본값: ${DETECTED_IP}]: " INPUT_HOSTNAME
-        EXTERNAL_HOSTNAME="${INPUT_HOSTNAME:-$DETECTED_IP}"
+# 접속 URL 기본값 계산 및 파싱 함수
+DETECTED_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')
+if [ -z "$DETECTED_IP" ]; then
+    DETECTED_IP=$(hostname -I | awk '{print $1}')
+fi
+DETECTED_IP="${DETECTED_IP:-127.0.0.1}"
+
+parse_harbor_url() {
+    local raw_url="$1"
+    URL_PROTOCOL="http"
+    URL_HOSTPORT="$raw_url"
+
+    if [[ "$raw_url" == *"://"* ]]; then
+        URL_PROTOCOL="${raw_url%%://*}"
+        URL_HOSTPORT="${raw_url#*://}"
     fi
 
-    # 여전히 비어있으면 입력 프롬프트 표시
-    if [ -z "$EXTERNAL_HOSTNAME" ]; then
-        read -p "Harbor 외부 접속 IP 또는 도메인을 입력하세요: " EXTERNAL_HOSTNAME_INPUT
-        EXTERNAL_HOSTNAME="$EXTERNAL_HOSTNAME_INPUT"
-        if [ -z "$EXTERNAL_HOSTNAME" ]; then
-            echo "오류: 호스트명을 입력해야 합니다."
-            exit 1
-        fi
+    URL_HOSTPORT="${URL_HOSTPORT%%/*}"
+    URL_HOST="${URL_HOSTPORT%%:*}"
+    URL_PORT=""
+    if [[ "$URL_HOSTPORT" == *":"* ]]; then
+        URL_PORT="${URL_HOSTPORT##*:}"
     fi
-fi
+    URL_NORMALIZED="${URL_PROTOCOL}://${URL_HOSTPORT}"
+}
 
 
 # ---------------------------
@@ -188,9 +190,10 @@ fi
 # 3. 노출 방식 선택
 echo ""
 echo "Harbor 노출 방식을 선택하세요:"
-echo "  1) NodePort + Envoy Gateway (기본, HTTPRoute로 도메인 라우팅)"
-echo "  2) nginx Ingress"
-read -p "선택 [1/2, 기본값 1]: " EXPOSE_CHOICE
+echo "  1) Envoy Gateway (기본, HTTPRoute로 도메인 라우팅)"
+echo "  2) NodePort 직접 접속"
+echo "  3) nginx Ingress"
+read -p "선택 [1/2/3, 기본값 1]: " EXPOSE_CHOICE
 EXPOSE_CHOICE="${EXPOSE_CHOICE:-1}"
 
 PROTOCOL="http"
@@ -198,26 +201,76 @@ TLS_SECRET_NAME=""
 TLS_ENABLED="false"
 TLS_CERT_SOURCE="none"
 
-if [[ "$EXPOSE_CHOICE" == "2" ]]; then
-    EXPOSE_TYPE="ingress"
-    echo "nginx Ingress 방식으로 설치합니다."
-    read -p "TLS(HTTPS)를 활성화하시겠습니까? (y/N): " ENABLE_TLS
-    if [[ "$ENABLE_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
-        PROTOCOL="https"
-        TLS_ENABLED="true"
-        TLS_CERT_SOURCE="secret"
-        read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
-        if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
-    fi
-else
-    EXPOSE_TYPE="nodePort"
-    echo "NodePort + Envoy Gateway 방식으로 설치합니다."
-    echo "  → Envoy HTTPRoute(manifests/route-harbor.yaml)로 도메인 라우팅을 설정하세요."
-    read -p "Envoy Gateway에서 HTTPS(보안 접속)를 사용하시겠습니까? (y/N): " ENVOY_TLS
-    if [[ "$ENVOY_TLS" =~ ^[yY]([eE][sS])?$ ]]; then
-        PROTOCOL="https"
-    fi
+case "$EXPOSE_CHOICE" in
+    1)
+        EXPOSE_TYPE="clusterIP"
+        DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-harbor.devops.internal}"
+        echo "Envoy Gateway 방식으로 설치합니다."
+        echo "  → Envoy HTTPRoute(manifests/route-harbor.yaml)로 도메인 라우팅을 설정하세요."
+        read -p "Harbor Envoy 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
+        EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
+        parse_harbor_url "$EXTERNAL_URL"
+        PROTOCOL="$URL_PROTOCOL"
+        EXTERNAL_HOSTNAME="$URL_HOST"
+        EXTERNAL_URL="$URL_NORMALIZED"
+        ;;
+    2)
+        EXPOSE_TYPE="nodePort"
+        DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-$DETECTED_IP}:${HTTP_NODEPORT}"
+        echo "NodePort 직접 접속 방식으로 설치합니다."
+        read -p "Harbor NodePort 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
+        EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
+        parse_harbor_url "$EXTERNAL_URL"
+        PROTOCOL="$URL_PROTOCOL"
+        EXTERNAL_HOSTNAME="$URL_HOST"
+        EXTERNAL_URL="$URL_NORMALIZED"
+        if [ -n "$URL_PORT" ]; then
+            if [[ "$PROTOCOL" == "https" ]]; then
+                HTTPS_NODEPORT="$URL_PORT"
+            else
+                HTTP_NODEPORT="$URL_PORT"
+            fi
+        elif [[ "$PROTOCOL" == "https" ]]; then
+            EXTERNAL_URL="${EXTERNAL_URL}:${HTTPS_NODEPORT}"
+        else
+            EXTERNAL_URL="${EXTERNAL_URL}:${HTTP_NODEPORT}"
+        fi
+        if [[ "$PROTOCOL" == "https" ]]; then
+            TLS_ENABLED="true"
+            TLS_CERT_SOURCE="secret"
+            read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
+            if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
+        fi
+        ;;
+    3)
+        EXPOSE_TYPE="ingress"
+        DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-harbor.devops.internal}"
+        echo "nginx Ingress 방식으로 설치합니다."
+        read -p "Harbor Ingress 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
+        EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
+        parse_harbor_url "$EXTERNAL_URL"
+        PROTOCOL="$URL_PROTOCOL"
+        EXTERNAL_HOSTNAME="$URL_HOST"
+        EXTERNAL_URL="$URL_NORMALIZED"
+        if [[ "$PROTOCOL" == "https" ]]; then
+            TLS_ENABLED="true"
+            TLS_CERT_SOURCE="secret"
+            read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
+            if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
+        fi
+        ;;
+    *)
+        echo "오류: 노출 방식은 1, 2, 3 중 하나를 선택해야 합니다."
+        exit 1
+        ;;
+esac
+
+if [ -z "$EXTERNAL_HOSTNAME" ]; then
+    echo "오류: Harbor 접속 URL에서 호스트명을 확인할 수 없습니다."
+    exit 1
 fi
+
+echo "사용할 Harbor externalURL: ${EXTERNAL_URL}"
 
 # 3-2. Control Plane Taint 허용 여부 확인
 echo ""
@@ -408,17 +461,7 @@ if [[ "$STORAGE_CHOICE" != "3" ]]; then
     kubectl apply -f "$PV_PVC_FILE"
 fi
 
-# externalURL 계산
-# - Envoy(nodePort): 도메인만 사용 (Envoy가 포트 처리)
-# - nodePort 직접: IP:포트 사용
-# - Ingress: 도메인만 사용
-if [[ "$EXPOSE_TYPE" == "nodePort" && "$EXPOSE_CHOICE" == "1" ]]; then
-    EXTERNAL_URL="${PROTOCOL}://${EXTERNAL_HOSTNAME}"
-elif [[ "$EXPOSE_TYPE" == "nodePort" ]]; then
-    EXTERNAL_URL="${PROTOCOL}://${EXTERNAL_HOSTNAME}:30002"
-else
-    EXTERNAL_URL="${PROTOCOL}://${EXTERNAL_HOSTNAME}"
-fi
+# externalURL은 노출 방식 선택 단계에서 입력받은 Harbor 접속 URL을 그대로 사용합니다.
 
 # 7. Harbor 설치
 echo "Helm을 사용하여 Harbor를 배포합니다. 이 작업은 몇 분 정도 소요될 수 있습니다..."
@@ -500,10 +543,10 @@ expose:
     ports:
       http:
         port: 80
-        nodePort: 30002
+        nodePort: ${HTTP_NODEPORT}
       https:
         port: 443
-        nodePort: 30003
+        nodePort: ${HTTPS_NODEPORT}
   tls:
     enabled: ${TLS_ENABLED}
     certSource: ${TLS_CERT_SOURCE}

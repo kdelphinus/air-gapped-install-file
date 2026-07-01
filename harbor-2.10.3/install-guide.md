@@ -23,8 +23,9 @@ sudo ./scripts/download_assets_offline.sh
 
 ## 설치 전 필수 확인 사항
 
-- **TLS 없이 IP로만 접속 시**: `EXTERNAL_HOSTNAME` 을 Harbor NodePort IP와 동일하게 설정
-- **TLS 도메인 접속 시**: 사전에 인증서로 Kubernetes Secret 생성 필요, `EXTERNAL_HOSTNAME` 을 도메인명으로 설정
+- **NodePort로 직접 접속 시**: Harbor 접속 URL에 NodePort를 포함합니다. 예: `http://<NODE_IP>:30002`
+- **Envoy 또는 Ingress로 접속 시**: Harbor 접속 URL에 실제 외부 도메인 또는 VIP를 입력합니다.
+- **TLS 도메인 접속 시**: 사전에 인증서로 Kubernetes Secret 생성 필요, 접속 URL의 호스트명과 인증서 도메인이 일치해야 합니다.
 - **저장 경로**: `SAVE_PATH` (데이터 저장 경로)는 `NODE_NAME` 노드에서 디렉토리가 생성되어 있어야 함 (권한: `chmod 777`)
 
 ## 1단계: 구성 이미지 로드 (ctr import)
@@ -70,14 +71,17 @@ chmod +x scripts/install.sh
 1. **이미지 로드 방식 선택**:
    - **`1` 로컬 tar 직접 import (권장)**: 하버가 아직 설치되지 않은 경우 선택합니다. (1단계에서 `load_images.sh`를 이미 실행했다면 이미 로드되어 있으므로 금방 넘어갑니다.)
    - **`2` Harbor 레지스트리 사용**: 하버가 이미 설치되어 있고 재설치하거나 이미지가 이미 로드된 경우 선택합니다.
-2. **노출 방식 선택**: `1` NodePort + Envoy Gateway (기본) / `2` nginx Ingress
+2. **노출 방식 선택**:
+   - **`1` Envoy Gateway (기본)**: `http://harbor.devops.internal`처럼 Envoy가 외부에서 받을 URL을 입력합니다.
+   - **`2` NodePort 직접 접속**: `http://<NODE_IP>:30002`처럼 NodePort가 포함된 URL을 입력합니다. URL의 포트가 Helm `nodePort` 값으로도 반영됩니다.
+   - **`3` nginx Ingress**: `http://harbor.example.com` 또는 `https://harbor.example.com`처럼 Ingress 외부 URL을 입력합니다.
 3. **스토리지 타입 선택**:
    - **`1` HostPath**: 단일 노드 테스트 환경용. 특정 노드 경로에 데이터를 저장합니다.
    - **`2` NFS (정적 할당)**: 미리 생성된 NFS 서버/경로 정보를 입력하여 정적 PV/PVC를 생성합니다.
    - **`3` NFS (동적 할당)**: `nfs-client` 등 클러스터에 설치된 StorageClass를 통해 볼륨을 자동 할당받습니다.
 4. **Harbor 관리자(`admin`) 비밀번호**: 최소 8자 이상의 비밀번호를 입력합니다.
 
-## 4단계: Envoy HTTPRoute 적용 (NodePort + Envoy 선택 시)
+## 4단계: Envoy HTTPRoute 적용 (Envoy Gateway 선택 시)
 
 `manifests/route-harbor.yaml`의 `hostnames`와 `parentRefs.name`을
 실제 환경에 맞게 수정 후 적용합니다.
