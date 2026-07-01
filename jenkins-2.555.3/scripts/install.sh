@@ -338,6 +338,12 @@ fi
 echo "도메인    : $PROTOCOL://$DOMAIN"
 if [ "$SVC_TYPE" == "NodePort" ]; then
     echo "접속 포트 : 30000 (NodePort)"
+else
+    echo "노출 방식 : ClusterIP (Envoy HTTPRoute 수동 적용 필요)"
+    echo "HTTPRoute 적용 명령:"
+    echo "  sed \"s|jenkins.test.com|${DOMAIN}|g\" ./manifests/route-jenkins.yaml | kubectl apply -f -"
+    echo "HTTPRoute 확인 명령:"
+    echo "  kubectl get httproute jenkins-route -n ${NAMESPACE}"
 fi
 echo "========================================================"
 echo "⏳ 초기 관리자(admin) 비밀번호 확인 방법:"
