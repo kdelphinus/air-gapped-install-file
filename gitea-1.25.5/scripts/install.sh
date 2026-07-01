@@ -256,6 +256,33 @@ nodeSelector: {}
 EOF
 fi
 
+# 초기 볼륨 권한 지정을 위한 루트 권한 실행 init 컨테이너 (preExtraInitContainers) 동기화
+if [ "${IMAGE_SOURCE}" = "harbor" ]; then
+    OS_SHELL_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/os-shell:12-debian-12-r51"
+else
+    OS_SHELL_IMAGE="docker.io/bitnamilegacy/os-shell:12-debian-12-r51"
+fi
+
+sed -i '/^preExtraInitContainers:/,/^$/d' "${VALUES_FILE}"
+cat >> "${VALUES_FILE}" <<EOF
+preExtraInitContainers:
+  - name: volume-permissions
+    image: "${OS_SHELL_IMAGE}"
+    imagePullPolicy: IfNotPresent
+    command:
+      - /bin/sh
+      - -c
+      - "chown -R 1000:1000 /data && chmod -R 775 /data"
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      privileged: true
+    volumeMounts:
+      - name: data
+        mountPath: /data
+
+EOF
+
 # ── 네임스페이스 및 PV 생성 ───────────────────────────────────
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 

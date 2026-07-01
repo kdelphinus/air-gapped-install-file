@@ -71,3 +71,5 @@ postgresql:
   image:
     registry: docker.io
     repository: bitnamilegacy/postgresql
+
+preExtraInitContainers: []
