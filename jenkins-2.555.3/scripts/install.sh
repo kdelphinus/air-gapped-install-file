@@ -86,6 +86,39 @@ function cleanup_resources() {
   echo ""
 }
 
+prepare_hostpath_permissions() {
+    local jenkins_path="$1"
+    local gradle_path="/data/gradle-cache"
+    local current_context
+    current_context=$(kubectl config current-context 2>/dev/null || true)
+
+    echo "   → HostPath 디렉터리 권한 확인 중..."
+    if [[ "$current_context" == kind-* ]] && command -v kind >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+        local kind_cluster="${current_context#kind-}"
+        local kind_nodes
+        kind_nodes=$(kind get nodes --name "$kind_cluster" 2>/dev/null || true)
+        if [ -z "$kind_nodes" ]; then
+            echo -e "${YELLOW}[경고] kind 노드 목록을 확인하지 못했습니다. HostPath 권한 보정을 건너뜁니다.${NC}"
+            return 0
+        fi
+
+        while IFS= read -r node_name; do
+            [ -n "$node_name" ] || continue
+            echo "     - ${node_name}: ${jenkins_path}, ${gradle_path} -> 1000:1000"
+            docker exec "$node_name" sh -c "mkdir -p '$jenkins_path' '$gradle_path' && chown -R 1000:1000 '$jenkins_path' '$gradle_path'" >/dev/null
+        done <<< "$kind_nodes"
+        return 0
+    fi
+
+    echo -e "${YELLOW}[주의] HostPath 디렉터리는 Jenkins UID/GID 1000이 쓸 수 있어야 합니다.${NC}"
+    if [ -n "$TARGET_NODE" ]; then
+        echo "       대상 노드(${TARGET_NODE})에서 아래 명령을 먼저 실행하세요:"
+    else
+        echo "       Jenkins Pod가 배치될 모든 후보 노드에서 아래 명령을 먼저 실행하세요:"
+    fi
+    echo "       sudo mkdir -p '${jenkins_path}' '${gradle_path}'"
+    echo "       sudo chown -R 1000:1000 '${jenkins_path}' '${gradle_path}'"
+}
 # ==========================================
 # [1] 기존 설치 감지 및 메뉴
 # ==========================================
@@ -368,6 +401,7 @@ kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f 
 
 # HostPath PV 수동 생성
 if [ "$STORAGE_TYPE" == "hostpath" ]; then
+    prepare_hostpath_permissions "$HOSTPATH_DIR"
     echo "   → HostPath 영구볼륨(PV) 생성 중..."
     sed "s|/data/jenkins|${HOSTPATH_DIR}|g" "$PV_FILE" | kubectl apply -f -
 fi
