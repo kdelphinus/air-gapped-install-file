@@ -88,6 +88,8 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 * **도메인 라우팅 방식**: `http://argocd.devops.internal`
   * (Envoy Gateway나 인그레스 게이트웨이 IP를 hosts 파일에 추가해야 합니다.)
   * 예: `192.168.1.10  argocd.devops.internal`
+  * TLS 비활성화 선택 시 `install.sh`가 서버 insecure 모드를 자동 반영합니다.
+  * 적용 값: `configs.params.server.insecure: "true"`
 
 > [!WARNING]
 > 최초 로그인 완료 후 보안을 위해 비밀번호를 반드시 새로 지정하고, 초기 패스워드 비밀번호 Secret을 안전하게 파괴하여 주십시오:
@@ -106,6 +108,8 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
    configs:
      cm:
        url: "https://argocd.devops.internal"
+     params:
+       server.insecure: "false"
    server:
      service:
        type: NodePort

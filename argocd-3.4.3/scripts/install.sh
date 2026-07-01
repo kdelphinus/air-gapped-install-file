@@ -270,7 +270,11 @@ fi
 
 # 2. 인프라 가변 설정 오버라이드 덧붙이기
 PROTOCOL="http"
-[ "$TLS_ENABLED" == "true" ] && PROTOCOL="https"
+SERVER_INSECURE="true"
+if [ "$TLS_ENABLED" == "true" ]; then
+    PROTOCOL="https"
+    SERVER_INSECURE="false"
+fi
 ARGOCD_URL="${PROTOCOL}://${DOMAIN}"
 
 cat >> ./values-temp.yaml <<EOF
@@ -281,6 +285,8 @@ cat >> ./values-temp.yaml <<EOF
 configs:
   cm:
     url: "${ARGOCD_URL}"
+  params:
+    server.insecure: "${SERVER_INSECURE}"
 
 server:
   service:
