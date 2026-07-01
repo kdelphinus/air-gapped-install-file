@@ -136,26 +136,57 @@ if [ "$DO_UPGRADE" != "true" ]; then
     else
         IMAGE_SOURCE="local"
         
-        # CLI 감지
-        if command -v docker >/dev/null 2>&1; then
-            LOCAL_CLI="docker"
-        elif command -v ctr >/dev/null 2>&1; then
-            LOCAL_CLI="ctr"
-        else
-            echo -e "${RED}[오류] 로컬 이미지를 로드할 수 있는 docker 또는 ctr이 설치되어 있지 않습니다.${NC}"
+        shopt -s nullglob
+        IMAGE_ARCHIVES=(./images/*.tar*)
+        shopt -u nullglob
+        if [ ${#IMAGE_ARCHIVES[@]} -eq 0 ]; then
+            echo -e "${YELLOW}[경고] ./images/ 아래에 이미지 tar 파일이 없습니다.${NC}"
+            echo "       폐쇄망 설치에서는 이미지 tar를 준비하거나 Harbor 레지스트리 방식을 선택하세요."
             exit 1
         fi
 
-        echo -e "📦 ${GREEN}${LOCAL_CLI}${NC}를 사용하여 로컬 이미지를 containerd/docker에 로드 중..."
-        for tar_file in ./images/*.tar*; do
-            [ -e "$tar_file" ] || continue
-            echo "  → $(basename "$tar_file") 임포트 중"
-            if [ "$LOCAL_CLI" == "docker" ]; then
-                docker load -i "$tar_file" 2>/dev/null
-            else
-                sudo ctr -n k8s.io images import "$tar_file" 2>/dev/null
+        CURRENT_CONTEXT=$(kubectl config current-context 2>/dev/null || true)
+        if [[ "$CURRENT_CONTEXT" == kind-* ]] && command -v kind >/dev/null 2>&1; then
+            KIND_CLUSTER="${CURRENT_CONTEXT#kind-}"
+            LOCAL_CLI="kind"
+            echo -e "📦 kind 클러스터(${GREEN}${KIND_CLUSTER}${NC})에 로컬 이미지를 로드 중..."
+            for tar_file in "${IMAGE_ARCHIVES[@]}"; do
+                echo "  → $(basename "$tar_file") -> kind/${KIND_CLUSTER}"
+                kind load image-archive "$tar_file" --name "$KIND_CLUSTER"
+            done
+        else
+            NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+            if [ "${NODE_COUNT:-0}" -gt 1 ]; then
+                echo -e "${YELLOW}[경고] 멀티노드 클러스터(${NODE_COUNT} nodes)에서 로컬 이미지 방식을 선택했습니다.${NC}"
+                echo "       docker/ctr import는 현재 접속한 런타임에만 이미지를 넣습니다."
+                echo "       Jenkins Pod가 다른 노드에 스케줄되면 ImagePullBackOff가 발생할 수 있습니다."
+                read -p "현재 노드에만 이미지를 로드하고 계속하시겠습니까? (y/N): " CONTINUE_LOCAL_IMPORT
+                if [[ ! "$CONTINUE_LOCAL_IMPORT" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+                    echo -e "${RED}[오류] 로컬 이미지 import를 취소했습니다. Harbor 방식을 사용하거나 모든 노드에 이미지를 로드하세요.${NC}"
+                    exit 1
+                fi
             fi
-        done
+
+            # CLI 감지
+            if command -v docker >/dev/null 2>&1; then
+                LOCAL_CLI="docker"
+            elif command -v ctr >/dev/null 2>&1; then
+                LOCAL_CLI="ctr"
+            else
+                echo -e "${RED}[오류] 로컬 이미지를 로드할 수 있는 kind, docker 또는 ctr이 설치되어 있지 않습니다.${NC}"
+                exit 1
+            fi
+
+            echo -e "📦 ${GREEN}${LOCAL_CLI}${NC}를 사용하여 로컬 이미지를 containerd/docker에 로드 중..."
+            for tar_file in "${IMAGE_ARCHIVES[@]}"; do
+                echo "  → $(basename "$tar_file") 임포트 중"
+                if [ "$LOCAL_CLI" == "docker" ]; then
+                    docker load -i "$tar_file" 2>/dev/null
+                else
+                    sudo ctr -n k8s.io images import "$tar_file" 2>/dev/null
+                fi
+            done
+        fi
     fi
 
     # 2-2. OpenTofu 커스텀 이미지 사용 여부
@@ -235,12 +266,17 @@ else
 fi
 
 # 2. 커스텀 OpenTofu 이미지 설정 값 준비
+CONTROLLER_IMAGE_REGISTRY=""
 CONTROLLER_IMAGE_REPOSITORY=""
+CONTROLLER_IMAGE_PULL_POLICY="IfNotPresent"
 if [ "$USE_CUSTOM_IMAGE" == "true" ]; then
     echo "   → OpenTofu 커스텀 이미지(cmp-jenkins-full) 설정을 values-temp.yaml에 적용..."
-    CONTROLLER_IMAGE_REPOSITORY="cmp-jenkins-full"
     if [ "$IMAGE_SOURCE" == "harbor" ]; then
-        CONTROLLER_IMAGE_REPOSITORY="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/cmp-jenkins-full"
+        CONTROLLER_IMAGE_REGISTRY="${HARBOR_REGISTRY}"
+        CONTROLLER_IMAGE_REPOSITORY="${HARBOR_PROJECT}/cmp-jenkins-full"
+    else
+        CONTROLLER_IMAGE_REGISTRY="docker.io"
+        CONTROLLER_IMAGE_REPOSITORY="library/cmp-jenkins-full"
     fi
 fi
 
@@ -262,8 +298,10 @@ fi
 if [ -n "$CONTROLLER_IMAGE_REPOSITORY" ]; then
     cat >> ./values-temp.yaml <<EOF
   image:
+    registry: "${CONTROLLER_IMAGE_REGISTRY}"
     repository: "${CONTROLLER_IMAGE_REPOSITORY}"
     tag: "2.555.3"
+    pullPolicy: "${CONTROLLER_IMAGE_PULL_POLICY}"
 EOF
 fi
 

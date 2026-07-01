@@ -50,7 +50,7 @@ controller:
     # -- Controller image tag label
     tagLabel: jdk21
     # -- Controller image pull policy
-    pullPolicy: "Always"
+    pullPolicy: "IfNotPresent"
 
   # -- Number of replicas. Max 1. Can be set to 0 for maintenance scenarios.
   replicas: 1
