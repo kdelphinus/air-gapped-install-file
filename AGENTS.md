@@ -75,8 +75,15 @@ by OS:
   - <detail description line 1>
   - <detail description line 2>
 
-  Co-Authored-By: Antigravity <noreply@google.com>
+  <agent-specific co-author line>
   ```
+  The co-author line must identify the actual agent performing the commit:
+
+  | Agent | Co-author line |
+  | :--- | :--- |
+  | Antigravity | `Co-Authored-By: Antigravity <noreply@google.com>` |
+  | Codex | `Co-authored-by: Codex <codex@openai.com>` |
+
   Example:
   ```text
   fix: MetalLB v0.16.1 설치 스크립트 내 \$@ 변수 확장 방지를 위한 이스케이프 추가
