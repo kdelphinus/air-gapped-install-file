@@ -330,6 +330,11 @@ echo ""
 echo "========================================================"
 echo -e "🎉 구성 완료! (Jenkins v2.555.3 / Chart v5.9.26)"
 echo "설정 파일 : $CONF_FILE"
+if [ "$TLS_ENABLED" == "true" ]; then
+    PROTOCOL="https"
+else
+    PROTOCOL="http"
+fi
 echo "도메인    : $PROTOCOL://$DOMAIN"
 if [ "$SVC_TYPE" == "NodePort" ]; then
     echo "접속 포트 : 30000 (NodePort)"
@@ -339,4 +344,3 @@ echo "⏳ 초기 관리자(admin) 비밀번호 확인 방법:"
 echo "👉 kubectl get secret jenkins -n $NAMESPACE -o jsonpath=\"{.data.jenkins-admin-password}\" | base64 -d"
 echo ""
 kubectl get pods -n $NAMESPACE
-EOF
