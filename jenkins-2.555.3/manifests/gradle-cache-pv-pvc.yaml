@@ -23,6 +23,7 @@ metadata:
   labels:
     purpose: gradle-cache
 spec:
+  storageClassName: manual
   capacity:
     storage: 5Gi
   accessModes:
@@ -42,6 +43,7 @@ metadata:
   name: gradle-cache-pvc
   namespace: jenkins
 spec:
+  storageClassName: manual
   accessModes:
     - ReadWriteOnce
   resources:

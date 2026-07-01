@@ -234,20 +234,14 @@ else
         ./values-temp.yaml
 fi
 
-# 2. 커스텀 OpenTofu 이미지 설정 오버라이드 덧붙이기
+# 2. 커스텀 OpenTofu 이미지 설정 값 준비
+CONTROLLER_IMAGE_REPOSITORY=""
 if [ "$USE_CUSTOM_IMAGE" == "true" ]; then
     echo "   → OpenTofu 커스텀 이미지(cmp-jenkins-full) 설정을 values-temp.yaml에 적용..."
-    img_repo="cmp-jenkins-full"
+    CONTROLLER_IMAGE_REPOSITORY="cmp-jenkins-full"
     if [ "$IMAGE_SOURCE" == "harbor" ]; then
-        img_repo="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/cmp-jenkins-full"
+        CONTROLLER_IMAGE_REPOSITORY="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/cmp-jenkins-full"
     fi
-    cat >> ./values-temp.yaml <<EOF
-
-controller:
-  image:
-    repository: "${img_repo}"
-    tag: "2.555.3"
-EOF
 fi
 
 # 3. 인프라 가변 설정 오버라이드 덧붙이기
@@ -264,20 +258,12 @@ if [ "$SVC_TYPE" == "NodePort" ]; then
 EOF
 fi
 
-# 스토리지 볼륨 설정 추가
-if [ "$STORAGE_TYPE" == "hostpath" ]; then
+# 커스텀 Jenkins 컨트롤러 이미지 설정
+if [ -n "$CONTROLLER_IMAGE_REPOSITORY" ]; then
     cat >> ./values-temp.yaml <<EOF
-  persistence:
-    enabled: true
-    storageClass: "manual"
-    size: "20Gi"
-EOF
-else
-    cat >> ./values-temp.yaml <<EOF
-  persistence:
-    enabled: true
-    storageClass: "${STORAGE_CLASS}"
-    size: "20Gi"
+  image:
+    repository: "${CONTROLLER_IMAGE_REPOSITORY}"
+    tag: "2.555.3"
 EOF
 fi
 
@@ -286,6 +272,25 @@ if [ -n "$TARGET_NODE" ]; then
     cat >> ./values-temp.yaml <<EOF
   nodeSelector:
     kubernetes.io/hostname: "${TARGET_NODE}"
+EOF
+fi
+
+# 스토리지 볼륨 설정 추가. Jenkins chart의 persistence는 controller 하위가 아닌 top-level 키입니다.
+if [ "$STORAGE_TYPE" == "hostpath" ]; then
+    cat >> ./values-temp.yaml <<EOF
+
+persistence:
+  enabled: true
+  storageClass: "manual"
+  size: "20Gi"
+EOF
+else
+    cat >> ./values-temp.yaml <<EOF
+
+persistence:
+  enabled: true
+  storageClass: "${STORAGE_CLASS}"
+  size: "20Gi"
 EOF
 fi
 
