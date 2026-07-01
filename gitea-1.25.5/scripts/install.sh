@@ -2,61 +2,14 @@
 cd "$(dirname "$0")/.." || exit 1
 
 # ==================== Config ====================
-# ── 이미지 소스 선택 ──────────────────────────────────────────
-echo ""
-echo "이미지 소스를 선택하세요:"
-echo "  1) Harbor 레지스트리 사용 (사전에 images/upload_images_to_harbor_v3-lite.sh 실행 필요)"
-echo "  2) 로컬 tar 직접 import (이미 이미지가 로드된 경우 건너뜀)"
-read -p "선택 [1/2, 기본값: 1]: " IMAGE_SOURCE
-IMAGE_SOURCE="${IMAGE_SOURCE:-1}"
-
-if [ "${IMAGE_SOURCE}" = "1" ]; then
-    read -p "Harbor 레지스트리 주소 (예: 192.168.1.10:30002): " HARBOR_REGISTRY
-    if [ -z "${HARBOR_REGISTRY}" ]; then
-        echo "[오류] Harbor 레지스트리 주소가 필요합니다."; exit 1
-    fi
-    read -p "Harbor 프로젝트 (예: library): " HARBOR_PROJECT
-    if [ -z "${HARBOR_PROJECT}" ]; then
-        echo "[오류] Harbor 프로젝트가 필요합니다."; exit 1
-    fi
-elif [ "${IMAGE_SOURCE}" = "2" ]; then
-    echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
-    IMPORT_COUNT=0
-    for tar_file in ./images/*.tar; do
-        [ -e "${tar_file}" ] || continue
-        echo "  → $(basename "${tar_file}")"
-        sudo ctr -n k8s.io images import "${tar_file}"
-        IMPORT_COUNT=$((IMPORT_COUNT + 1))
-    done
-    [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
-    echo "  ${IMPORT_COUNT}개 이미지 import 완료"
-    HARBOR_REGISTRY=""
-    HARBOR_PROJECT=""
-else
-    echo "[오류] 1 또는 2를 선택하세요."; exit 1
-fi
-
-# ── DB 선택 ───────────────────────────────────────────────────
-echo ""
-echo "데이터베이스를 선택하세요:"
-echo "  1) SQLite (기본, 추가 이미지 없음, 개발/소규모 환경)"
-echo "  2) PostgreSQL (권장, images/postgresql.tar 필요)"
-read -p "선택 [1/2, 기본값: 1]: " DB_TYPE
-DB_TYPE="${DB_TYPE:-1}"
-
-# Networking
-NODEPORT_HTTP="30003"
-NODEPORT_SSH="30022"
-DOMAIN="gitea.devops.internal"     # HTTPRoute hostname, "" 이면 HTTPRoute 미생성
-GATEWAY_NAME="cluster-gateway"
-GATEWAY_NAMESPACE="envoy-gateway-system"
-# ================================================
-
 NAMESPACE="gitea"
 CHART_PATH="./charts/gitea"
 VALUES_FILE="./values.yaml"
 PV_FILE="./manifests/pv-gitea.yaml"
 HTTPROUTE_FILE="./manifests/httproute-gitea.yaml"
+CONF_FILE="./install.conf"
+NODE_LABEL_KEY="gitea-node"
+NODE_LABEL_VALUE="true"
 
 # CoreDNS 호스트 등록 함수
 add_coredns_host() {
@@ -77,57 +30,234 @@ ${ip} ${domain}"
     echo "  - CoreDNS: ${ip} ${domain} 등록 완료 (15초 내 자동 반영)"
 }
 
+# ── install.conf 로드 / 저장 ──────────────────────────────
+load_conf() {
+    if [ -f "$CONF_FILE" ]; then
+        source "$CONF_FILE"
+    fi
+}
+
+save_conf() {
+    cat > "$CONF_FILE" <<EOF
+# Gitea v1.25.5 설치 설정 — install.sh 에 의해 자동 관리됩니다.
+IMAGE_SOURCE="${IMAGE_SOURCE}"
+HARBOR_REGISTRY="${HARBOR_REGISTRY}"
+HARBOR_PROJECT="${HARBOR_PROJECT}"
+DB_TYPE="${DB_TYPE}"
+TARGET_NODE="${TARGET_NODE}"
+DOMAIN="${DOMAIN}"
+INSTALLED_VERSION="v1.25.5"
+EOF
+    echo "  ✅ 설정이 ${CONF_FILE} 에 저장되었습니다."
+}
+
+# ── 클린업 로직 ──────────────────────────────────────────
+cleanup_resources() {
+    local RESET_MODE=$1
+    echo ""
+    echo "🧹 [Clean Up] 기존 Gitea 리소스 제거 시작..."
+
+    if helm status gitea -n "${NAMESPACE}" >/dev/null 2>&1; then
+        echo "🗑️  Helm Release 'gitea' 삭제 중..."
+        helm uninstall gitea -n "${NAMESPACE}" --wait=false 2>/dev/null || true
+    fi
+
+    echo "⏳ 리소스 삭제 대기 중..."
+    sleep 5
+
+    echo "🗑️  HTTPRoute 삭제 중..."
+    kubectl delete httproute gitea-route -n "${NAMESPACE}" --ignore-not-found=true
+
+    if [ "$RESET_MODE" == "reset" ]; then
+        echo "🗑️  PVC 및 PV 삭제 중..."
+        kubectl delete pvc gitea-data-pvc -n "${NAMESPACE}" --ignore-not-found=true
+        kubectl delete pv gitea-data-pv --ignore-not-found=true
+        rm -f "$CONF_FILE"
+        echo "🗑️  설정 파일($CONF_FILE) 삭제 완료."
+    else
+        read -p "❓ [데이터 삭제] 기존 PVC/PV 데이터를 삭제하시겠습니까? (y/N): " DELETE_DATA
+        if [[ "${DELETE_DATA}" =~ ^[Yy]$ ]]; then
+            echo "🗑️  PVC 및 PV 삭제 중..."
+            kubectl delete pvc gitea-data-pvc -n "${NAMESPACE}" --ignore-not-found=true
+            kubectl delete pv gitea-data-pv --ignore-not-found=true
+        fi
+    fi
+
+    if kubectl get ns "${NAMESPACE}" >/dev/null 2>&1; then
+        echo "🗑️  Namespace '${NAMESPACE}' 삭제 중..."
+        kubectl delete ns "${NAMESPACE}" --ignore-not-found=true --timeout=30s
+    fi
+
+    echo "✅ 초기화 완료."
+    echo ""
+}
+
 echo ""
 echo "==========================================="
-echo " Installing Gitea 1.25.5 (Offline)"
-echo "==========================================="
-echo " Image Source : ${IMAGE_SOURCE}"
-echo " DB Type      : ${DB_TYPE} (1=SQLite, 2=PostgreSQL)"
-[ -n "${HARBOR_REGISTRY}" ] && echo " Harbor       : ${HARBOR_REGISTRY}/${HARBOR_PROJECT}"
+echo " Installing Gitea 1.25.5"
 echo "==========================================="
 
-# ── 기존 설치 감지 ────────────────────────────────────────────
-if kubectl get ns "${NAMESPACE}" > /dev/null 2>&1; then
+# ==========================================
+# [1] 기존 설치 감지 및 메뉴
+# ==========================================
+load_conf
+EXIST_HELM=$(helm status gitea -n "$NAMESPACE" >/dev/null 2>&1 && echo "yes" || echo "no")
+DO_UPGRADE=false
+
+if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     echo ""
-    echo "⚠️  기존 설치 감지: namespace '${NAMESPACE}' 가 존재합니다."
-    echo "  1) 삭제 후 재설치"
-    echo "  2) Helm upgrade (설정 변경 시)"
-    echo "  3) 취소"
-    read -p "선택 [1/2/3]: " REINSTALL_CHOICE
+    echo "⚠️  기존 설치 또는 설정이 감지되었습니다."
+    [ -f "$CONF_FILE" ] && echo "  📋 저장된 설정 정보:"
+    [ -n "$IMAGE_SOURCE" ] && echo "     - 이미지 소스  : $IMAGE_SOURCE"
+    [ "$IMAGE_SOURCE" == "harbor" ] && echo "     - Harbor 주소  : $HARBOR_REGISTRY/$HARBOR_PROJECT"
+    [ -n "$DB_TYPE" ] && echo "     - DB 타입      : $DB_TYPE (1=SQLite, 2=PostgreSQL)"
+    [ -n "$DOMAIN" ] && echo "     - 도메인       : $DOMAIN"
+    [ -n "$TARGET_NODE" ] && echo "     - 고정 노드    : $TARGET_NODE"
 
-    if [ "${REINSTALL_CHOICE}" = "1" ]; then
-        echo "기존 설치를 삭제합니다..."
-        helm uninstall gitea -n "${NAMESPACE}" --wait=false 2>/dev/null || true
-        sleep 5
-        kubectl delete httproute gitea-route -n "${NAMESPACE}" --ignore-not-found=true
-        kubectl delete ns "${NAMESPACE}" --ignore-not-found=true --timeout=30s
-        kubectl delete pvc gitea-data-pvc -n "${NAMESPACE}" --ignore-not-found=true 2>/dev/null || true
-    elif [ "${REINSTALL_CHOICE}" = "2" ]; then
-        DO_UPGRADE=true
+    echo ""
+    echo "동작을 선택하세요:"
+    echo "  1) 업그레이드 (저장된 설정 유지, Helm upgrade)"
+    echo "  2) 재설치     (기존 리소스 삭제 후 새로 설치)"
+    echo "  3) 초기화     (모든 리소스 및 설정 파일 완전 삭제)"
+    echo "  4) 취소"
+    read -p "선택 [1/2/3/4]: " ACTION
+
+    case "$ACTION" in
+        1) DO_UPGRADE=true ;;
+        2) cleanup_resources "reinstall" ;;
+        3) cleanup_resources "reset"; exit 0 ;;
+        *) echo "취소되었습니다."; exit 0 ;;
+    esac
+fi
+
+# ==========================================
+# [2] 설치 설정 입력 (새로 설치 시에만)
+# ==========================================
+if [ "$DO_UPGRADE" != "true" ]; then
+    # 2-1. 이미지 소스
+    echo ""
+    echo "이미지 소스를 선택하세요:"
+    echo "  1) Harbor 레지스트리 사용 (사전에 images/upload_images_to_harbor_v3-lite.sh 실행 필요)"
+    echo "  2) 로컬 이미지 직접 사용 (ctr import)"
+    echo "  3) 온라인 Pull 사용 (인터넷 가능 환경)"
+    read -p "선택 [1/2/3, 기본값 1]: " _IMG_SRC
+    _IMG_SRC="${_IMG_SRC:-1}"
+    if [ "$_IMG_SRC" = "1" ]; then
+        IMAGE_SOURCE="harbor"
+        read -p "Harbor 주소 (예: 192.168.1.10:30002): " HARBOR_REGISTRY
+        if [ -z "${HARBOR_REGISTRY}" ]; then
+            echo "[오류] Harbor 레지스트리 주소가 필요합니다."; exit 1
+        fi
+        read -p "Harbor 프로젝트 (예: library): " HARBOR_PROJECT
+        if [ -z "${HARBOR_PROJECT}" ]; then
+            echo "[오류] Harbor 프로젝트가 필요합니다."; exit 1
+        fi
+    elif [ "$_IMG_SRC" = "2" ]; then
+        IMAGE_SOURCE="local"
+        echo "로컬 tar 파일을 containerd(k8s.io)에 import 중..."
+        IMPORT_COUNT=0
+        for tar_file in ./images/*.tar; do
+            [ -e "${tar_file}" ] || continue
+            echo "  → $(basename "${tar_file}")"
+            sudo ctr -n k8s.io images import "${tar_file}"
+            IMPORT_COUNT=$((IMPORT_COUNT + 1))
+        done
+        [ "${IMPORT_COUNT}" -eq 0 ] && echo "[경고] ./images/ 에 tar 파일이 없습니다."
+        echo "  ${IMPORT_COUNT}개 이미지 import 완료"
+        HARBOR_REGISTRY=""
+        HARBOR_PROJECT=""
+    elif [ "$_IMG_SRC" = "3" ]; then
+        IMAGE_SOURCE="online"
+        HARBOR_REGISTRY=""
+        HARBOR_PROJECT=""
     else
-        echo "취소되었습니다."; exit 0
+        echo "[오류] 1, 2, 또는 3을 선택하세요."; exit 1
     fi
+
+    # 2-2. DB 선택
+    echo ""
+    echo "데이터베이스를 선택하세요:"
+    echo "  1) SQLite (기본, 추가 이미지 없음, 개발/소규모 환경)"
+    echo "  2) PostgreSQL (권장, images/postgresql.tar 필요)"
+    read -p "선택 [1/2, 기본값: 1]: " DB_TYPE
+    DB_TYPE="${DB_TYPE:-1}"
+
+    # 2-3. 도메인 설정
+    echo ""
+    read -p "HTTPRoute에 사용할 도메인 이름 (기본값: gitea.devops.internal, 공백 시 미생성): " DOMAIN
+    DOMAIN="${DOMAIN:-gitea.devops.internal}"
+
+    # 2-4. 노드 고정
+    echo ""
+    echo ">>> 사용 가능한 노드 목록:"
+    kubectl get nodes -o custom-columns="NAME:.metadata.name,STATUS:.status.conditions[-1].type,ROLES:.metadata.labels.node-role\.kubernetes\.io/worker"
+    echo ""
+    read -p "Gitea 를 배치할 노드 이름 (엔터 = 자동 배치): " TARGET_NODE
+fi
+
+save_conf
+
+# ==========================================
+# [3] 설정 파일(values.yaml) 업데이트 및 리소스 배포
+# ==========================================
+echo "🔧 설정 파일(${VALUES_FILE}) 업데이트 중..."
+
+# Gitea 이미지 설정 동기화
+if [ "${IMAGE_SOURCE}" = "harbor" ]; then
+    GITEA_REGISTRY="${HARBOR_REGISTRY}"
+    GITEA_REPOSITORY="${HARBOR_PROJECT}/gitea"
+else
+    GITEA_REGISTRY="docker.gitea.com"
+    GITEA_REPOSITORY="gitea"
+fi
+
+sed -i '/^image:/,/^service:/ s|registry: .*|registry: '"$GITEA_REGISTRY"'|' "${VALUES_FILE}"
+sed -i '/^image:/,/^service:/ s|repository: .*|repository: '"$GITEA_REPOSITORY"'|' "${VALUES_FILE}"
+
+# DB 및 PostgreSQL 동기화
+if [ "${DB_TYPE}" = "2" ]; then
+    DB_TYPE_NAME="postgres"
+    PG_ENABLED="true"
+    if [ "${IMAGE_SOURCE}" = "harbor" ]; then
+        PG_REGISTRY="${HARBOR_REGISTRY}"
+        PG_REPOSITORY="${HARBOR_PROJECT}/postgresql"
+    else
+        PG_REGISTRY="docker.io"
+        PG_REPOSITORY="bitnamilegacy/postgresql"
+    fi
+else
+    DB_TYPE_NAME="sqlite3"
+    PG_ENABLED="false"
+    PG_REGISTRY="docker.io"
+    PG_REPOSITORY="bitnamilegacy/postgresql"
+fi
+
+sed -i '/database:/,/^$/ s|DB_TYPE: .*|DB_TYPE: '"$DB_TYPE_NAME"'|' "${VALUES_FILE}"
+sed -i '/^postgresql:/,/^$/ s|enabled: .*|enabled: '"$PG_ENABLED"'|' "${VALUES_FILE}"
+sed -i '/^postgresql:/,/^$/ s|registry: .*|registry: '"$PG_REGISTRY"'|' "${VALUES_FILE}"
+sed -i '/^postgresql:/,/^$/ s|repository: .*|repository: '"$PG_REPOSITORY"'|' "${VALUES_FILE}"
+
+# 노드 고정 (nodeSelector) 동기화
+if [ -n "${TARGET_NODE}" ]; then
+    kubectl label nodes "${TARGET_NODE}" "${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}" --overwrite
+    
+    # values.yaml 에서 기존 nodeSelector 블록 삭제 후 새로 추가
+    sed -i '/^nodeSelector:/,/^$/d' "${VALUES_FILE}"
+    cat >> "${VALUES_FILE}" <<EOF
+nodeSelector:
+  ${NODE_LABEL_KEY}: "${NODE_LABEL_VALUE}"
+
+EOF
+else
+    sed -i '/^nodeSelector:/,/^$/d' "${VALUES_FILE}"
+    cat >> "${VALUES_FILE}" <<EOF
+nodeSelector: {}
+
+EOF
 fi
 
 # ── 네임스페이스 및 PV 생성 ───────────────────────────────────
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
-
-# ── 노드 고정 (선택) ──────────────────────────────────────────
-echo ""
-echo ">>> 사용 가능한 노드 목록:"
-kubectl get nodes -o custom-columns="NAME:.metadata.name,STATUS:.status.conditions[-1].type,ROLES:.metadata.labels.node-role\.kubernetes\.io/worker"
-echo ""
-read -p "Gitea 를 배치할 노드 이름 (엔터 = 자동 배치): " TARGET_NODE
-
-NODE_LABEL_KEY="gitea-node"
-NODE_LABEL_VALUE="true"
-NODE_FLAG=""
-
-if [ -n "${TARGET_NODE}" ]; then
-    kubectl label nodes "${TARGET_NODE}" "${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}" --overwrite
-    NODE_FLAG="--set-string nodeSelector.${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}"
-    # PV nodeAffinity 가 gitea-node=true 를 사용하므로 레이블 일치 확인
-fi
 
 echo ""
 echo ">>> PV/PVC 적용 중..."
@@ -141,39 +271,6 @@ kubectl annotate pvc gitea-data-pvc -n "${NAMESPACE}" \
     "meta.helm.sh/release-namespace=${NAMESPACE}" \
     --overwrite 2>/dev/null || true
 
-# ── Helm --set 인자 구성 ──────────────────────────────────────
-HELM_IMAGE_ARGS=()
-if [ "${IMAGE_SOURCE}" = "1" ]; then
-    GITEA_IMAGE_REGISTRY="${HARBOR_REGISTRY}"
-    GITEA_IMAGE_REPO="${HARBOR_PROJECT}/gitea"
-    HELM_IMAGE_ARGS=(
-        --set "image.registry=${GITEA_IMAGE_REGISTRY}"
-        --set "image.repository=${GITEA_IMAGE_REPO}"
-        --set "image.tag=1.25.5"
-    )
-fi
-
-HELM_DB_ARGS=()
-if [ "${DB_TYPE}" = "2" ]; then
-    # PostgreSQL 단일 인스턴스 활성화
-    PG_IMAGE_REPO="${HARBOR_PROJECT}/postgresql"
-    HELM_DB_ARGS=(
-        --set "postgresql.enabled=true"
-        --set "postgresql-ha.enabled=false"
-        --set "gitea.config.database.DB_TYPE=postgres"
-        --set "gitea.config.database.HOST=gitea-postgresql:5432"
-        --set "gitea.config.database.NAME=gitea"
-        --set "gitea.config.database.USER=gitea"
-        --set "gitea.config.database.PASSWD=gitea"
-    )
-    if [ "${IMAGE_SOURCE}" = "1" ]; then
-        HELM_DB_ARGS+=(
-            --set "postgresql.image.registry=${HARBOR_REGISTRY}"
-            --set "postgresql.image.repository=${PG_IMAGE_REPO}"
-        )
-    fi
-fi
-
 # ── Helm 설치 / 업그레이드 ────────────────────────────────────
 if [ ! -d "${CHART_PATH}" ]; then
     echo "[오류] Helm 차트 디렉토리 '${CHART_PATH}' 가 없습니다."; exit 1
@@ -183,10 +280,7 @@ echo ""
 echo ">>> Helm ${DO_UPGRADE:+upgrade}${DO_UPGRADE:-install} 실행 중..."
 helm upgrade --install gitea "${CHART_PATH}" \
     -n "${NAMESPACE}" \
-    -f "${VALUES_FILE}" \
-    "${HELM_IMAGE_ARGS[@]}" \
-    "${HELM_DB_ARGS[@]}" \
-    ${NODE_FLAG}
+    -f "${VALUES_FILE}"
 
 echo ""
 echo ">>> Gitea Pod 준비 대기 중 (최대 5분)..."
@@ -195,6 +289,11 @@ kubectl wait --timeout=5m -n "${NAMESPACE}" \
 kubectl rollout status deployment/gitea -n "${NAMESPACE}" --timeout=5m
 
 # ── NodePort 패치 ─────────────────────────────────────────────
+NODEPORT_HTTP="30003"
+NODEPORT_SSH="30022"
+GATEWAY_NAME="cluster-gateway"
+GATEWAY_NAMESPACE="envoy-gateway-system"
+
 echo ""
 echo ">>> NodePort 패치 중 (HTTP: ${NODEPORT_HTTP}, SSH: ${NODEPORT_SSH})..."
 sleep 5

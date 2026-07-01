@@ -42,5 +42,11 @@ if [[ "${DELETE_PV}" =~ ^[Yy]$ ]]; then
     echo "  ⚠️  호스트 데이터 (/data/gitea) 는 수동으로 삭제하세요."
 fi
 
+# install.conf 삭제
+if [ -f "./install.conf" ]; then
+    rm -f "./install.conf"
+    echo "🗑️  설정 파일(install.conf) 삭제 완료."
+fi
+
 echo ""
 echo "✅ Gitea 삭제 완료."
