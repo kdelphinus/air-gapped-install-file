@@ -126,15 +126,32 @@ if [ "$DO_UPGRADE" != "true" ]; then
     # 2-1. 이미지 소스 선택
     echo ""
     echo "이미지 소스를 선택하세요:"
-    echo "  1) Harbor 레지스트리 사용"
-    echo "  2) 로컬 이미지 직접 사용 (k8s containerd 또는 docker daemon 로드)"
-    read -p "선택 [1/2, 기본값 1]: " _IMG_SRC
-    if [ "${_IMG_SRC:-1}" == "1" ]; then
-        IMAGE_SOURCE="harbor"
-        read -p "Harbor 주소 (예: 192.168.1.10:30002): " HARBOR_REGISTRY
-        read -p "Harbor 프로젝트 (예: library): " HARBOR_PROJECT
-    else
-        IMAGE_SOURCE="local"
+    echo "  1) Harbor 레지스트리 사용 (폐쇄망 권장)"
+    echo "  2) 로컬 이미지 tar 직접 사용 (kind/docker/containerd 로드)"
+    echo "  3) 온라인 공개 레지스트리 사용 (인터넷 연결 필요)"
+    read -p "선택 [1/2/3, 기본값 1]: " _IMG_SRC
+    case "${_IMG_SRC:-1}" in
+        1)
+            IMAGE_SOURCE="harbor"
+            read -p "Harbor 주소 (예: 192.168.1.10:30002): " HARBOR_REGISTRY
+            read -p "Harbor 프로젝트 (예: library): " HARBOR_PROJECT
+            ;;
+        2)
+            IMAGE_SOURCE="local"
+            ;;
+        3)
+            IMAGE_SOURCE="online"
+            HARBOR_REGISTRY=""
+            HARBOR_PROJECT=""
+            echo "온라인 공개 레지스트리(docker.io)에서 Jenkins 기본 이미지를 pull합니다."
+            ;;
+        *)
+            echo -e "${RED}[오류] 이미지 소스는 1, 2, 3 중 하나를 선택해야 합니다.${NC}"
+            exit 1
+            ;;
+    esac
+
+    if [ "$IMAGE_SOURCE" == "local" ]; then
         
         shopt -s nullglob
         IMAGE_ARCHIVES=(./images/*.tar*)
@@ -191,11 +208,17 @@ if [ "$DO_UPGRADE" != "true" ]; then
 
     # 2-2. OpenTofu 커스텀 이미지 사용 여부
     echo ""
-    read -p "OpenTofu가 내장된 커스텀 이미지(cmp-jenkins-full)를 사용하겠습니까? (y/n, 기본 y): " _USE_CUSTOM
-    if [[ "${_USE_CUSTOM:-y}" =~ ^[Yy]$ ]]; then
-        USE_CUSTOM_IMAGE="true"
-    else
+    if [ "$IMAGE_SOURCE" == "online" ]; then
         USE_CUSTOM_IMAGE="false"
+        echo "온라인 공개 레지스트리 모드는 Jenkins 공식 이미지를 사용합니다."
+        echo "OpenTofu 커스텀 이미지가 필요하면 Harbor 또는 로컬 이미지 tar 방식을 선택하세요."
+    else
+        read -p "OpenTofu가 내장된 커스텀 이미지(cmp-jenkins-full)를 사용하겠습니까? (y/n, 기본 y): " _USE_CUSTOM
+        if [[ "${_USE_CUSTOM:-y}" =~ ^[Yy]$ ]]; then
+            USE_CUSTOM_IMAGE="true"
+        else
+            USE_CUSTOM_IMAGE="false"
+        fi
     fi
 
     # 2-3. 스토리지 타입 선택
@@ -254,15 +277,17 @@ echo ""
 echo "🔧 임시 설정 파일(values-temp.yaml) 생성 및 치환 중..."
 
 # 1. 템플릿 복사 분기
-if [ "${IMAGE_SOURCE}" = "local" ]; then
-    cp -f ./values-local.yaml ./values-temp.yaml
-else
+if [ "${IMAGE_SOURCE}" = "harbor" ]; then
     cp -f ./values.yaml ./values-temp.yaml
     # Harbor 사용 시 이미지 레지스트리 주소 치환
     sed -i \
         -e "s|<HARBOR_REGISTRY>|${HARBOR_REGISTRY}|g" \
         -e "s|<HARBOR_PROJECT>|${HARBOR_PROJECT}|g" \
         ./values-temp.yaml
+else
+    # local/online 모드는 공개 이미지 기본값을 사용합니다.
+    # local 모드는 위 단계에서 tar를 클러스터 런타임에 먼저 로드합니다.
+    cp -f ./values-local.yaml ./values-temp.yaml
 fi
 
 # 2. 커스텀 OpenTofu 이미지 설정 값 준비

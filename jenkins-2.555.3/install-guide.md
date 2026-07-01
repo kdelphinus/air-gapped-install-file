@@ -73,8 +73,10 @@ sudo ./scripts/install.sh
 * **이미지 소스**:
   * Harbor 방식은 `<HARBOR_REGISTRY>/<HARBOR_PROJECT>/...` 이미지를 사용합니다.
   * 로컬 방식은 `./images/*.tar*`를 클러스터 런타임에 먼저 로드합니다.
+  * 온라인 방식은 공개 레지스트리(`docker.io`)에서 Jenkins 기본 이미지를 pull합니다.
   * kind context에서는 `kind load image-archive --name <cluster>`를 자동 사용합니다.
   * 일반 멀티노드 클러스터에서는 모든 스케줄 가능 노드에 이미지를 로드해야 합니다.
+  * `cmp-jenkins-full` 커스텀 이미지는 Harbor 또는 로컬 방식에서 사용합니다.
 * **OpenTofu 커스텀 이미지 활성화 여부**: "y"를 선택하면, 빌드하여 업로드해 둔 `cmp-jenkins-full:2.555.3` 이미지를 `controller.image`로 오버라이드하여 배포합니다.
 * **스토리지 유형**: 
   * `hostpath` 선택 시 워커 노드의 특정 로컬 디바이스 경로(기본 `/data/jenkins`)를 영구 마운트하며, `manifests/pv-volume.yaml` 리소스를 먼저 생성해줍니다.
