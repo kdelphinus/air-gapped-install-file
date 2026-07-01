@@ -437,6 +437,11 @@ echo "설정 파일 : $CONF_FILE"
 echo "도메인    : $PROTOCOL://$DOMAIN"
 if [ "$SVC_TYPE" == "NodePort" ]; then
     echo "접속 포트 : ${NODE_PORT} (NodePort)"
+else
+    echo "노출 방식 : ClusterIP (Envoy HTTPRoute 수동 적용 필요)"
+    echo "HTTPRoute 적용:"
+    echo "  sed \"s|argocd.devops.internal|${DOMAIN}|g\" ./manifests/argocd-httproute.yaml | kubectl apply -f -"
+    echo "  kubectl get httproute argocd-route -n ${NAMESPACE}"
 fi
 echo "========================================================"
 echo "⏳ 초기 관리자(admin) 비밀번호 확인 방법:"

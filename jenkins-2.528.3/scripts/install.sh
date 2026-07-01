@@ -306,4 +306,8 @@ if [ -n "$DOMAIN" ]; then
     echo " - Windows: C:\\Windows\\System32\\drivers\\etc\\hosts"
     echo " - Linux/Mac: /etc/hosts"
     echo "==========================================="
+    echo ""
+    echo "Envoy HTTPRoute를 사용할 경우 아래 명령을 수동 적용하세요:"
+    echo "  sed \"s|jenkins.test.com|${DOMAIN}|g\" ./manifests/route-jenkins.yaml | kubectl apply -f -"
+    echo "  kubectl get httproute jenkins-route -n ${NAMESPACE}"
 fi

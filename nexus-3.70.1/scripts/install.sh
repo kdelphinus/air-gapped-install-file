@@ -57,3 +57,16 @@ helm upgrade --install $RELEASE_NAME "$CHART_PATH" \
   -f "$VALUES_FILE" \
   "${HELM_IMAGE_ARGS[@]}" \
   --wait
+
+cat <<EOF
+========================================================
+🎉 구성 완료! (Nexus Repository Manager v3.70.1)
+네임스페이스 : ${NAMESPACE}
+접속 포트   : 30081 (NodePort)
+접속 주소   : http://<NodeIP>:30081
+
+Envoy HTTPRoute를 사용할 경우 아래 명령을 수동 적용하세요:
+  sed "s|nexus.devops.internal|<NEXUS_DOMAIN>|g" ./manifests/httproute.yaml | kubectl apply -f -
+  kubectl get httproute nexus-route -n ${NAMESPACE}
+========================================================
+EOF
