@@ -55,7 +55,8 @@
 ```text
 argocd-3.4.3/
 ├── charts/          # Helm 차트 (argo-cd-9.5.21.tgz 원본 및 압축 해제 폴더)
-├── images/          # 컨테이너 이미지 (.tar 파일 저장 위치)
+├── images/          # 컨테이너 이미지 (.tar 파일) 및 Harbor 업로드 스크립트
+│   └── upload_images_to_harbor_v3-lite.sh
 ├── manifests/       # 정적 K8s 매니페스트 (HTTPRoute, PV/PVC 정의)
 │   ├── nas-pv.yaml
 │   ├── argocd-nodeport-svc.yaml
@@ -63,8 +64,7 @@ argocd-3.4.3/
 ├── scripts/         # 설치 및 운영 스크립트 (루트 상대 경로 실행 필수)
 │   ├── install.sh
 │   ├── uninstall.sh
-│   ├── download_assets_offline.sh
-│   └── upload_images_to_harbor_v3-lite.sh
+│   └── download_assets_offline.sh
 ├── values.yaml      # 기본 설정 값 (Harbor 기반 이미지 경로 포함)
 └── values.yaml.orig # values.yaml 백업 원본 (install.sh가 멱등성 보장용으로 사용)
 ```

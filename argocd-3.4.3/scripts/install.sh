@@ -279,56 +279,31 @@ if [ "$TLS_ENABLED" == "true" ]; then
 fi
 ARGOCD_URL="${PROTOCOL}://${DOMAIN}"
 
-cat > ./values-infra.yaml <<EOF
-# ArgoCD 3.4.3 인프라 및 가변 설정 — install.sh 에 의해 자동 관리됩니다.
-configs:
-  cm:
-    url: "${ARGOCD_URL}"
-  params:
-    server.insecure: "${SERVER_INSECURE}"
-
-server:
-  service:
-    type: "${SVC_TYPE}"
-EOF
-
-# NodePort 설정 시 포트 상세 매핑
-if [ "$SVC_TYPE" == "NodePort" ]; then
-    if [ "$TLS_ENABLED" == "true" ]; then
-        cat >> ./values-infra.yaml <<EOF
-    nodePortHttp: null
-    nodePortHttps: ${NODE_PORT}
-EOF
-    else
-        cat >> ./values-infra.yaml <<EOF
-    nodePortHttp: ${NODE_PORT}
-    nodePortHttps: null
-EOF
+# 3-1. global 설정 조립 (노드 고정 및 로컬 이미지)
+GLOBAL_CONTENT=""
+if [ -n "$TARGET_NODE" ] || [ "${IMAGE_SOURCE}" = "local" ]; then
+    GLOBAL_CONTENT="global:"
+    if [ -n "$TARGET_NODE" ]; then
+        GLOBAL_CONTENT="${GLOBAL_CONTENT}
+  nodeSelector:
+    kubernetes.io/os: linux
+    kubernetes.io/hostname: \"${TARGET_NODE}\""
+    fi
+    if [ "${IMAGE_SOURCE}" = "local" ]; then
+        GLOBAL_CONTENT="${GLOBAL_CONTENT}
+  image:
+    repository: quay.io/argoproj/argocd"
     fi
 fi
 
-# Redis HA 활성화 분기
+# 3-2. redis 활성화 상태 및 이미지 오버라이드 조립
+REDIS_EN_VAL="true"
+REDIS_HA_VAL="false"
 if [ "$REDIS_HA_ENABLED" == "true" ]; then
-    cat >> ./values-infra.yaml <<EOF
-
-redis:
-  enabled: false
-
-redis-ha:
-  enabled: true
-EOF
-else
-    cat >> ./values-infra.yaml <<EOF
-
-redis:
-  enabled: true
-
-redis-ha:
-  enabled: false
-EOF
+    REDIS_EN_VAL="false"
+    REDIS_HA_VAL="true"
 fi
 
-# 스토리지 볼륨 설정 분기
 REDIS_VOLUMES="[]"
 REDIS_MOUNTS="[]"
 REPO_VOLUMES="[]"
@@ -346,61 +321,79 @@ elif [ "$STORAGE_TYPE" == "nas" ] || [ "$STORAGE_TYPE" == "nfs-dynamic" ]; then
     REPO_MOUNTS="[{\"name\":\"argocd-repo-cache\",\"mountPath\":\"/home/argocd/cmp-server/cache\"}]"
 fi
 
-cat >> ./values-infra.yaml <<EOF
+# 로컬 이미지 모드일 때 redis 및 기타 컴포넌트 오버라이드 준비
+REDIS_IMAGE_OVERRIDE=""
+DEX_IMAGE_OVERRIDE=""
+REDIS_HA_IMAGE_OVERRIDE=""
+NOTI_IMAGE_OVERRIDE=""
+
+if [ "${IMAGE_SOURCE}" = "local" ]; then
+    REDIS_IMAGE_OVERRIDE="  image:
+    repository: ecr-public.aws.com/docker/library/redis
+  metrics:
+    image:
+      repository: ghcr.io/oliver006/redis_exporter"
+
+    DEX_IMAGE_OVERRIDE="dex:
+  image:
+    repository: ghcr.io/dexidp/dex"
+
+    REDIS_HA_IMAGE_OVERRIDE="redis-ha:
+  haproxy:
+    image:
+      repository: ecr-public.aws.com/docker/library/haproxy"
+
+    NOTI_IMAGE_OVERRIDE="notifications:
+  argocdExtensionInstaller:
+    image:
+      repository: quay.io/argoprojlabs/argocd-extension-installer"
+fi
+
+# NodePort 설정 시 포트 상세 매핑
+NODE_PORT_HTTP="null"
+NODE_PORT_HTTPS="null"
+if [ "$SVC_TYPE" == "NodePort" ]; then
+    if [ "$TLS_ENABLED" == "true" ]; then
+        NODE_PORT_HTTPS="${NODE_PORT}"
+    else
+        NODE_PORT_HTTP="${NODE_PORT}"
+    fi
+fi
+
+# 3-3. 단일 values-infra.yaml 작성 (중복 최상위 키 제거)
+cat > ./values-infra.yaml <<EOF
+# ArgoCD 3.4.3 인프라 및 가변 설정 — install.sh 에 의해 자동 관리됩니다.
+${GLOBAL_CONTENT}
+
+configs:
+  cm:
+    url: "${ARGOCD_URL}"
+  params:
+    server.insecure: "${SERVER_INSECURE}"
+
+server:
+  service:
+    type: "${SVC_TYPE}"
+    nodePortHttp: ${NODE_PORT_HTTP}
+    nodePortHttps: ${NODE_PORT_HTTPS}
 
 redis:
+  enabled: ${REDIS_EN_VAL}
   volumes: ${REDIS_VOLUMES}
   volumeMounts: ${REDIS_MOUNTS}
+${REDIS_IMAGE_OVERRIDE}
+
+redis-ha:
+  enabled: ${REDIS_HA_VAL}
+${REDIS_HA_IMAGE_OVERRIDE}
 
 repoServer:
   volumes: ${REPO_VOLUMES}
   volumeMounts: ${REPO_MOUNTS}
+
+${DEX_IMAGE_OVERRIDE}
+${NOTI_IMAGE_OVERRIDE}
 EOF
-
-# 노드 고정 배치(global.nodeSelector) 추가
-if [ -n "$TARGET_NODE" ]; then
-    cat >> ./values-infra.yaml <<EOF
-
-global:
-  nodeSelector:
-    kubernetes.io/os: linux
-    kubernetes.io/hostname: "${TARGET_NODE}"
-EOF
-fi
-
-# Local 모드일 경우 퍼블릭 오리지널 이미지 경로 덮어쓰기 설정 추가
-if [ "${IMAGE_SOURCE}" = "local" ]; then
-    cat >> ./values-infra.yaml <<EOF
-
-# ---------------------------------------------
-# Local Image Direct Load Overrides
-# ---------------------------------------------
-global:
-  image:
-    repository: quay.io/argoproj/argocd
-
-dex:
-  image:
-    repository: ghcr.io/dexidp/dex
-
-redis:
-  image:
-    repository: ecr-public.aws.com/docker/library/redis
-  metrics:
-    image:
-      repository: ghcr.io/oliver006/redis_exporter
-
-redis-ha:
-  haproxy:
-    image:
-      repository: ecr-public.aws.com/docker/library/haproxy
-
-notifications:
-  argocdExtensionInstaller:
-    image:
-      repository: quay.io/argoprojlabs/argocd-extension-installer
-EOF
-fi
 
 # ==========================================
 # [4] Kubernetes 리소스 준비 및 설치

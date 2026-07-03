@@ -10,8 +10,8 @@
 (Docker, skopeo, ctr 중 사용 가능한 CLI 중 하나와 Helm v3 설치 필수)
 
 ```bash
-# 스크립트 디렉토리로 이동
-cd argocd-3.4.3/scripts/
+# 컴포넌트 디렉토리로 이동
+cd argocd-3.4.3/
 
 # 실행 권한 부여
 chmod +x ./scripts/download_assets_offline.sh
@@ -40,7 +40,7 @@ sudo ./scripts/download_assets_offline.sh
 
 ```bash
 # 이미지 업로드 스크립트 실행 (sudo 권한 필요)
-sudo ./scripts/upload_images_to_harbor_v3-lite.sh
+sudo ./images/upload_images_to_harbor_v3-lite.sh
 ```
 
 ### 업로드 동작 원리:
@@ -62,7 +62,7 @@ sudo ./scripts/install.sh
 ### 스크립트 동작 및 입력 가이드
 1. **기존 상태 감지**: 기존 헬름 릴리즈가 존재하거나 `install.conf`가 존재할 시, `Upgrade(업그레이드)`, `Reinstall(재설치)`, `Reset(초기화)` 분기 메뉴를 제공합니다.
 2. **설정값 수집 및 보존**: 사용자가 입력한 모든 정보는 `install.conf` 파일에 저장되어 멱등성을 보장합니다.
-3. **YAML 동기화**: 입력된 설정은 `--set` 인자를 사용하는 대신 `values-override.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
+3. **YAML 동기화**: 입력된 설정은 `--set` 인자를 사용하는 대신 `values-infra.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
 
 ---
 
@@ -103,7 +103,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 ### 5.1. 수동 설치 진행
 1. `values.yaml` 내의 이미지 레지스트리 필드를 사설 Harbor 주소로 수동 교체합니다.
-2. `values-override.yaml` 파일을 수동으로 작성하여 다음과 같이 로컬 사양을 추가합니다.
+2. `values-infra.yaml` 파일을 수동으로 작성하여 다음과 같이 로컬 사양을 추가합니다.
    ```yaml
    configs:
      cm:
@@ -113,7 +113,8 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
    server:
      service:
        type: NodePort
-       nodePort: 30001
+       nodePortHttp: null
+       nodePortHttps: 30001
    ```
 3. 차트 원본과 설정 파일을 활용해 Helm 릴리즈를 적용합니다.
    ```bash
@@ -124,7 +125,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
    helm upgrade --install argocd ./charts/argo-cd \
      -n argocd --create-namespace \
      -f ./values.yaml \
-     -f ./values-override.yaml
+     -f ./values-infra.yaml
    ```
 
 ---
