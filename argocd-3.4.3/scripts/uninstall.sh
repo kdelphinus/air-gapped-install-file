@@ -43,8 +43,12 @@ fi
 
 if [ "$RESET_MODE" == "reset" ]; then
     rm -f "$CONF_FILE"
-    rm -f "./values-temp.yaml"
-    echo -e "🗑️  설정 파일 및 임시 파일 삭제 완료 (Reset)."
+    rm -f "./values-infra.yaml"
+    if [ -f "./values.yaml.orig" ]; then
+        mv -f ./values.yaml.orig ./values.yaml
+        echo "   → values.yaml을 백업본으로 복원했습니다."
+    fi
+    echo -e "🗑️  설정 파일 및 생성된 인프라 설정 파일 삭제 완료 (Reset)."
 fi
 
 echo -e "${GREEN}✅ 삭제 완료!${NC}"

@@ -12,8 +12,6 @@ CHART_PATH="./charts/argo-cd"
 CONF_FILE="./install.conf"
 NAS_PV_FILE="./manifests/nas-pv.yaml"
 
-# 임시 파일 자동 클린업 trap 설정
-trap 'rm -f ./values-temp.yaml' EXIT
 
 
 # 색상 코드
@@ -254,21 +252,25 @@ save_conf
 # [3] YAML 동기화 (Single Source of Truth)
 # ==========================================
 echo ""
-echo "🔧 임시 설정 파일(values-temp.yaml) 생성 및 치환 중..."
+echo "🔧 설정 파일(values.yaml, values-infra.yaml) 업데이트 중..."
 
-# 1. 템플릿 복사 분기
-if [ "${IMAGE_SOURCE}" = "local" ]; then
-    cp -f ./values-local.yaml ./values-temp.yaml
-else
-    cp -f ./values.yaml ./values-temp.yaml
-    # Harbor 사용 시 이미지 레지스트리 주소 치환
+# 1. values.yaml 원본 백업 및 복사 처리
+if [ ! -f "./values.yaml.orig" ]; then
+    cp -f ./values.yaml ./values.yaml.orig
+    echo "   → 원본 values.yaml 백업 생성 완료 (values.yaml.orig)"
+fi
+cp -f ./values.yaml.orig ./values.yaml
+
+# 2. 이미지 소스에 따른 values.yaml 치환 및 values-infra.yaml 초기화
+if [ "${IMAGE_SOURCE}" = "harbor" ]; then
+    # Harbor 사용 시 values.yaml 내의 플레이스홀더 치환
     sed -i \
         -e "s|<HARBOR_REGISTRY>|${HARBOR_REGISTRY}|g" \
         -e "s|<HARBOR_PROJECT>|${HARBOR_PROJECT}|g" \
-        ./values-temp.yaml
+        ./values.yaml
 fi
 
-# 2. 인프라 가변 설정 오버라이드 덧붙이기
+# 3. values-infra.yaml 생성 시작
 PROTOCOL="http"
 SERVER_INSECURE="true"
 if [ "$TLS_ENABLED" == "true" ]; then
@@ -277,11 +279,8 @@ if [ "$TLS_ENABLED" == "true" ]; then
 fi
 ARGOCD_URL="${PROTOCOL}://${DOMAIN}"
 
-cat >> ./values-temp.yaml <<EOF
-
-# ---------------------------------------------
-# Dynamic Configurations Added by install.sh
-# ---------------------------------------------
+cat > ./values-infra.yaml <<EOF
+# ArgoCD 3.4.3 인프라 및 가변 설정 — install.sh 에 의해 자동 관리됩니다.
 configs:
   cm:
     url: "${ARGOCD_URL}"
@@ -296,12 +295,12 @@ EOF
 # NodePort 설정 시 포트 상세 매핑
 if [ "$SVC_TYPE" == "NodePort" ]; then
     if [ "$TLS_ENABLED" == "true" ]; then
-        cat >> ./values-temp.yaml <<EOF
+        cat >> ./values-infra.yaml <<EOF
     nodePortHttp: null
     nodePortHttps: ${NODE_PORT}
 EOF
     else
-        cat >> ./values-temp.yaml <<EOF
+        cat >> ./values-infra.yaml <<EOF
     nodePortHttp: ${NODE_PORT}
     nodePortHttps: null
 EOF
@@ -310,7 +309,7 @@ fi
 
 # Redis HA 활성화 분기
 if [ "$REDIS_HA_ENABLED" == "true" ]; then
-    cat >> ./values-temp.yaml <<EOF
+    cat >> ./values-infra.yaml <<EOF
 
 redis:
   enabled: false
@@ -319,7 +318,7 @@ redis-ha:
   enabled: true
 EOF
 else
-    cat >> ./values-temp.yaml <<EOF
+    cat >> ./values-infra.yaml <<EOF
 
 redis:
   enabled: true
@@ -329,7 +328,7 @@ redis-ha:
 EOF
 fi
 
-# 스토리지 볼륨 설정 분기 (안전한 JSON 포맷 한 줄 치환)
+# 스토리지 볼륨 설정 분기
 REDIS_VOLUMES="[]"
 REDIS_MOUNTS="[]"
 REPO_VOLUMES="[]"
@@ -347,7 +346,7 @@ elif [ "$STORAGE_TYPE" == "nas" ] || [ "$STORAGE_TYPE" == "nfs-dynamic" ]; then
     REPO_MOUNTS="[{\"name\":\"argocd-repo-cache\",\"mountPath\":\"/home/argocd/cmp-server/cache\"}]"
 fi
 
-cat >> ./values-temp.yaml <<EOF
+cat >> ./values-infra.yaml <<EOF
 
 redis:
   volumes: ${REDIS_VOLUMES}
@@ -360,12 +359,46 @@ EOF
 
 # 노드 고정 배치(global.nodeSelector) 추가
 if [ -n "$TARGET_NODE" ]; then
-    cat >> ./values-temp.yaml <<EOF
+    cat >> ./values-infra.yaml <<EOF
 
 global:
   nodeSelector:
     kubernetes.io/os: linux
     kubernetes.io/hostname: "${TARGET_NODE}"
+EOF
+fi
+
+# Local 모드일 경우 퍼블릭 오리지널 이미지 경로 덮어쓰기 설정 추가
+if [ "${IMAGE_SOURCE}" = "local" ]; then
+    cat >> ./values-infra.yaml <<EOF
+
+# ---------------------------------------------
+# Local Image Direct Load Overrides
+# ---------------------------------------------
+global:
+  image:
+    repository: quay.io/argoproj/argocd
+
+dex:
+  image:
+    repository: ghcr.io/dexidp/dex
+
+redis:
+  image:
+    repository: ecr-public.aws.com/docker/library/redis
+  metrics:
+    image:
+      repository: ghcr.io/oliver006/redis_exporter
+
+redis-ha:
+  haproxy:
+    image:
+      repository: ecr-public.aws.com/docker/library/haproxy
+
+notifications:
+  argocdExtensionInstaller:
+    image:
+      repository: quay.io/argoprojlabs/argocd-extension-installer
 EOF
 fi
 
@@ -430,7 +463,8 @@ echo -e "🚀 [3/3] ArgoCD Helm 차트 배포 중... (${DO_UPGRADE:+업그레이
 if [ -d "$CHART_PATH" ]; then
     helm upgrade --install argocd "$CHART_PATH" \
         -n "$NAMESPACE" \
-        -f ./values-temp.yaml
+        -f ./values.yaml \
+        -f ./values-infra.yaml
 else
     echo -e "${RED}[오류] Helm 차트 디렉토리('${CHART_PATH}')가 존재하지 않습니다.${NC}"
     exit 1
