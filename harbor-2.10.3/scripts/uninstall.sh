@@ -38,9 +38,13 @@ else
     echo "➡️  PVC 및 PV 볼륨 데이터가 보존되었습니다."
 fi
 
-# 네임스페이스 삭제
-echo "🗑️  Namespace '$NAMESPACE' 삭제 중..."
-kubectl delete ns "$NAMESPACE" --ignore-not-found=true
+# 네임스페이스 삭제 (볼륨 보존 시 namespace 삭제로 인한 namespaced PVC cascade delete 방지)
+if [[ "$DELETE_VOLUMES" =~ ^[Yy]$ ]]; then
+    echo "🗑️  Namespace '$NAMESPACE' 삭제 중..."
+    kubectl delete ns "$NAMESPACE" --ignore-not-found=true
+else
+    echo "➡️  볼륨 보존 선택에 따라 Namespace '$NAMESPACE' 삭제 단계를 생략합니다."
+fi
 
 # 리셋 모드 시 설정 파일 제거
 if [ "$RESET_MODE" == "reset" ]; then

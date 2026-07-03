@@ -10,17 +10,23 @@
 - **문제**: `values-infra.yaml` 파일에 `harborAdminPassword`가 평문으로 기록되어 디바이스 디스크에 영구 보존되던 심각한 보안 결함이 있었습니다.
 - **해결**: `values-infra.yaml` 생성 템플릿에서 비밀번호 필드를 완전히 제거했습니다. 대신 `helm upgrade --install` 시점에 `--set harborAdminPassword="${ADMIN_PASSWORD}"` 파라미터를 통해 메모리 내에서 안전하게 주입되도록 변경하여 비밀번호 노출 경로를 물리적으로 원천 봉쇄했습니다.
 
-### ⚠️ [P0] Reinstall/Reset 시 PVC/PV 대화식 동의 보호 (데이터 안전 확보)
-- **문제**: 이전 코드에서 PV 삭제만 묻고 PVC는 무조건 삭제를 때려, 동적 StorageClass의 `Delete` Reclaim Policy 환경 등에서 컨테이너 이미지 데이터가 의도치 않게 자동 증발할 위험이 존재했습니다.
-- **해결**: `install.sh` 및 `uninstall.sh`에서 PVC와 PV의 수명주기를 하나로 묶어 **`DELETE_VOLUMES` 대화식 프롬프트(y/N)**로 일관되게 확인 절차를 거치도록 통합 수선했습니다. 이제 사용자의 명시적 동의 없이는 PVC 역시 삭제되지 않고 안전하게 보존됩니다.
+### ⚠️ [P0] Reinstall/Reset 시 PVC/PV 대화식 동의 보호 및 Namespace 무력화 차단
+- **문제**: PVC와 PV의 수명주기를 묶어 삭제 프롬프트(y/N)를 띄웠음에도, 사용자가 볼륨 **보존**(`n`)을 선택했을 때 바로 다음 라인에서 `kubectl delete ns harbor`가 실행되면서 K8s 특성상 namespaced 리소스인 PVC가 네임스페이스와 함께 강제로 연달아 삭제(Cascade Delete)되는 심각한 결함이 있었습니다.
+- **해결**:
+  - `install.sh` 및 `uninstall.sh`에서 PVC/PV 삭제 단계를 `DELETE_VOLUMES` 프롬프트로 묶어 완벽하게 격리 보호했습니다.
+  - 사용자가 볼륨 **보존**을 선택할 경우(`DELETE_VOLUMES`가 `y`가 아닌 경우), **네임스페이스 삭제(`kubectl delete ns`) 단계를 건너뛰도록 조건 분기를 추가**하여 볼륨과 데이터를 완전하고 안전하게 보존합니다.
 
 ### ⚙️ [P1] Upgrade 시 인프라 설정 복원 멱등성 해결
 - **문제**: 업그레이드 경로 선택 시 입력 단계를 스킵하면서, 헬름 조립에 쓰일 가변값들(`EXPOSE_TYPE`, `EXTERNAL_URL`, `PROTOCOL`, `ENABLE_CP_TOLERATIONS`, `TLS_CERT_SOURCE`)이 유실되어 빈 값으로 렌더링되던 버그가 있었습니다.
 - **해결**: `install.conf` 저장 명세에 런타임에서 계산된 해당 정보들을 누락 없이 모두 기재하고 로드하도록 확장하여, 업그레이드 구동 시 완벽하게 설정을 복원하도록 멱등성을 정착시켰습니다.
 
-### 🧩 [P1] YAML 최상위 키 중복 덮어쓰기 원천 해결
-- **문제**: 스케줄링 toleration 설정과 리소스 최소화 옵션을 동시 구동할 때 `nginx:`, `core:` 등 최상위 컴포넌트 키가 중복으로 덧붙여져 YAML 파서가 오작동할 수 있었습니다.
-- **해결**: 컴포넌트 단위로 루프를 돌며 toleration, nodeSelector, resources를 취합한 단일 컴포넌트 YAML 블록(`COMPONENTS_OVERRIDE_BLOCK`)을 선 조립 후 단일 `cat` 주입하도록 병합 리팩토링을 완료했습니다.
+### 🧩 [P1] YAML 최상위 키 중복 덮어쓰기 원천 해결 & local 문법 오류 해결
+- **문제**:
+  - 스케줄링 toleration 설정과 리소스 최소화 옵션을 동시 구동할 때 `nginx:`, `core:` 등 최상위 컴포넌트 키가 중복으로 덧붙여져 YAML 파서가 오작동할 수 있었습니다.
+  - 함수 외부의 메인 흐름 루프에서 `local` 예약어를 변수 정의에 사용하는 바람에 실제 런타임 구동 시 쉘 에러가 날 위기가 있었습니다.
+- **해결**:
+  - 컴포넌트 단위로 루프를 돌며 toleration, nodeSelector, resources를 취합한 단일 컴포넌트 YAML 블록(`COMPONENTS_OVERRIDE_BLOCK`)을 선 조립 후 주입하여 YAML 키 중복을 완벽히 제거했습니다.
+  - 함수 외부 영역의 변수 선언부에서 `local` 키워드를 완전히 걷어내어 정상 기동을 담보했습니다.
 
 ### 📝 [P2] `Manual Installation & Upgrade` 섹션 보강
 - **문제**: 표준 규격이 요구하는 수동 설치 수선 절차가 빠져 있었습니다.
@@ -50,5 +56,5 @@ helm template harbor ./charts/harbor -n harbor -f ./values.yaml -f ./values-infr
 ```
 
 ### 4) 워크트리 임시 파일(쓰레기 파일) 전수 정리
-- 미추적 공백 파일 `" "` 전수 삭제 완료.
-- `implementation_plan.md` 및 `task.md` 를 `.gitignore`에 정규 등록하여 깨끗하고 청결한 git status 상태를 도출했습니다.
+- 미추적 공백 파일 `" "` 및 `harbor-2.10.3/ ` 전수 삭제 완료.
+- `implementation_plan.md` 및 `task.md` 를 `.gitignore`에 정규 등록하여 `git status --short --untracked-files=all`이 완전히 Clean한 상태를 도출했습니다.

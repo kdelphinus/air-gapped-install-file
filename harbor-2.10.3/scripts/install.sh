@@ -88,10 +88,14 @@ function cleanup_resources() {
       echo "➡️  PVC 및 PV 볼륨 데이터가 보존되었습니다."
   fi
 
-  # 네임스페이스 삭제
-  if kubectl get ns "$HARBOR_NAMESPACE" > /dev/null 2>&1; then
-      echo "🗑️  네임스페이스($HARBOR_NAMESPACE) 삭제..."
-      kubectl delete ns "$HARBOR_NAMESPACE" --timeout=15s --wait=false 2>/dev/null
+  # 네임스페이스 삭제 (볼륨 보존 시 namespace 삭제로 인한 namespaced PVC cascade delete 방지)
+  if [[ "$DELETE_VOLUMES" =~ ^[Yy]$ ]]; then
+      if kubectl get ns "$HARBOR_NAMESPACE" > /dev/null 2>&1; then
+          echo "🗑️  네임스페이스($HARBOR_NAMESPACE) 삭제..."
+          kubectl delete ns "$HARBOR_NAMESPACE" --timeout=15s --wait=false 2>/dev/null
+      fi
+  else
+      echo "➡️  볼륨 보존 선택에 따라 네임스페이스($HARBOR_NAMESPACE) 삭제 단계를 생략합니다."
   fi
 
   # 리셋 모드 시 설정 및 런타임 파일 제거
@@ -461,10 +465,10 @@ for COMP in nginx portal core jobservice registry trivy exporter; do
 
     COMP_RES=""
     if [ "$MINIMIZE_RESOURCES" == "true" ]; then
-        local REQ_CPU="50m"
-        local REQ_MEM="128Mi"
-        local LIM_CPU="500m"
-        local LIM_MEM="512Mi"
+        REQ_CPU="50m"
+        REQ_MEM="128Mi"
+        LIM_CPU="500m"
+        LIM_MEM="512Mi"
         if [ "$COMP" == "nginx" ] || [ "$COMP" == "portal" ]; then
             REQ_MEM="64Mi"
             LIM_CPU="200m"
@@ -510,10 +514,10 @@ for COMP in database redis; do
 
     COMP_RES=""
     if [ "$MINIMIZE_RESOURCES" == "true" ]; then
-        local REQ_CPU="50m"
-        local REQ_MEM="128Mi"
-        local LIM_CPU="200m"
-        local LIM_MEM="512Mi"
+        REQ_CPU="50m"
+        REQ_MEM="128Mi"
+        LIM_CPU="200m"
+        LIM_MEM="512Mi"
         if [ "$COMP" == "redis" ]; then
             REQ_MEM="64Mi"
             LIM_CPU="100m"
