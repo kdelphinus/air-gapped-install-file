@@ -45,41 +45,43 @@ sudo ./scripts/load_images.sh
 sudo ctr -n k8s.io images list | grep harbor
 ```
 
-## 2단계: 설치 스크립트 설정
+## 2단계: 설치 및 환경 정보 입력
 
-`scripts/install.sh` 상단 Config 블록을 환경에 맞게 수정합니다.
+`install.sh`를 구동하면, 환경 정보가 대화식 인터프리터 프롬프트(CLI)로 안전하게 수집됩니다. 스크립트 파일을 직접 수정할 필요 없이, 입력된 변수 값은 컴포넌트 루트의 `install.conf` 및 `values-infra.yaml`에 보존되어 멱등성 있는 생명주기 제어가 가능하게 관리됩니다.
 
-| 변수 | 설명 | 예시 |
+| 인프라 환경 변수 | 설명 | 예시 |
 | :--- | :--- | :--- |
-| `HARBOR_NAMESPACE` | Harbor 설치 네임스페이스 | `harbor` |
-| `HARBOR_RELEASE_NAME` | Helm release 이름 | `harbor` |
-| `HELM_CHART_PATH` | Helm 차트 경로 | `./charts/harbor` |
-| `EXTERNAL_HOSTNAME` | Harbor 접근 호스트명 또는 IP | `<NODE_IP>` 또는 도메인 |
-| `SAVE_PATH` | PV 데이터 저장 경로 (호스트) | `/harbor/data` |
-| `NODE_NAME` | PV가 위치할 노드 이름 | `worker-node-01` |
-| `STORAGE_SIZE` | PVC 요청 크기 | `40Gi` |
+| `EXTERNAL_HOSTNAME` | Harbor 외부 접속 도메인명 또는 IP 주소 | `harbor.devops.internal` 또는 `<NODE_IP>` |
+| `TLS_ENABLED` / `TLS_SECRET_NAME` | 외부 HTTPS TLS 적용 여부 및 인증서 Secret 명 | `true` / `harbor-tls-secret` |
+| `STORAGE_MODE` | 볼륨 백엔드 모드 (HostPath / NFS 정적 / NFS SC) | `hostpath`, `nfs`, `nfs-dynamic` |
+| `SAVE_PATH` / `NODE_NAME` | HostPath 볼륨 사용 시 디렉토리 경로 및 매핑 노드명 | `/data/harbor` / `worker-01` |
+| `NFS_SERVER` / `NFS_PATH` | NFS 정적 PV 매핑 서버 IP 및 내보내기 디렉토리 경로 | `192.168.1.100` / `/nfs/harbor` |
+| `STORAGE_CLASS` | NFS 동적 프로비저닝을 위한 K8s StorageClass 명칭 | `nfs-client` |
+| `MINIMIZE_RESOURCES` | 개발/검증 목적의 리소스(Limits/Requests) 제한 최소화 여부 | `true` (기본값 `false`) |
 
-## 3단계: 설치 실행
+## 3단계: 설치 실행 및 대화형 설정
 
 ```bash
-chmod +x scripts/install.sh
+chmod +x scripts/install.sh scripts/uninstall.sh
 ./scripts/install.sh
 ```
 
 스크립트 실행 중 아래 항목을 인터랙티브하게 선택/입력합니다.
 
 1. **이미지 로드 방식 선택**:
-   - **`1` 로컬 tar 직접 import (권장)**: 하버가 아직 설치되지 않은 경우 선택합니다. (1단계에서 `load_images.sh`를 이미 실행했다면 이미 로드되어 있으므로 금방 넘어갑니다.)
-   - **`2` Harbor 레지스트리 사용**: 하버가 이미 설치되어 있고 재설치하거나 이미지가 이미 로드된 경우 선택합니다.
+   - **`1` 로컬 tar 직접 import (권장)**: 하버가 아직 설치되지 않은 최초 기동 단계에 선택하며 `images/*.tar`를 자동으로 임포트합니다.
+   - **`2` 로컬 이미지 수동 로드 완료**: 이미 각 노드에 컨테이너 이미지 캐싱이 완료된 경우 스킵할 때 사용합니다.
 2. **노출 방식 선택**:
-   - **`1` Envoy Gateway (기본)**: `http://harbor.devops.internal`처럼 Envoy가 외부에서 받을 URL을 입력합니다.
-   - **`2` NodePort 직접 접속**: `http://<NODE_IP>:30002`처럼 NodePort가 포함된 URL을 입력합니다. URL의 포트가 Helm `nodePort` 값으로도 반영됩니다.
-   - **`3` nginx Ingress**: `http://harbor.example.com` 또는 `https://harbor.example.com`처럼 Ingress 외부 URL을 입력합니다.
-3. **스토리지 타입 선택**:
-   - **`1` HostPath**: 단일 노드 테스트 환경용. 특정 노드 경로에 데이터를 저장합니다.
-   - **`2` NFS (정적 할당)**: 미리 생성된 NFS 서버/경로 정보를 입력하여 정적 PV/PVC를 생성합니다.
-   - **`3` NFS (동적 할당)**: `nfs-client` 등 클러스터에 설치된 StorageClass를 통해 볼륨을 자동 할당받습니다.
-4. **Harbor 관리자(`admin`) 비밀번호**: 최소 8자 이상의 비밀번호를 입력합니다.
+   - **`1` Envoy Gateway (기본)**: `http://harbor.devops.internal` 등 Envoy HTTPRoute를 통해 외부 주소 해석을 매핑할 도메인을 수집합니다.
+   - **`2` NodePort 직접 접속**: 포트 포워딩 또는 로컬 노드 포트로 직접 타겟팅해 기동합니다. (기본 HTTP 30002, HTTPS 30003 포트 오버라이드 가능)
+   - **`3` nginx Ingress**: 인그레스 제어기를 활용해 도메인 접근을 처리합니다.
+3. **리소스 사양 설정**:
+   - **개발 환경 리소스 최소화 (y/N)**: 가상머신 등 리소스가 한정된 로컬 개발 장비에서 테스트할 경우, nginx/core/database 등 주요 파드의 Requests/Limits 제한을 최하위 사양(64Mi/128Mi 단위)으로 축소 오버라이드하여 가동 안정성을 확보합니다.
+4. **스토리지 타입 선택**:
+   - **`1` HostPath**: 단일 노드 로컬 마운트용. 고정 타겟 노드 이름과 로컬 호스트 절대 경로를 지정합니다.
+   - **`2` NFS (정적 할당)**: 정적 볼륨 볼 바인딩. NFS 서버 및 익스포트 디렉토리를 제공하여 PV/PVC를 동적 빌드합니다.
+   - **`3` NFS SC (동적 할당)**: 클러스터의 StorageClass와 컴포넌트별 개별 DB/Redis 용량을 조절해 자동 스토리지 프로비저닝을 위임합니다.
+5. **Harbor 관리자(`admin`) 비밀번호**: 최초/재설치 시에만 대화식으로 패스워드 입력을 요구하며, 평문으로 설정파일에 저장되지 않고 보안을 보존합니다. (Upgrade 시에는 기존 K8s Secret에서 자동 추출 및 상속 기동)
 
 ## 4단계: Envoy HTTPRoute 적용 (Envoy Gateway 선택 시)
 
@@ -249,10 +251,14 @@ sudo ctr -n k8s.io images push \
   <NODE_IP>:30002/library/my-image:v1
 ```
 
-## 삭제
+## 삭제 및 리셋
 
 ```bash
+# 기본 삭제 (설정 및 생성된 인프라 values 파일 유지)
 ./scripts/uninstall.sh
+
+# 완전 리셋 (저장된 설정 및 인프라 values 파일도 모두 삭제)
+./scripts/uninstall.sh --reset
 ```
 
 ## 보안 고려사항
