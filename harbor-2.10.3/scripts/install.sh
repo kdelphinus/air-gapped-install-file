@@ -1,115 +1,114 @@
 #!/bin/bash
-# 스크립트 위치 기준으로 컴포넌트 루트로 이동 (scripts/ 하위에서 실행해도 경로 안전)
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동
 cd "$(dirname "$0")/.." || exit 1
 
-# [수정] 스크립트 전체 Root 체크 제거 (MJKO 사용자 권한으로 kubectl 실행을 위해)
-# 이미지 로드 등 sudo가 필요한 부분은 내부적으로 sudo를 사용합니다.
-
-set -e # 오류 발생 시 즉시 스크립트 중단
-
-# 임시 파일 정리 (정상/비정상 종료 모두 대응)
-cleanup() { rm -f "$VALUES_FILE" "$PV_PVC_FILE" 2>/dev/null; }
-trap cleanup EXIT
-
-# =================================================================
-# --- 설정 변수 (사용자 환경에 맞게 이 부분을 수정하세요) ---
-# =================================================================
-
-# 1. 기본 정보
+# ==========================================
+# [설정] 기본 변수
+# ==========================================
 HARBOR_NAMESPACE="harbor"
 HARBOR_RELEASE_NAME="harbor"
 PV_NAME="harbor-pv"
 PVC_NAME="harbor-pvc"
-
-# 2. 폐쇄망 환경 설정
 HELM_CHART_PATH="./charts/harbor"
+CONF_FILE="./install.conf"
+PV_PVC_FILE="./manifests/harbor-persistence-infra.yaml"
 
-# 3. 외부 접속 설정 (TLS 사용 시 인증서의 domain과 일치 해야함)
-EXTERNAL_HOSTNAME="" # 환경에 맞게 설정 (예: 172.31.63.195 또는 harbor.example.com)
-HTTP_NODEPORT="30002"
-HTTPS_NODEPORT="30003"
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-# 4. 영구 저장소 설정
-STORAGE_SIZE="50Gi"
-# 스토리지 모드: "hostpath" 또는 "nfs" (빈 값이면 실행 시 선택)
-STORAGE_MODE=""
-# HostPath 설정
-SAVE_PATH="/data/harbor"
-NODE_NAME="" # 빈 값이면 자동 감지
-# NFS 설정
-NFS_SERVER="" # 예: 192.168.1.100
-NFS_PATH=""   # 예: /nfs/harbor
-
-# 5. 고급 설정 (Ingress 선택 시 사용 및 파드 고정 타겟 노드 지정)
-INGRESS_CLASS="nginx"
-TARGET_NODE_NAME="" # 모든 Harbor 파드를 특정 노드에 고정하고 싶을 때 노드명 입력 (빈 값이면 실행 중 프롬프트로 확인)
-
-# =================================================================
-# --- 메인 스크립트 로직 ---
-# =================================================================
-
-# --- 사전 요구사항 검사 함수 ---
-check_command() {
-    if ! command -v "$1" &> /dev/null; then 
-        # 일반 PATH에서 못 찾으면 사용자 홈 디렉토리 .local/bin 에서도 시도
-        local USER_HOME=$(eval echo "~$SUDO_USER")
-        if [ -x "${USER_HOME}/.local/bin/$1" ]; then
-            alias "$1"="${USER_HOME}/.local/bin/$1"
-        else
-            echo "오류: '$1' 명령어를 찾을 수 없습니다."
-            exit 1
-        fi
+# ── install.conf 로드 / 저장 ──────────────────────────────
+load_conf() {
+    if [ -f "$CONF_FILE" ]; then
+        source "$CONF_FILE"
     fi
 }
 
-# 쉘 명령어 캐시 초기화
-hash -r
+save_conf() {
+    cat > "$CONF_FILE" <<EOF
+# Harbor 2.10.3 설치 설정 — install.sh 에 의해 자동 관리됩니다.
+IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE}"
+EXPOSE_CHOICE="${EXPOSE_CHOICE}"
+EXTERNAL_HOSTNAME="${EXTERNAL_HOSTNAME}"
+HTTP_NODEPORT="${HTTP_NODEPORT}"
+HTTPS_NODEPORT="${HTTPS_NODEPORT}"
+TLS_ENABLED="${TLS_ENABLED}"
+TLS_SECRET_NAME="${TLS_SECRET_NAME}"
+STORAGE_MODE="${STORAGE_MODE}"
+STORAGE_SIZE="${STORAGE_SIZE}"
+SAVE_PATH="${SAVE_PATH}"
+NODE_NAME="${NODE_NAME}"
+NFS_SERVER="${NFS_SERVER}"
+NFS_PATH="${NFS_PATH}"
+STORAGE_CLASS="${STORAGE_CLASS}"
+DATABASE_SIZE="${DATABASE_SIZE}"
+REDIS_SIZE="${REDIS_SIZE}"
+JOBLOG_SIZE="${JOBLOG_SIZE}"
+TRIVY_SIZE="${TRIVY_SIZE}"
+ALLOW_CP_TAINT="${ALLOW_CP_TAINT}"
+TARGET_NODE_NAME="${TARGET_NODE_NAME}"
+MINIMIZE_RESOURCES="${MINIMIZE_RESOURCES}"
+INSTALLED_VERSION="v2.10.3"
+EOF
+    echo -e "  ✅ 설정이 ${GREEN}${CONF_FILE}${NC} 에 저장되었습니다."
+}
 
-# 명령어 경로 결정 (I/O error 방지를 위해 실제 바이너리 위치를 직접 찾아 할당)
-KUBECTL_CMD=$(command -v kubectl || which kubectl 2>/dev/null || echo "kubectl")
-HELM_CMD=$(command -v helm || which helm 2>/dev/null || echo "helm")
+# ==========================================
+# [함수] 클린업 로직
+# ==========================================
+function cleanup_resources() {
+  local RESET_MODE=$1 # "reset" 이면 install.conf 도 삭제
+  echo ""
+  echo -e "🧹 ${YELLOW}[Clean Up] 기존 Harbor 리소스 제거 시작...${NC}"
 
-# 만약 sudo로 실행 중이라면, 사용자의 KUBECONFIG를 상속받도록 시도
-if [ -n "$SUDO_USER" ] && [ -z "$KUBECONFIG" ]; then
-    USER_HOME=$(eval echo "~$SUDO_USER")
-    if [ -f "${USER_HOME}/.kube/config" ]; then
-        export KUBECONFIG="${USER_HOME}/.kube/config"
-    elif [ -f "/etc/rancher/k3s/k3s.yaml" ]; then
-        export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+  # Helm Uninstall
+  if helm status "$HARBOR_RELEASE_NAME" -n "$HARBOR_NAMESPACE" >/dev/null 2>&1; then
+      echo "⏳ Helm 차트 삭제 중..."
+      helm uninstall "$HARBOR_RELEASE_NAME" -n "$HARBOR_NAMESPACE" --wait=false 2>/dev/null
+      sleep 3
+  fi
+
+  # PVC 삭제
+  echo "🗑️  Harbor PVC 삭제 중..."
+  kubectl delete pvc -n "$HARBOR_NAMESPACE" --all --timeout=15s --wait=false 2>/dev/null
+
+  # PV 삭제 여부 ( Retain 정책 보존을 위해 별도 대화형 프롬프트 강제 )
+  echo ""
+  read -p "⚠️  PV도 물리적으로 삭제하시겠습니까? (Harbor 저장 이미지 데이터 전체 유실 주의) (y/n): " DELETE_PV
+  if [[ "$DELETE_PV" =~ ^[Yy]$ ]]; then
+      echo "🗑️  PV 삭제 중..."
+      kubectl delete pv "$PV_NAME" --ignore-not-found=true 2>/dev/null
+      kubectl get pv 2>/dev/null | grep "$HARBOR_NAMESPACE" | awk '{print $1}' | xargs -r kubectl delete pv 2>/dev/null
+  fi
+
+  # 네임스페이스 삭제
+  if kubectl get ns "$HARBOR_NAMESPACE" > /dev/null 2>&1; then
+      echo "🗑️  네임스페이스($HARBOR_NAMESPACE) 삭제..."
+      kubectl delete ns "$HARBOR_NAMESPACE" --timeout=15s --wait=false 2>/dev/null
+  fi
+
+  # 리셋 모드 시 설정 및 런타임 파일 제거
+  if [ "$RESET_MODE" == "reset" ]; then
+      rm -f "$CONF_FILE"
+      rm -f "./values-infra.yaml"
+      rm -f "$PV_PVC_FILE"
+      echo -e "🗑️  설정 파일 및 생성된 인프라 파일 삭제 완료 (Reset)."
+  fi
+
+  echo -e "${GREEN}✅ 초기화 작업이 완료되었습니다.${NC}"
+  echo ""
+}
+
+# 쉘 명령어 사전 체크
+check_command() {
+    if ! command -v "$1" &> /dev/null; then 
+        echo -e "${RED}[오류] '$1' 명령어를 찾을 수 없습니다. 설치 후 다시 진행하십시오.${NC}"
+        exit 1
     fi
-fi
+}
 
-echo "Harbor 폐쇄망 설치 스크립트를 시작합니다."
-
-# 0. 이미지 로드 단계 추가
-echo ""
-echo "0. 이미지 로드 방식 선택:"
-echo "  1) 로컬 tar 직접 import (images/load_images_locally.sh 실행과 동일)"
-echo "  2) Harbor 레지스트리 사용 (이미 이미지가 로드된 경우)"
-read -p "선택 [1/2, 기본값 1]: " IMAGE_LOAD_CHOICE
-IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE:-1}"
-
-if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
-    echo "✅ 워커 노드에 하버 이미지가 로드되어 있어야 합니다."
-else
-    echo "➡️ 이미 이미지가 로드되어 있거나 레지스트리를 사용한다고 가정합니다."
-fi
-
-# 1. 도구 및 파일 확인
-check_command kubectl
-check_command helm
-if [ ! -e "$HELM_CHART_PATH" ]; then
-    echo "오류: Helm 차트 '$HELM_CHART_PATH'을 찾을 수 없습니다."
-    exit 1
-fi
-
-# 접속 URL 기본값 계산 및 파싱 함수
-DETECTED_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')
-if [ -z "$DETECTED_IP" ]; then
-    DETECTED_IP=$(hostname -I | awk '{print $1}')
-fi
-DETECTED_IP="${DETECTED_IP:-127.0.0.1}"
-
+# 접속 URL 기본값 파싱
 parse_harbor_url() {
     local raw_url="$1"
     URL_PROTOCOL="http"
@@ -129,296 +128,245 @@ parse_harbor_url() {
     URL_NORMALIZED="${URL_PROTOCOL}://${URL_HOSTPORT}"
 }
 
+# ==========================================
+# [1] 기존 설치 감지 및 메뉴
+# ==========================================
+load_conf
+check_command kubectl
+check_command helm
 
-# ---------------------------
-# 2. 기존 Harbor 설치 확인 및 삭제 처리
-# ---------------------------
-RELEASE_EXISTS=$(helm list -n "$HARBOR_NAMESPACE" -q | grep -w "$HARBOR_RELEASE_NAME" || true)
-PVC_EXISTS=$(kubectl get pvc -n "$HARBOR_NAMESPACE" -o name | grep "$PVC_NAME" || true)
-PV_EXISTS=$(kubectl get pv -o name | grep "$PV_NAME" || true)
-SVC_EXISTS=$(kubectl get svc -n "$HARBOR_NAMESPACE" -l "release=$HARBOR_RELEASE_NAME" -o name || true)
+EXIST_HELM=$(helm status "$HARBOR_RELEASE_NAME" -n "$HARBOR_NAMESPACE" > /dev/null 2>&1 && echo "yes" || echo "no")
+DO_UPGRADE=false
 
-if [[ -n "$RELEASE_EXISTS" || -n "$PVC_EXISTS" || -n "$PV_EXISTS" || -n "$SVC_EXISTS" ]]; then
-    echo "⚠️ 기존 Harbor 리소스가 감지되었습니다."
-    read -p "기존 Harbor를 완전히 삭제하고 새로 설치하시겠습니까? (y/N): " DELETE_EXISTING
-    if [[ "$DELETE_EXISTING" =~ ^[yY]([eE][sS])?$ ]]; then
+if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
+    echo ""
+    echo -e "⚠️  ${YELLOW}기존 설치 또는 설정이 감지되었습니다.${NC}"
+    [ -f "$CONF_FILE" ] && echo "  📋 저장된 설정 정보:"
+    [ -n "$EXTERNAL_HOSTNAME" ] && echo "     - 접속 호스트  : $EXTERNAL_HOSTNAME"
+    [ -n "$STORAGE_MODE" ] && echo "     - 스토리지 모드: $STORAGE_MODE (크기: $STORAGE_SIZE)"
+    [ -n "$TLS_ENABLED" ] && echo "     - TLS 활성화   : $TLS_ENABLED"
+    [ -n "$MINIMIZE_RESOURCES" ] && echo "     - 리소스 최소화: $MINIMIZE_RESOURCES"
 
-        # Helm 릴리스 삭제
-        if [[ -n "$RELEASE_EXISTS" ]]; then
-            echo "➡️ Helm 릴리스 삭제 중..."
-            helm uninstall "$HARBOR_RELEASE_NAME" -n "$HARBOR_NAMESPACE" || true
-        fi
+    echo ""
+    echo "동작을 선택하세요:"
+    echo "  1) 업그레이드 (저장된 설정 유지, Helm upgrade)"
+    echo "  2) 재설치     (기존 리소스 삭제 후 새로 설치)"
+    echo "  3) 초기화     (모든 리소스 및 설정 파일 완전 삭제)"
+    echo "  4) 취소"
+    read -p "선택 [1/2/3/4]: " ACTION
 
-        # PVC 삭제
-        echo "➡️ PVC 삭제 확인..."
-        PVC_LIST=$(kubectl get pvc -n "$HARBOR_NAMESPACE" --no-headers --ignore-not-found | awk '{print $1}')
-        if [[ -n "$PVC_LIST" ]]; then
-            echo "➡️ PVC 삭제 중..."
-            echo "$PVC_LIST" | xargs -r kubectl delete pvc -n "$HARBOR_NAMESPACE"
-            for pvc in $PVC_LIST; do
-                kubectl wait --for=delete pvc/"$pvc" -n "$HARBOR_NAMESPACE" --timeout=60s || true
-            done
-        else
-            echo "➡️ PVC가 존재하지 않아 삭제할 필요 없음"
-        fi
-
-        # PV 삭제
-        echo "➡️ PV 삭제 확인..."
-        PV_LIST=$(kubectl get pv --no-headers --ignore-not-found | grep "$HARBOR_RELEASE_NAME" | awk '{print $1}')
-        if [[ -n "$PV_LIST" ]]; then
-            echo "➡️ PV 삭제 중..."
-            echo "$PV_LIST" | xargs -r kubectl delete pv
-            for pv in $PV_LIST; do
-                kubectl wait --for=delete pv/"$pv" --timeout=60s || true
-            done
-        else
-            echo "➡️ PV가 존재하지 않아 삭제할 필요 없음"
-        fi
-
-        # Service 삭제
-        if [[ -n "$SVC_EXISTS" ]]; then
-            echo "➡️ Service 삭제 중..."
-            kubectl delete svc -n "$HARBOR_NAMESPACE" -l "release=$HARBOR_RELEASE_NAME" --ignore-not-found
-        fi
-
-    else
-        echo "❌ 설치를 중단합니다."
-        exit 1
-    fi
+    case "$ACTION" in
+        1) DO_UPGRADE=true ;;
+        2) cleanup_resources "reinstall" ;;
+        3) cleanup_resources "reset"; exit 0 ;;
+        *) echo "취소되었습니다."; exit 0 ;;
+    esac
 fi
 
-# 3. 노출 방식 선택
-echo ""
-echo "Harbor 노출 방식을 선택하세요:"
-echo "  1) Envoy Gateway (기본, HTTPRoute로 도메인 라우팅)"
-echo "  2) NodePort 직접 접속"
-echo "  3) nginx Ingress"
-read -p "선택 [1/2/3, 기본값 1]: " EXPOSE_CHOICE
-EXPOSE_CHOICE="${EXPOSE_CHOICE:-1}"
+# ==========================================
+# [2] 설치 설정 입력 (새로 설치 시에만)
+# ==========================================
+if [ "$DO_UPGRADE" != "true" ]; then
+    echo ""
+    echo "0. 이미지 로드 방식 선택:"
+    echo "  1) 로컬 tar 직접 import (images/*.tar 파일들 containerd에 로딩)"
+    echo "  2) 로컬 이미지 수동 로드 완료 (이미 이미지가 로드된 경우)"
+    read -p "선택 [1/2, 기본값 1]: " IMAGE_LOAD_CHOICE
+    IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE:-1}"
 
-PROTOCOL="http"
-TLS_SECRET_NAME=""
-TLS_ENABLED="false"
-TLS_CERT_SOURCE="none"
+    if [ "$IMAGE_LOAD_CHOICE" == "1" ]; then
+        echo -e "📦 containerd(k8s.io)에 로컬 이미지를 로드 중..."
+        for tar_file in ./images/*.tar*; do
+            [ -e "$tar_file" ] || continue
+            echo "  → $(basename "$tar_file") 임포트 중"
+            sudo ctr -n k8s.io images import "$tar_file" 2>/dev/null || true
+        done
+    fi
 
-case "$EXPOSE_CHOICE" in
-    1)
-        EXPOSE_TYPE="clusterIP"
-        DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-harbor.devops.internal}"
-        echo "Envoy Gateway 방식으로 설치합니다."
-        echo "  → Envoy HTTPRoute(manifests/route-harbor.yaml)로 도메인 라우팅을 설정하세요."
-        read -p "Harbor Envoy 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
-        EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
-        parse_harbor_url "$EXTERNAL_URL"
-        PROTOCOL="$URL_PROTOCOL"
-        EXTERNAL_HOSTNAME="$URL_HOST"
-        EXTERNAL_URL="$URL_NORMALIZED"
-        ;;
-    2)
-        EXPOSE_TYPE="nodePort"
-        DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-$DETECTED_IP}:${HTTP_NODEPORT}"
-        echo "NodePort 직접 접속 방식으로 설치합니다."
-        read -p "Harbor NodePort 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
-        EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
-        parse_harbor_url "$EXTERNAL_URL"
-        PROTOCOL="$URL_PROTOCOL"
-        EXTERNAL_HOSTNAME="$URL_HOST"
-        EXTERNAL_URL="$URL_NORMALIZED"
-        if [ -n "$URL_PORT" ]; then
-            if [[ "$PROTOCOL" == "https" ]]; then
-                HTTPS_NODEPORT="$URL_PORT"
+    DETECTED_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')
+    if [ -z "$DETECTED_IP" ]; then
+        DETECTED_IP=$(hostname -I | awk '{print $1}')
+    fi
+    DETECTED_IP="${DETECTED_IP:-127.0.0.1}"
+
+    echo ""
+    echo "Harbor 노출 방식을 선택하세요:"
+    echo "  1) Envoy Gateway (기본, HTTPRoute로 도메인 라우팅)"
+    echo "  2) NodePort 직접 접속"
+    echo "  3) nginx Ingress"
+    read -p "선택 [1/2/3, 기본값 1]: " EXPOSE_CHOICE
+    EXPOSE_CHOICE="${EXPOSE_CHOICE:-1}"
+
+    PROTOCOL="http"
+    TLS_SECRET_NAME=""
+    TLS_ENABLED="false"
+
+    case "$EXPOSE_CHOICE" in
+        1)
+            EXPOSE_TYPE="clusterIP"
+            DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-harbor.devops.internal}"
+            read -p "Harbor Envoy 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
+            EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
+            parse_harbor_url "$EXTERNAL_URL"
+            PROTOCOL="$URL_PROTOCOL"
+            EXTERNAL_HOSTNAME="$URL_HOST"
+            EXTERNAL_URL="$URL_NORMALIZED"
+            ;;
+        2)
+            EXPOSE_TYPE="nodePort"
+            HTTP_NODEPORT="${HTTP_NODEPORT:-30002}"
+            HTTPS_NODEPORT="${HTTPS_NODEPORT:-30003}"
+            DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-$DETECTED_IP}:${HTTP_NODEPORT}"
+            read -p "Harbor NodePort 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
+            EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
+            parse_harbor_url "$EXTERNAL_URL"
+            PROTOCOL="$URL_PROTOCOL"
+            EXTERNAL_HOSTNAME="$URL_HOST"
+            EXTERNAL_URL="$URL_NORMALIZED"
+            if [ -n "$URL_PORT" ]; then
+                if [[ "$PROTOCOL" == "https" ]]; then
+                    HTTPS_NODEPORT="$URL_PORT"
+                else
+                    HTTP_NODEPORT="$URL_PORT"
+                fi
+            elif [[ "$PROTOCOL" == "https" ]]; then
+                EXTERNAL_URL="${EXTERNAL_URL}:${HTTPS_NODEPORT}"
             else
-                HTTP_NODEPORT="$URL_PORT"
+                EXTERNAL_URL="${EXTERNAL_URL}:${HTTP_NODEPORT}"
             fi
-        elif [[ "$PROTOCOL" == "https" ]]; then
-            EXTERNAL_URL="${EXTERNAL_URL}:${HTTPS_NODEPORT}"
-        else
-            EXTERNAL_URL="${EXTERNAL_URL}:${HTTP_NODEPORT}"
-        fi
-        if [[ "$PROTOCOL" == "https" ]]; then
-            TLS_ENABLED="true"
-            TLS_CERT_SOURCE="secret"
-            read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
-            if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
-        fi
-        ;;
-    3)
-        EXPOSE_TYPE="ingress"
-        DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-harbor.devops.internal}"
-        echo "nginx Ingress 방식으로 설치합니다."
-        read -p "Harbor Ingress 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
-        EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
-        parse_harbor_url "$EXTERNAL_URL"
-        PROTOCOL="$URL_PROTOCOL"
-        EXTERNAL_HOSTNAME="$URL_HOST"
-        EXTERNAL_URL="$URL_NORMALIZED"
-        if [[ "$PROTOCOL" == "https" ]]; then
-            TLS_ENABLED="true"
-            TLS_CERT_SOURCE="secret"
-            read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
-            if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
-        fi
-        ;;
-    *)
-        echo "오류: 노출 방식은 1, 2, 3 중 하나를 선택해야 합니다."
-        exit 1
-        ;;
-esac
+            if [[ "$PROTOCOL" == "https" ]]; then
+                TLS_ENABLED="true"
+                read -p "미리 생성해 둔 TLS 시크릿의 이름을 입력하세요: " TLS_SECRET_NAME
+                if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 비워둘 수 없습니다."; exit 1; fi
+            fi
+            ;;
+        3)
+            EXPOSE_TYPE="ingress"
+            DEFAULT_HARBOR_URL="http://${EXTERNAL_HOSTNAME:-harbor.devops.internal}"
+            read -p "Harbor Ingress 접속 URL [${DEFAULT_HARBOR_URL}]: " INPUT_HARBOR_URL
+            EXTERNAL_URL="${INPUT_HARBOR_URL:-$DEFAULT_HARBOR_URL}"
+            parse_harbor_url "$EXTERNAL_URL"
+            PROTOCOL="$URL_PROTOCOL"
+            EXTERNAL_HOSTNAME="$URL_HOST"
+            EXTERNAL_URL="$URL_NORMALIZED"
+            if [[ "$PROTOCOL" == "https" ]]; then
+                TLS_ENABLED="true"
+                read -p "Ingress용 TLS 시크릿 이름 입력: " TLS_SECRET_NAME
+                if [ -z "$TLS_SECRET_NAME" ]; then echo "오류: TLS 시크릿 이름은 필수입니다."; exit 1; fi
+            fi
+            ;;
+    esac
 
-if [ -z "$EXTERNAL_HOSTNAME" ]; then
-    echo "오류: Harbor 접속 URL에서 호스트명을 확인할 수 없습니다."
-    exit 1
-fi
-
-echo "사용할 Harbor externalURL: ${EXTERNAL_URL}"
-
-# 3-2. Control Plane Taint 허용 여부 확인
-echo ""
-read -p "Control Plane(Master) 노드의 Taint를 허용하여 Pod을 스케줄링하겠습니까? (y/N): " ALLOW_CP_TAINT
-ENABLE_CP_TOLERATIONS="false"
-if [[ "$ALLOW_CP_TAINT" =~ ^[yY]([eE][sS])?$ ]]; then
-    ENABLE_CP_TOLERATIONS="true"
-    echo "Control Plane Taint 허용(Tolerations)이 활성화되었습니다."
-fi
-
-# 3-3. 특정 노드에 파드 고정 여부 확인
-echo ""
-read -p "모든 Harbor 파드를 특정 노드에 고정하여 배포하시겠습니까? (y/N): " FORCE_NODE_PIN
-TARGET_NODE_NAME=""
-if [[ "$FORCE_NODE_PIN" =~ ^[yY]([eE][sS])?$ ]]; then
-    # 기본값 추천용 첫 번째 노드 감지
-    DEFAULT_NODE=$($KUBECTL_CMD get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-    read -p "고정하여 배포할 노드 이름을 입력하세요 [기본값: ${DEFAULT_NODE}]: " INPUT_NODE
-    TARGET_NODE_NAME="${INPUT_NODE:-$DEFAULT_NODE}"
-    if [ -n "$TARGET_NODE_NAME" ]; then
-        echo "Harbor 파드 고정 노드 설정 완료: $TARGET_NODE_NAME"
+    echo ""
+    read -p "Control Plane(Master) 노드의 Taint를 허용하여 Pod을 배치하겠습니까? (y/N): " ALLOW_CP_TAINT
+    ENABLE_CP_TOLERATIONS="false"
+    if [[ "$ALLOW_CP_TAINT" =~ ^[yY]([eE][sS])?$ ]]; then
+        ENABLE_CP_TOLERATIONS="true"
     fi
-fi
 
-# 4. 관리자 비밀번호 직접 입력받기
-while true; do
-    read -sp "Harbor 관리자('admin') 비밀번호를 입력하세요: " ADMIN_PASSWORD
-    echo
-    read -sp "비밀번호를 다시 한번 입력하세요: " ADMIN_PASSWORD_CONFIRM
-    echo
-    if [ -z "$ADMIN_PASSWORD" ]; then
-        echo "비밀번호가 비어있습니다. 다시 시도하세요."
-    elif [ ${#ADMIN_PASSWORD} -lt 8 ]; then
-        echo "비밀번호는 최소 8자 이상이어야 합니다. 다시 시도하세요."
-    elif [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
-        echo "비밀번호가 일치하지 않습니다. 다시 시도하세요."
+    echo ""
+    read -p "모든 Harbor 파드를 특정 노드에 고정하여 배포하시겠습니까? (y/N): " FORCE_NODE_PIN
+    TARGET_NODE_NAME=""
+    if [[ "$FORCE_NODE_PIN" =~ ^[yY]([eE][sS])?$ ]]; then
+        DEFAULT_NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        read -p "고정할 노드 이름 입력 [기본값: ${DEFAULT_NODE}]: " INPUT_NODE
+        TARGET_NODE_NAME="${INPUT_NODE:-$DEFAULT_NODE}"
+    fi
+
+    echo ""
+    read -p "로컬 개발 환경을 위해 리소스 사용량(CPU/Memory 제한)을 최소화하시겠습니까? (y/N): " _MIN_RES
+    if [[ "$_MIN_RES" =~ ^[yY]$ ]]; then
+        MINIMIZE_RESOURCES="true"
     else
-        break
+        MINIMIZE_RESOURCES="false"
     fi
-done
 
-# 5. 네임스페이스 생성
-echo "Harbor 네임스페이스 '$HARBOR_NAMESPACE'를 생성합니다..."
-kubectl create namespace "$HARBOR_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-
-echo "[INFO] Done."
-
-# 6. 스토리지 타입 선택 및 PV/PVC 생성
-PV_PVC_FILE="harbor-hostpath-persistence.yaml"
-
-echo ""
-if [[ "$STORAGE_MODE" == "hostpath" ]]; then
-    STORAGE_CHOICE="1"
-    echo "스토리지 모드: HostPath (STORAGE_MODE 사전 설정)"
-elif [[ "$STORAGE_MODE" == "nfs" ]]; then
-    STORAGE_CHOICE="2"
-    echo "스토리지 모드: NFS (STORAGE_MODE 사전 설정)"
-elif [[ "$STORAGE_MODE" == "nfs-dynamic" ]]; then
-    STORAGE_CHOICE="3"
-    echo "스토리지 모드: NFS 동적 할당 (STORAGE_MODE 사전 설정)"
-else
+    echo ""
     echo "스토리지 타입을 선택하세요:"
-    echo "  1) HostPath (노드 고정, 단일 노드 환경 권장)"
-    echo "  2) NFS (정적 할당)"
-    echo "  3) NFS (동적 할당 - StorageClass 사용)"
-    read -p "선택 [1/2/3, 기본값 1]: " STORAGE_CHOICE
+    echo "  1) HostPath (특정 단일 노드 디렉토리 지정)"
+    echo "  2) NFS      (정적 PV / PVC 구성)"
+    echo "  3) NFS SC   (StorageClass 기반 동적 프로비저닝)"
+    read -p "선택 [1/2/3, 기본 1]: " STORAGE_CHOICE
     STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
+
+    STORAGE_SIZE="${STORAGE_SIZE:-50Gi}"
+    read -p "Registry 이미지 저장용량 크기 지정 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
+    STORAGE_SIZE="${USER_STORAGE_SIZE:-$STORAGE_SIZE}"
+
+    case "$STORAGE_CHOICE" in
+        1)
+            STORAGE_MODE="hostpath"
+            NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+            SAVE_PATH="${SAVE_PATH:-/data/harbor}"
+            read -p "호스트 저장 절대 경로 [${SAVE_PATH}]: " USER_SAVE_PATH
+            SAVE_PATH="${USER_SAVE_PATH:-$SAVE_PATH}"
+            read -p "PV를 핀할 노드 이름 [${NODE_NAME}]: " USER_NODE_NAME
+            NODE_NAME="${USER_NODE_NAME:-$NODE_NAME}"
+            if [ -z "$NODE_NAME" ]; then echo "오류: 노드 이름이 필요합니다."; exit 1; fi
+            ;;
+        2)
+            STORAGE_MODE="nfs"
+            read -p "NFS 서버 주소 (예: 192.168.1.100): " NFS_SERVER
+            if [ -z "$NFS_SERVER" ]; then echo "오류: NFS 서버 주소는 필수입니다."; exit 1; fi
+            read -p "NFS 익스포트 경로 (예: /nfs/harbor): " NFS_PATH
+            if [ -z "$NFS_PATH" ]; then echo "오류: NFS 경로는 필수입니다."; exit 1; fi
+            ;;
+        3)
+            STORAGE_MODE="nfs-dynamic"
+            DATABASE_SIZE="${DATABASE_SIZE:-5Gi}"
+            REDIS_SIZE="${REDIS_SIZE:-1Gi}"
+            JOBLOG_SIZE="${JOBLOG_SIZE:-1Gi}"
+            TRIVY_SIZE="${TRIVY_SIZE:-5Gi}"
+            read -p "Database 용량  [${DATABASE_SIZE}]: " _DB; DATABASE_SIZE="${_DB:-$DATABASE_SIZE}"
+            read -p "Redis 용량     [${REDIS_SIZE}]: " _RD; REDIS_SIZE="${_RD:-$REDIS_SIZE}"
+            read -p "JobService 로그 [${JOBLOG_SIZE}]: " _JL; JOBLOG_SIZE="${_JL:-$JOBLOG_SIZE}"
+            read -p "Trivy 스캔 용량 [${TRIVY_SIZE}]: " _TV; TRIVY_SIZE="${_TV:-$TRIVY_SIZE}"
+            
+            echo ""
+            kubectl get sc || echo "(StorageClass 조회 실패)"
+            read -p "사용할 StorageClass 이름 [nfs-client]: " USER_STORAGE_CLASS
+            STORAGE_CLASS="${USER_STORAGE_CLASS:-nfs-client}"
+            ;;
+    esac
 fi
 
-read -p "Registry 이미지 저장소 크기 [${STORAGE_SIZE}]: " USER_STORAGE_SIZE
-STORAGE_SIZE="${USER_STORAGE_SIZE:-$STORAGE_SIZE}"
-
-if [[ "$STORAGE_CHOICE" == "3" ]]; then
-    # --- NFS Dynamic: 컴포넌트별 PVC 크기 (subPath 분리되므로 각각 입력) ---
-    : "${DATABASE_SIZE:=5Gi}"
-    : "${REDIS_SIZE:=1Gi}"
-    : "${JOBLOG_SIZE:=1Gi}"
-    : "${TRIVY_SIZE:=5Gi}"
-    read -p "Database PVC 크기      [${DATABASE_SIZE}]: " _IN; DATABASE_SIZE="${_IN:-$DATABASE_SIZE}"
-    read -p "Redis PVC 크기         [${REDIS_SIZE}]: "    _IN; REDIS_SIZE="${_IN:-$REDIS_SIZE}"
-    read -p "JobService 로그 크기   [${JOBLOG_SIZE}]: "   _IN; JOBLOG_SIZE="${_IN:-$JOBLOG_SIZE}"
-    read -p "Trivy 데이터 크기      [${TRIVY_SIZE}]: "    _IN; TRIVY_SIZE="${_IN:-$TRIVY_SIZE}"
-    unset _IN
-    echo "  ⚠  주의: database·redis는 StatefulSet volumeClaimTemplates 기반 — 최초 생성 후 size 변경 불가"
-    echo ""
-    echo "현재 클러스터의 StorageClass 목록:"
-    kubectl get sc 2>/dev/null || echo "  (StorageClass 조회 실패 — kubectl 설정을 확인하세요)"
-    echo ""
-    read -p "사용할 StorageClass 이름을 입력하세요 [nfs-client]: " USER_STORAGE_CLASS
-    STORAGE_CLASS="${USER_STORAGE_CLASS:-nfs-client}"
-    
-    if ! kubectl get sc "${STORAGE_CLASS}" > /dev/null 2>&1; then
-        echo "[오류] StorageClass '${STORAGE_CLASS}'를 찾을 수 없습니다."; exit 1
+# ==========================================
+# [3] 관리자 비밀번호 수집 및 업그레이드 복원
+# ==========================================
+if [ "$DO_UPGRADE" == "true" ]; then
+    echo "🔐 기존 Harbor Secret에서 admin 비밀번호 복원 시도 중..."
+    ADMIN_PASSWORD=$(kubectl get secret -n "$HARBOR_NAMESPACE" harbor-core -o jsonpath="{.data.harborAdminPassword}" | base64 -d 2>/dev/null || \
+                     kubectl get secret -n "$HARBOR_NAMESPACE" harbor-harbor-core -o jsonpath="{.data.harborAdminPassword}" | base64 -d 2>/dev/null || \
+                     echo "")
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        echo -e "${YELLOW}⚠️  기존 비밀번호를 K8s Secret에서 가져오지 못했습니다.${NC}"
+        read -sp "Harbor admin 비밀번호를 다시 입력해 주세요: " ADMIN_PASSWORD
+        echo
+    else
+        echo "✅ 비밀번호가 K8s Secret에서 성공적으로 자동 복원되었습니다."
     fi
-    echo "NFS 동적 할당 모드를 사용합니다. (StorageClass: ${STORAGE_CLASS})"
-elif [[ "$STORAGE_CHOICE" == "2" ]]; then
-    # --- NFS ---
-    if [ -z "$NFS_SERVER" ]; then
-        read -p "NFS 서버 주소를 입력하세요 (예: 192.168.1.100): " NFS_SERVER
-        [ -z "$NFS_SERVER" ] && { echo "오류: NFS 서버 주소를 입력해야 합니다."; exit 1; }
-    fi
-    if [ -z "$NFS_PATH" ]; then
-        read -p "NFS 내보내기 경로를 입력하세요 (예: /nfs/harbor): " NFS_PATH
-        [ -z "$NFS_PATH" ] && { echo "오류: NFS 경로를 입력해야 합니다."; exit 1; }
-    fi
-    echo "NFS PV/PVC를 생성합니다... (서버: ${NFS_SERVER}, 경로: ${NFS_PATH})"
-    cat > "$PV_PVC_FILE" <<EOF
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: ${PV_NAME}
-spec:
-  capacity:
-    storage: ${STORAGE_SIZE}
-  volumeMode: Filesystem
-  accessModes: ["ReadWriteMany"]
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: harbor-nfs-sc
-  nfs:
-    server: ${NFS_SERVER}
-    path: ${NFS_PATH}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ${PVC_NAME}
-  namespace: ${HARBOR_NAMESPACE}
-spec:
-  accessModes: ["ReadWriteMany"]
-  storageClassName: harbor-nfs-sc
-  resources:
-    requests:
-      storage: ${STORAGE_SIZE}
-EOF
-
 else
-    # --- HostPath ---
-    if [ -z "$NODE_NAME" ]; then
-        NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-        [ -n "$NODE_NAME" ] && echo "자동 감지된 노드: $NODE_NAME"
-    fi
-    read -p "데이터를 저장할 호스트 노드의 절대 경로를 입력하세요 [${SAVE_PATH}]: " USER_SAVE_PATH
-    SAVE_PATH="${USER_SAVE_PATH:-$SAVE_PATH}"
-    read -p "PV를 고정할 노드 이름을 입력하세요 [${NODE_NAME}]: " USER_NODE_NAME
-    NODE_NAME="${USER_NODE_NAME:-$NODE_NAME}"
-    [ -z "$NODE_NAME" ] && { echo "오류: 노드 이름을 입력해야 합니다."; exit 1; }
+    while true; do
+        read -sp "Harbor 관리자('admin') 신규 비밀번호 입력 (최소 8자): " ADMIN_PASSWORD
+        echo
+        read -sp "비밀번호 확인 입력: " ADMIN_PASSWORD_CONFIRM
+        echo
+        if [ -z "$ADMIN_PASSWORD" ] || [ ${#ADMIN_PASSWORD} -lt 8 ] || [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+            echo -e "${RED}❌ 비밀번호 조건이 맞지 않거나 일치하지 않습니다. 다시 입력하십시오.${NC}"
+        else
+            break
+        fi
+    done
+fi
 
-    echo "HostPath PV/PVC를 생성합니다... (노드: ${NODE_NAME}, 경로: ${SAVE_PATH})"
+save_conf
+
+# ==========================================
+# [4] YAML 및 볼륨 매니페스트 동기화
+# ==========================================
+echo -e "🔧 ${GREEN}설정 파일(values-infra.yaml, persistence) 생성 중...${NC}"
+
+if [ "$STORAGE_MODE" == "hostpath" ]; then
     cat > "$PV_PVC_FILE" <<EOF
 apiVersion: v1
 kind: PersistentVolume
@@ -455,85 +403,213 @@ spec:
     requests:
       storage: ${STORAGE_SIZE}
 EOF
+elif [ "$STORAGE_MODE" == "nfs" ]; then
+    cat > "$PV_PVC_FILE" <<EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${PV_NAME}
+spec:
+  capacity:
+    storage: ${STORAGE_SIZE}
+  volumeMode: Filesystem
+  accessModes: ["ReadWriteMany"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: harbor-nfs-sc
+  nfs:
+    server: ${NFS_SERVER}
+    path: ${NFS_PATH}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${PVC_NAME}
+  namespace: ${HARBOR_NAMESPACE}
+spec:
+  accessModes: ["ReadWriteMany"]
+  storageClassName: harbor-nfs-sc
+  resources:
+    requests:
+      storage: ${STORAGE_SIZE}
+EOF
 fi
 
-if [[ "$STORAGE_CHOICE" != "3" ]]; then
-    kubectl apply -f "$PV_PVC_FILE"
+SCHEDULING_BLOCK=""
+for COMP in nginx portal core jobservice registry trivy exporter; do
+    COMP_SCHED=""
+    if [ -n "$TARGET_NODE_NAME" ]; then
+        COMP_SCHED="${COMP_SCHED}  nodeSelector:
+    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"
+"
+    fi
+    if [ "$ENABLE_CP_TOLERATIONS" == "true" ]; then
+        COMP_SCHED="${COMP_SCHED}  tolerations:
+    - key: \"node-role.kubernetes.io/control-plane\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+    - key: \"node-role.kubernetes.io/master\"
+      operator: \"Exists\"
+      effect: \"NoSchedule\"
+"
+    fi
+    if [ -n "$COMP_SCHED" ]; then
+        SCHEDULING_BLOCK="${SCHEDULING_BLOCK}
+${COMP}:
+${COMP_SCHED}"
+    fi
+done
+
+for COMP in database redis; do
+    COMP_SCHED=""
+    if [ -n "$TARGET_NODE_NAME" ]; then
+        COMP_SCHED="${COMP_SCHED}    nodeSelector:
+      kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"
+"
+    fi
+    if [ "$ENABLE_CP_TOLERATIONS" == "true" ]; then
+        COMP_SCHED="${COMP_SCHED}    tolerations:
+      - key: \"node-role.kubernetes.io/control-plane\"
+        operator: \"Exists\"
+        effect: \"NoSchedule\"
+      - key: \"node-role.kubernetes.io/master\"
+        operator: \"Exists\"
+        effect: \"NoSchedule\"
+"
+    fi
+    if [ -n "$COMP_SCHED" ]; then
+        SCHEDULING_BLOCK="${SCHEDULING_BLOCK}
+${COMP}:
+  internal:
+${COMP_SCHED}"
+    fi
+done
+
+RESOURCES_BLOCK=""
+if [ "$MINIMIZE_RESOURCES" == "true" ]; then
+    RESOURCES_BLOCK="nginx:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+portal:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+core:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+jobservice:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+registry:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+database:
+  internal:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
+
+redis:
+  internal:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi"
 fi
 
-# externalURL은 노출 방식 선택 단계에서 입력받은 Harbor 접속 URL을 그대로 사용합니다.
+TLS_CERT_SOURCE="none"
+if [ "$TLS_ENABLED" == "true" ]; then
+    TLS_CERT_SOURCE="secret"
+fi
 
-# 7. Harbor 설치
-echo "Helm을 사용하여 Harbor를 배포합니다. 이 작업은 몇 분 정도 소요될 수 있습니다..."
-VALUES_FILE="harbor-generated-values.yaml"
-
-# Persistence 설정 분기
-if [[ "$STORAGE_CHOICE" == "3" ]]; then
-    # 동적 할당
-    PERSISTENCE_CONFIG=$(cat <<EOF
-persistence:
+PERSISTENCE_CONFIG=""
+if [ "$STORAGE_MODE" == "nfs-dynamic" ]; then
+    PERSISTENCE_CONFIG="persistence:
   enabled: true
-  resourcePolicy: "keep"
+  resourcePolicy: \"keep\"
   persistentVolumeClaim:
     registry:
-      existingClaim: ""
-      storageClass: "${STORAGE_CLASS}"
+      storageClass: \"${STORAGE_CLASS}\"
       subPath: registry
       size: ${STORAGE_SIZE}
     database:
-      existingClaim: ""
-      storageClass: "${STORAGE_CLASS}"
+      storageClass: \"${STORAGE_CLASS}\"
       subPath: database
       size: ${DATABASE_SIZE}
     jobservice:
       jobLog:
-        existingClaim: ""
-        storageClass: "${STORAGE_CLASS}"
+        storageClass: \"${STORAGE_CLASS}\"
         subPath: jobservice-logs
         size: ${JOBLOG_SIZE}
     redis:
-      existingClaim: ""
-      storageClass: "${STORAGE_CLASS}"
+      storageClass: \"${STORAGE_CLASS}\"
       subPath: redis
       size: ${REDIS_SIZE}
     trivy:
-      existingClaim: ""
-      storageClass: "${STORAGE_CLASS}"
+      storageClass: \"${STORAGE_CLASS}\"
       subPath: trivy
-      size: ${TRIVY_SIZE}
-EOF
-)
+      size: ${TRIVY_SIZE}"
 else
-    # 정적 할당 (HostPath/NFS)
-    PERSISTENCE_CONFIG=$(cat <<EOF
-persistence:
+    PERSISTENCE_CONFIG="persistence:
   enabled: true
-  resourcePolicy: "keep"
+  resourcePolicy: \"keep\"
   persistentVolumeClaim:
     registry:
-      existingClaim: "harbor-pvc"
+      existingClaim: \"${PVC_NAME}\"
       subPath: registry
     database:
-      existingClaim: "harbor-pvc"
+      existingClaim: \"${PVC_NAME}\"
       subPath: database
     jobservice:
       jobLog:
-        existingClaim: "harbor-pvc"
+        existingClaim: \"${PVC_NAME}\"
         subPath: jobservice-logs
     redis:
-      existingClaim: "harbor-pvc"
+      existingClaim: \"${PVC_NAME}\"
       subPath: redis
     trivy:
-      existingClaim: "harbor-pvc"
-      subPath: trivy
-EOF
-)
+      existingClaim: \"${PVC_NAME}\"
+      subPath: trivy"
 fi
 
-# values.yaml 생성
-cat > "$VALUES_FILE" <<EOF
+cat > ./values-infra.yaml <<EOF
+# Harbor 2.10.3 인프라 설정 — install.sh 에 의해 자동 관리됩니다.
 externalURL: ${EXTERNAL_URL}
-
 harborAdminPassword: "${ADMIN_PASSWORD}"
 
 expose:
@@ -552,120 +628,30 @@ expose:
     certSource: ${TLS_CERT_SOURCE}
     secret:
       secretName: "${TLS_SECRET_NAME}"
-  ingress:
-    className: "${INGRESS_CLASS}"
-    hosts:
-      core: ${EXTERNAL_HOSTNAME}
-    annotations:
-      nginx.ingress.kubernetes.io/proxy-body-size: "0"
-      $([[ "$TLS_ENABLED" == "true" ]] && echo 'nginx.ingress.kubernetes.io/ssl-redirect: "true"' || echo "")
 
 ${PERSISTENCE_CONFIG}
 
-  imageChartStorage:
-    type: filesystem
+${SCHEDULING_BLOCK}
+${RESOURCES_BLOCK}
 EOF
 
-# Control Plane Taint Tolerations 및 nodeSelector 추가 주입
-if [[ "$ENABLE_CP_TOLERATIONS" == "true" || -n "$TARGET_NODE_NAME" ]]; then
-    cat >> "$VALUES_FILE" <<EOF
+# ==========================================
+# [5] K8s 볼륨 배포 및 Helm 설치 진행
+# ==========================================
+echo ""
+echo -e "🚀 ${GREEN}[1/2] K8s 네임스페이스 및 볼륨 리소스 적용 중...${NC}"
+kubectl create namespace "$HARBOR_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-nginx:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
-    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
-    - key: \"node-role.kubernetes.io/control-plane\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"
-    - key: \"node-role.kubernetes.io/master\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"")
-
-portal:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
-    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
-    - key: \"node-role.kubernetes.io/control-plane\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"
-    - key: \"node-role.kubernetes.io/master\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"")
-
-core:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
-    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
-    - key: \"node-role.kubernetes.io/control-plane\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"
-    - key: \"node-role.kubernetes.io/master\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"")
-
-jobservice:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
-    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
-    - key: \"node-role.kubernetes.io/control-plane\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"
-    - key: \"node-role.kubernetes.io/master\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"")
-
-registry:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
-    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
-    - key: \"node-role.kubernetes.io/control-plane\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"
-    - key: \"node-role.kubernetes.io/master\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"")
-
-trivy:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "  nodeSelector:
-    kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "  tolerations:
-    - key: \"node-role.kubernetes.io/control-plane\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"
-    - key: \"node-role.kubernetes.io/master\"
-      operator: \"Exists\"
-      effect: \"NoSchedule\"")
-
-database:
-  internal:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "    nodeSelector:
-      kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "    tolerations:
-      - key: \"node-role.kubernetes.io/control-plane\"
-        operator: \"Exists\"
-        effect: \"NoSchedule\"
-      - key: \"node-role.kubernetes.io/master\"
-        operator: \"Exists\"
-        effect: \"NoSchedule\"")
-
-redis:
-  internal:
-$([[ -n "$TARGET_NODE_NAME" ]] && echo "    nodeSelector:
-      kubernetes.io/hostname: \"${TARGET_NODE_NAME}\"")
-$([[ "$ENABLE_CP_TOLERATIONS" == "true" ]] && echo "    tolerations:
-      - key: \"node-role.kubernetes.io/control-plane\"
-        operator: \"Exists\"
-        effect: \"NoSchedule\"
-      - key: \"node-role.kubernetes.io/master\"
-        operator: \"Exists\"
-        effect: \"NoSchedule\"")
-EOF
+if [ "$STORAGE_MODE" != "nfs-dynamic" ]; then
+    kubectl apply -f "$PV_PVC_FILE"
 fi
 
+echo ""
+echo -e "🚀 ${GREEN}[2/2] Harbor Helm 차트 릴리스 배포 중... (${DO_UPGRADE:+업그레이드}${DO_UPGRADE:-설치})${NC}"
 helm upgrade --install "$HARBOR_RELEASE_NAME" "$HELM_CHART_PATH" \
     --namespace "$HARBOR_NAMESPACE" \
     -f ./values.yaml \
-    -f "$VALUES_FILE" \
+    -f ./values-infra.yaml \
     --atomic \
     --wait
 
