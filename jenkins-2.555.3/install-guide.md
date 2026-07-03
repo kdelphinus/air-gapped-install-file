@@ -148,7 +148,11 @@ sudo ./scripts/uninstall.sh
 
 # 완전 초기화 (설정 파일 및 로컬 백업 복원 등 완전 제거)
 sudo ./scripts/uninstall.sh --reset
-```\n\n---\n\n## 7. CI/CD Buildah agent 구성
+```
+
+---
+
+## 7. CI/CD Buildah agent 구성
 
 Jenkins에서 애플리케이션 컨테이너 이미지를 빌드하려면 기본 설치 이후
 `cicd-buildah-guide.md` 절차를 적용합니다.
@@ -169,7 +173,7 @@ sudo ./scripts/upload_images_to_harbor_v3-lite.sh
 # Jenkins에 Buildah agent podTemplate 적용
 cp values-cicd-buildah.yaml values-cicd-buildah.local.yaml
 sed -i \
-  -e 's|<HARBOR_REGISTRY>|harbor.devops.internal:30002|g' \
+  -e 's|<HARBOR_REGISTRY>|harbor.example.local:30080|g' \
   -e 's|<HARBOR_PROJECT>|devops|g' \
   values-cicd-buildah.local.yaml
 
@@ -181,3 +185,8 @@ helm upgrade --install jenkins ./charts/jenkins \
 
 표준 Jenkinsfile 예시는 `examples/Jenkinsfile.buildah`를 사용합니다.
 Argo CD Application 예시는 `examples/argocd-application-sample.yaml`을 사용합니다.
+
+Harbor 도메인은 Jenkins buildah agent Pod와 Kubernetes worker node가 모두
+해석할 수 있는 동일한 주소로 지정합니다. DNS에 등록되어 있지 않은 테스트
+환경에서는 `cicd-buildah-guide.md`의 Harbor 주소 및 DNS 기준 절차에 따라
+agent Pod `hostAliases`와 노드의 registry 접근 설정을 함께 검토합니다.

@@ -4,13 +4,12 @@ pipeline {
   }
 
   options {
-    timestamps()
     disableConcurrentBuilds()
   }
 
   environment {
     APP_NAME = 'sample-app'
-    HARBOR_REGISTRY = 'harbor.devops.internal:30002'
+    HARBOR_REGISTRY = 'harbor.example.local:30080'
     HARBOR_PROJECT = 'devops'
     MANIFEST_REPO_URL = 'http://gitlab.devops.internal/root/sample-app-manifests.git'
     MANIFEST_PATH = 'deploy/overlays/prod/deployment.yaml'
@@ -46,8 +45,8 @@ pipeline {
           withCredentials([usernamePassword(credentialsId: env.HARBOR_CREDENTIALS, usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASSWORD')]) {
             sh '''
               set -eu
-              buildah login --username "${HARBOR_USER}" --password "${HARBOR_PASSWORD}" "${HARBOR_REGISTRY}"
-              buildah push "${IMAGE}"
+              buildah login --tls-verify=false --username "${HARBOR_USER}" --password "${HARBOR_PASSWORD}" "${HARBOR_REGISTRY}"
+              buildah push --tls-verify=false "${IMAGE}"
             '''
           }
         }

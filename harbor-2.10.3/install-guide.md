@@ -274,3 +274,67 @@ sudo ctr -n k8s.io images push \
 - **이미지 Push 실패**: 모든 노드에서 insecure registry 등록 여부 확인 (`scripts/insecurity_registry_add.sh`)
 - **TLS 인증서 오류**: Secret 이름과 `EXTERNAL_HOSTNAME` 도메인 일치 여부, 인증서 만료일 확인
 - **PVC Pending**: `NODE_NAME`이 실제 노드 이름과 일치하는지, nodeAffinity 설정 확인
+
+## 부록: HTTP Harbor 로그인 및 Pull 확인
+
+HTTP Harbor를 사용할 때 이미지 주소에는 `http://` 또는 `https://` 프로토콜을 포함하지 않습니다. 프로토콜은 클라이언트 옵션과 containerd registry 설정으로 처리합니다.
+
+```text
+좋은 예: harbor.example.local:30002/library/my-image:v1
+나쁜 예: http://harbor.example.local:30002/library/my-image:v1
+```
+
+Harbor project가 public이면 Kubernetes에서 `imagePullSecrets` 없이 이미지를 pull할 수 있습니다. private project인 경우에는 애플리케이션 namespace에 `docker-registry` Secret을 생성하고 Pod 또는 ServiceAccount에 연결합니다.
+
+```bash
+kubectl create secret docker-registry harbor-regcred \
+  --docker-server=<HARBOR_REGISTRY> \
+  --docker-username=admin \
+  --docker-password='<PASSWORD>' \
+  -n <APP_NAMESPACE>
+```
+
+Docker 또는 Buildah로 HTTP Harbor에 로그인할 때는 HTTPS를 강제하지 않도록 옵션을 명시합니다.
+
+```bash
+printf '%s' '<PASSWORD>' | docker login <HARBOR_REGISTRY> \
+  -u admin --password-stdin
+
+buildah login --tls-verify=false \
+  --username admin \
+  --password '<PASSWORD>' \
+  <HARBOR_REGISTRY>
+
+buildah push --tls-verify=false <HARBOR_REGISTRY>/library/my-image:v1
+```
+
+containerd에서 직접 push할 때는 `--plain-http`를 사용합니다.
+
+```bash
+sudo ctr -n k8s.io images push \
+  --plain-http \
+  --user admin:<PASSWORD> \
+  <HARBOR_REGISTRY>/library/my-image:v1
+```
+
+kind 클러스터처럼 Kubernetes 노드가 Docker 컨테이너로 실행되는 환경에서는 호스트가 아니라 kind 노드 컨테이너 안에서 insecure registry를 설정해야 합니다. 즉 `systemctl restart containerd`도 kind 노드 컨테이너 안에서 실행되어야 합니다.
+
+```bash
+KIND_NODE_NAME="test-cluster-worker"
+HARBOR_REGISTRY="harbor.example.local:30002"
+
+# hosts.toml 파일은 kind 노드 컨테이너 내부에 생성합니다.
+docker exec "${KIND_NODE_NAME}" mkdir -p "/etc/containerd/certs.d/${HARBOR_REGISTRY}"
+
+docker exec "${KIND_NODE_NAME}" sh -c "cat > '/etc/containerd/certs.d/${HARBOR_REGISTRY}/hosts.toml'" <<EOF
+server = "http://${HARBOR_REGISTRY}"
+
+[host."http://${HARBOR_REGISTRY}"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true
+EOF
+
+docker exec "${KIND_NODE_NAME}" systemctl restart containerd
+```
+
+실제 운영 환경에서는 위 예시의 `harbor.example.local:30002` 대신 DNS에 등록된 Harbor 도메인 또는 로드밸런서 주소를 사용합니다. DNS 서버에 등록하지 않았다면 Jenkins agent Pod의 `hostAliases`, Kubernetes worker 노드의 `/etc/hosts`, 또는 사내 DNS 중 하나로 동일한 이름이 해석되도록 맞춰야 합니다.

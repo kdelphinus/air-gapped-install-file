@@ -15,7 +15,7 @@ RUN dnf -y install \
       gzip \
       which \
     && dnf clean all \
-    && if ! id -u jenkins >/dev/null 2>&1; then useradd -u 1000 -m -s /bin/bash jenkins; fi \
+    && if ! id -u jenkins >/dev/null 2>&1 && ! getent passwd 1000 >/dev/null 2>&1; then useradd -u 1000 -m -s /bin/bash jenkins; fi \
     && mkdir -p /home/jenkins/.config/containers /home/jenkins/.local/share/containers /workspace /tmp/run-1000 \
     && chown -R 1000:1000 /home/jenkins /workspace /tmp/run-1000 \
     && chmod 700 /tmp/run-1000

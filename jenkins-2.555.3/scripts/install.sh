@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # 스크립트 위치 기준으로 컴포넌트 루트로 이동
 cd "$(dirname "$0")/.." || exit 1
@@ -13,7 +14,7 @@ CONF_FILE="./install.conf"
 PV_FILE="./manifests/pv-volume.yaml"
 
 # 임시 파일 자동 클린업 trap 설정
-trap 'rm -f ./values-temp.yaml' EXIT
+trap 'rm -f ./values-temp.yaml ./values-cicd-buildah.local.yaml' EXIT
 
 GRADLE_CACHE_FILE="./manifests/gradle-cache-pv-pvc.yaml"
 
@@ -37,6 +38,8 @@ IMAGE_SOURCE="${IMAGE_SOURCE}"
 HARBOR_REGISTRY="${HARBOR_REGISTRY}"
 HARBOR_PROJECT="${HARBOR_PROJECT}"
 USE_CUSTOM_IMAGE="${USE_CUSTOM_IMAGE}"
+ENABLE_CICD_BUILDAH="${ENABLE_CICD_BUILDAH}"
+BUILDAH_AGENT_IMAGE="${BUILDAH_AGENT_IMAGE}"
 STORAGE_TYPE="${STORAGE_TYPE}"
 STORAGE_CLASS="${STORAGE_CLASS}"
 HOSTPATH_DIR="${HOSTPATH_DIR}"
@@ -119,6 +122,92 @@ prepare_hostpath_permissions() {
     echo "       sudo mkdir -p '${jenkins_path}' '${gradle_path}'"
     echo "       sudo chown -R 1000:1000 '${jenkins_path}' '${gradle_path}'"
 }
+
+load_image_archive_to_cluster() {
+    local tar_file="$1"
+
+    if [ ! -f "$tar_file" ]; then
+        echo -e "${RED}[오류] 이미지 tar 파일이 없습니다: ${tar_file}${NC}"
+        return 1
+    fi
+
+    local current_context
+    current_context=$(kubectl config current-context 2>/dev/null || true)
+    if [[ "$current_context" == kind-* ]] && command -v kind >/dev/null 2>&1; then
+        local kind_cluster="${current_context#kind-}"
+        echo "   → kind 클러스터(${kind_cluster})에 $(basename "$tar_file") 로드 중..."
+        kind load image-archive "$tar_file" --name "$kind_cluster"
+        return 0
+    fi
+
+    if command -v docker >/dev/null 2>&1; then
+        echo "   → docker에 $(basename "$tar_file") 로드 중..."
+        docker load -i "$tar_file" >/dev/null
+        return 0
+    fi
+
+    if command -v ctr >/dev/null 2>&1; then
+        echo "   → containerd(k8s.io)에 $(basename "$tar_file") 로드 중..."
+        sudo ctr -n k8s.io images import "$tar_file" >/dev/null
+        return 0
+    fi
+
+    echo -e "${RED}[오류] 이미지 로드를 위해 kind, docker 또는 ctr 중 하나가 필요합니다.${NC}"
+    return 1
+}
+
+prepare_buildah_agent_image() {
+    [ "$ENABLE_CICD_BUILDAH" == "true" ] || return 0
+
+    local buildah_tar="./images/jenkins-buildah-agent_1.41.4.tar"
+
+    if [ "$IMAGE_SOURCE" == "harbor" ]; then
+        BUILDAH_AGENT_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/jenkins-buildah-agent:1.41.4"
+        echo "   → Buildah agent 이미지는 Harbor에서 pull합니다: ${BUILDAH_AGENT_IMAGE}"
+        read -p "Jenkins namespace에 harbor-regcred Secret을 생성/갱신하시겠습니까? (y/N): " _CREATE_REGCRED
+        if [[ "$_CREATE_REGCRED" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+            read -p "Harbor 사용자명 (기본 admin): " HARBOR_USER
+            HARBOR_USER="${HARBOR_USER:-admin}"
+            read -sp "Harbor 비밀번호: " HARBOR_PASSWORD; echo
+            kubectl -n "$NAMESPACE" create secret docker-registry harbor-regcred \
+                --docker-server="$HARBOR_REGISTRY" \
+                --docker-username="$HARBOR_USER" \
+                --docker-password="$HARBOR_PASSWORD" \
+                --dry-run=client -o yaml | kubectl apply -f -
+        fi
+        return 0
+    fi
+
+    BUILDAH_AGENT_IMAGE="jenkins-buildah-agent:1.41.4"
+    if [ ! -f "$buildah_tar" ]; then
+        if [ "$IMAGE_SOURCE" != "online" ]; then
+            echo -e "${RED}[오류] Buildah agent tar가 없습니다: ${buildah_tar}${NC}"
+            echo "       온라인 모드에서 자동 빌드하거나, 온라인 준비 환경에서 jenkins-build/buildah-agent/build-buildah-agent.sh를 먼저 실행하세요."
+            exit 1
+        fi
+        echo "   → 온라인 모드: Buildah agent 이미지를 자동 빌드합니다."
+        (cd ./jenkins-build/buildah-agent && chmod +x ./build-buildah-agent.sh && ./build-buildah-agent.sh)
+    fi
+
+    load_image_archive_to_cluster "$buildah_tar"
+}
+
+render_buildah_values() {
+    [ "$ENABLE_CICD_BUILDAH" == "true" ] || return 0
+
+    cp -f ./values-cicd-buildah.yaml ./values-cicd-buildah.local.yaml
+    if [ "$IMAGE_SOURCE" == "harbor" ]; then
+        sed -i \
+            -e "s|<HARBOR_REGISTRY>|${HARBOR_REGISTRY}|g" \
+            -e "s|<HARBOR_PROJECT>|${HARBOR_PROJECT}|g" \
+            ./values-cicd-buildah.local.yaml
+    else
+        sed -i \
+            -e "s|<HARBOR_REGISTRY>/<HARBOR_PROJECT>/jenkins-buildah-agent:1.41.4|${BUILDAH_AGENT_IMAGE}|g" \
+            -e '/imagePullSecretName: harbor-regcred/d' \
+            ./values-cicd-buildah.local.yaml
+    fi
+}
 # ==========================================
 # [1] 기존 설치 감지 및 메뉴
 # ==========================================
@@ -155,6 +244,20 @@ fi
 # ==========================================
 # [2] 설치 설정 입력 (새로 설치 시에만)
 # ==========================================
+if [ "$DO_UPGRADE" == "true" ]; then
+    echo ""
+    _DEFAULT_BUILDAH="y"
+    [ "$ENABLE_CICD_BUILDAH" == "false" ] && _DEFAULT_BUILDAH="n"
+    read -p "CI/CD용 Buildah Jenkins agent를 구성/갱신하시겠습니까? (y/n, 기본 ${_DEFAULT_BUILDAH}): " _ENABLE_BUILDAH
+    _ENABLE_BUILDAH="${_ENABLE_BUILDAH:-$_DEFAULT_BUILDAH}"
+    if [[ "$_ENABLE_BUILDAH" =~ ^[Yy]$ ]]; then
+        ENABLE_CICD_BUILDAH="true"
+    else
+        ENABLE_CICD_BUILDAH="false"
+        BUILDAH_AGENT_IMAGE=""
+    fi
+fi
+
 if [ "$DO_UPGRADE" != "true" ]; then
     # 2-1. 이미지 소스 선택
     echo ""
@@ -254,7 +357,17 @@ if [ "$DO_UPGRADE" != "true" ]; then
         fi
     fi
 
-    # 2-3. 스토리지 타입 선택
+    # 2-3. CI/CD Buildah agent 구성 여부
+    echo ""
+    read -p "CI/CD용 Buildah Jenkins agent를 자동 구성하시겠습니까? (y/n, 기본 y): " _ENABLE_BUILDAH
+    if [[ "${_ENABLE_BUILDAH:-y}" =~ ^[Yy]$ ]]; then
+        ENABLE_CICD_BUILDAH="true"
+    else
+        ENABLE_CICD_BUILDAH="false"
+        BUILDAH_AGENT_IMAGE=""
+    fi
+
+    # 2-4. 스토리지 타입 선택
     echo ""
     echo "Jenkins Home 영구 볼륨 스토리지 유형을 선택하세요:"
     echo "  1) HostPath (로컬 노드의 특정 경로 직접 사용)"
@@ -271,7 +384,7 @@ if [ "$DO_UPGRADE" != "true" ]; then
         read -p "StorageClass 이름 입력 (예: nfs-client): " STORAGE_CLASS
     fi
 
-    # 2-4. 서비스 노출 및 도메인
+    # 2-5. 서비스 노출 및 도메인
     echo ""
     echo "Jenkins 컨트롤러 웹 UI 노출 방식을 선택하세요:"
     echo "  1) ClusterIP (인그레스 또는 Envoy HTTPRoute 연동 권장)"
@@ -295,10 +408,18 @@ if [ "$DO_UPGRADE" != "true" ]; then
     read -p "Jenkins 접속 도메인 (기본: jenkins.test.com): " DOMAIN
     DOMAIN="${DOMAIN:-jenkins.test.com}"
 
-    # 2-5. 노드 고정 배치 지정
+    # 2-6. 노드 고정 배치 지정
     echo ""
     kubectl get nodes -o wide
     read -p "Jenkins 컨트롤러를 고정 배치할 노드 이름 (없으면 비워둠): " TARGET_NODE
+fi
+
+if [ "$ENABLE_CICD_BUILDAH" == "true" ]; then
+    if [ "$IMAGE_SOURCE" == "harbor" ]; then
+        BUILDAH_AGENT_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/jenkins-buildah-agent:1.41.4"
+    else
+        BUILDAH_AGENT_IMAGE="jenkins-buildah-agent:1.41.4"
+    fi
 fi
 
 save_conf
@@ -399,6 +520,9 @@ echo "🚀 [1/3] Kubernetes 네임스페이스 및 스토리지 구성 중..."
 # 네임스페이스 생성
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
+prepare_buildah_agent_image
+render_buildah_values
+
 # HostPath PV 수동 생성
 if [ "$STORAGE_TYPE" == "hostpath" ]; then
     prepare_hostpath_permissions "$HOSTPATH_DIR"
@@ -420,9 +544,13 @@ fi
 echo ""
 echo -e "🚀 [2/3] Jenkins Helm 차트 배포 중... (${DO_UPGRADE:+업그레이드}${DO_UPGRADE:-설치})"
 if [ -d "$CHART_PATH" ]; then
+    HELM_VALUES=(-f ./values-temp.yaml)
+    if [ "$ENABLE_CICD_BUILDAH" == "true" ]; then
+        HELM_VALUES+=( -f ./values-cicd-buildah.local.yaml )
+    fi
     helm upgrade --install jenkins "$CHART_PATH" \
         -n "$NAMESPACE" \
-        -f ./values-temp.yaml
+        "${HELM_VALUES[@]}"
 else
     echo -e "${RED}[오류] Helm 차트 디렉토리('${CHART_PATH}')가 존재하지 않습니다.${NC}"
     exit 1
@@ -432,6 +560,11 @@ echo ""
 echo "========================================================"
 echo -e "🎉 구성 완료! (Jenkins v2.555.3 / Chart v5.9.26)"
 echo "설정 파일 : $CONF_FILE"
+if [ "$ENABLE_CICD_BUILDAH" == "true" ]; then
+    echo "Buildah CI : enabled (${BUILDAH_AGENT_IMAGE})"
+else
+    echo "Buildah CI : disabled"
+fi
 if [ "$TLS_ENABLED" == "true" ]; then
     PROTOCOL="https"
 else
