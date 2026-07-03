@@ -263,3 +263,4 @@ velero-*/velero-v*/
 # 임시 기획 및 태스크 관리 파일
 /implementation_plan.md
 /task.md
+/walkthrough.md
