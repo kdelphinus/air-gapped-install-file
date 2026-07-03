@@ -75,6 +75,7 @@
 
 ### ✅ 준수 완료 (Compliant)
 
+- **ArgoCD**: `argocd-3.4.3`
 - **Envoy**: `envoy-1.37.2` (Standard Reference / 표준 모델)
 - **Cilium**: `cilium-1.19.3`
 - **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`
