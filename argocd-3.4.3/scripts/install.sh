@@ -84,8 +84,12 @@ function cleanup_resources() {
 
   if [ "$RESET_MODE" == "reset" ]; then
       rm -f "$CONF_FILE"
-      rm -f "./values-temp.yaml"
-      echo -e "🗑️  설정 파일 및 임시 파일 삭제 완료 (Reset)."
+      rm -f "./values-infra.yaml"
+      if [ -f "./values.yaml.orig" ]; then
+          mv -f ./values.yaml.orig ./values.yaml
+          echo "   → values.yaml을 백업본으로 복원했습니다."
+      fi
+      echo -e "🗑️  설정 파일 및 생성된 인프라 설정 파일 삭제 완료 (Reset)."
   fi
 
   echo -e "${GREEN}✅ 초기화 작업이 완료되었습니다.${NC}"
@@ -338,8 +342,7 @@ if [ "${IMAGE_SOURCE}" = "local" ]; then
   image:
     repository: ghcr.io/dexidp/dex"
 
-    REDIS_HA_IMAGE_OVERRIDE="redis-ha:
-  haproxy:
+    REDIS_HA_IMAGE_OVERRIDE="  haproxy:
     image:
       repository: ecr-public.aws.com/docker/library/haproxy"
 

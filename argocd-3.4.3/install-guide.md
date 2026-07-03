@@ -79,11 +79,13 @@ kubectl get svc -n argocd
 ```
 
 ### 초기 관리자(admin) 비밀번호 조회
+
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
 ```
 
 ### 웹 UI 접속 방법
+
 * **NodePort 방식**: `http://<NODE_IP>:30001`
 * **도메인 라우팅 방식**: `http://argocd.devops.internal`
   * (Envoy Gateway나 인그레스 게이트웨이 IP를 hosts 파일에 추가해야 합니다.)
@@ -120,7 +122,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
    ```bash
    # CRD 우선 배포
    kubectl apply -f ./charts/argo-cd/templates/crds/ -n argocd
-   
+
    # Helm 배포
    helm upgrade --install argocd ./charts/argo-cd \
      -n argocd --create-namespace \
