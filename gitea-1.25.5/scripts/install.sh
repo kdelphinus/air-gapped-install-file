@@ -44,8 +44,13 @@ IMAGE_SOURCE="${IMAGE_SOURCE}"
 HARBOR_REGISTRY="${HARBOR_REGISTRY}"
 HARBOR_PROJECT="${HARBOR_PROJECT}"
 DB_TYPE="${DB_TYPE}"
+DB_TYPE_NAME="${DB_TYPE_NAME}"
+PG_ENABLED="${PG_ENABLED}"
+PG_REGISTRY="${PG_REGISTRY}"
+PG_REPOSITORY="${PG_REPOSITORY}"
 TARGET_NODE="${TARGET_NODE}"
 DOMAIN="${DOMAIN}"
+ADMIN_USERNAME="${ADMIN_USERNAME}"
 INSTALLED_VERSION="v1.25.5"
 EOF
     echo "  ✅ 설정이 ${CONF_FILE} 에 저장되었습니다."
@@ -68,24 +73,39 @@ cleanup_resources() {
     echo "🗑️  HTTPRoute 삭제 중..."
     kubectl delete httproute gitea-route -n "${NAMESPACE}" --ignore-not-found=true
 
+    local DELETE_VOLUMES="no"
     if [ "$RESET_MODE" == "reset" ]; then
-        echo "🗑️  PVC 및 PV 삭제 중..."
-        kubectl delete pvc gitea-data-pvc -n "${NAMESPACE}" --ignore-not-found=true
-        kubectl delete pv gitea-data-pv --ignore-not-found=true
-        rm -f "$CONF_FILE"
-        echo "🗑️  설정 파일($CONF_FILE) 삭제 완료."
+        DELETE_VOLUMES="yes"
     else
-        read -p "❓ [데이터 삭제] 기존 PVC/PV 데이터를 삭제하시겠습니까? (y/N): " DELETE_DATA
+        echo ""
+        read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_DATA
         if [[ "${DELETE_DATA}" =~ ^[Yy]$ ]]; then
-            echo "🗑️  PVC 및 PV 삭제 중..."
-            kubectl delete pvc gitea-data-pvc -n "${NAMESPACE}" --ignore-not-found=true
-            kubectl delete pv gitea-data-pv --ignore-not-found=true
+            DELETE_VOLUMES="yes"
         fi
     fi
 
-    if kubectl get ns "${NAMESPACE}" >/dev/null 2>&1; then
-        echo "🗑️  Namespace '${NAMESPACE}' 삭제 중..."
-        kubectl delete ns "${NAMESPACE}" --ignore-not-found=true --timeout=30s
+    if [ "$DELETE_VOLUMES" == "yes" ]; then
+        echo "🗑️  PVC 및 PV 삭제 중..."
+        kubectl delete pvc gitea-data-pvc -n "${NAMESPACE}" --ignore-not-found=true
+        kubectl delete pv gitea-data-pv --ignore-not-found=true
+    else
+        echo "➡️  PVC 및 PV 볼륨 데이터가 보존되었습니다."
+    fi
+
+    # 네임스페이스 삭제 (볼륨 보존 시 cascade delete 방지를 위해 우회)
+    if [ "$DELETE_VOLUMES" == "yes" ]; then
+        if kubectl get ns "${NAMESPACE}" >/dev/null 2>&1; then
+            echo "🗑️  Namespace '${NAMESPACE}' 삭제 중..."
+            kubectl delete ns "${NAMESPACE}" --ignore-not-found=true --timeout=30s
+        fi
+    else
+        echo "➡️  볼륨 보존 선택에 따라 Namespace '${NAMESPACE}' 삭제 단계를 생략합니다."
+    fi
+
+    if [ "$RESET_MODE" == "reset" ]; then
+        rm -f "$CONF_FILE"
+        rm -f "./values-infra.yaml"
+        echo "🗑️  설정 파일 및 생성된 인프라 파일 삭제 완료 (Reset)."
     fi
 
     echo "✅ 초기화 완료."
@@ -201,23 +221,50 @@ if [ "$DO_UPGRADE" != "true" ]; then
     ADMIN_USERNAME="${ADMIN_USERNAME:-gitea-admin}"
 
     read -sp "초기 관리자 비밀번호 (엔터 시 임의 자동 생성): " ADMIN_PASSWORD; echo
+fi
+
+ADMIN_USERNAME="${ADMIN_USERNAME:-gitea-admin}"
+
+if [ "$DO_UPGRADE" == "true" ]; then
+    echo "⏳ 기존 관리자 비밀번호 복구를 시도합니다..."
+    ENV_PWD=$(kubectl get deployment gitea -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="GITEA_ADMIN_PASSWORD")].value}' 2>/dev/null)
+    if [ -z "$ENV_PWD" ]; then
+        SECRET_NAME=$(kubectl get deployment gitea -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="GITEA_ADMIN_PASSWORD")].valueFrom.secretKeyRef.name}' 2>/dev/null)
+        SECRET_KEY=$(kubectl get deployment gitea -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="GITEA_ADMIN_PASSWORD")].valueFrom.secretKeyRef.key}' 2>/dev/null)
+        if [ -n "$SECRET_NAME" ] && [ -n "$SECRET_KEY" ]; then
+            ENV_PWD=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.${SECRET_KEY}}" | base64 -d 2>/dev/null)
+        fi
+    fi
+
+    if [ -n "$ENV_PWD" ]; then
+        ADMIN_PASSWORD="$ENV_PWD"
+        echo "  🔑 기존 설치 상태로부터 비밀번호를 성공적으로 복구했습니다."
+    else
+        echo "  ⚠️  기존 비밀번호 복구에 실패했습니다."
+        read -sp "관리자 비밀번호를 수동으로 입력하세요: " ADMIN_PASSWORD; echo
+        if [ -z "$ADMIN_PASSWORD" ]; then
+            echo "[오류] 비밀번호 입력이 누락되었습니다."
+            exit 1
+        fi
+    fi
+else
     if [ -z "${ADMIN_PASSWORD}" ]; then
         ADMIN_PASSWORD=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 12)
         echo "  - 관리자 비밀번호가 자동으로 생성되었습니다."
     fi
 fi
 
-ADMIN_USERNAME="${ADMIN_USERNAME:-gitea-admin}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 12)}"
-
 save_conf
 
 # ==========================================
-# [3] 설정 파일(values.yaml) 업데이트 및 리소스 배포
-# ==========================================
-echo "🔧 설정 파일(${VALUES_FILE}) 업데이트 중..."
 
-# Gitea 이미지 설정 동기화
+
+# ==========================================
+# [3] 설정 파일(values-infra.yaml) 생성 및 리소스 배포
+# ==========================================
+echo "🔧 인프라 설정 파일(values-infra.yaml) 생성 중..."
+
+# Gitea 이미지 설정
 if [ "${IMAGE_SOURCE}" = "harbor" ]; then
     GITEA_REGISTRY="${HARBOR_REGISTRY}"
     GITEA_REPOSITORY="${HARBOR_PROJECT}/gitea"
@@ -226,14 +273,7 @@ else
     GITEA_REPOSITORY="gitea"
 fi
 
-sed -i '/^image:/,/^service:/ s|registry: .*|registry: '"$GITEA_REGISTRY"'|' "${VALUES_FILE}"
-sed -i '/^image:/,/^service:/ s|repository: .*|repository: '"$GITEA_REPOSITORY"'|' "${VALUES_FILE}"
-
-# 관리자 계정 설정 동기화
-sed -i '/admin:/,/^$/ s|username: .*|username: '"$ADMIN_USERNAME"'|' "${VALUES_FILE}"
-sed -i '/admin:/,/^$/ s|password: .*|password: "'"$ADMIN_PASSWORD"'"|' "${VALUES_FILE}"
-
-# DB 및 PostgreSQL 동기화
+# DB 및 PostgreSQL 설정
 if [ "${DB_TYPE}" = "2" ]; then
     DB_TYPE_NAME="postgres"
     PG_ENABLED="true"
@@ -251,39 +291,49 @@ else
     PG_REPOSITORY="bitnamilegacy/postgresql"
 fi
 
-sed -i '/database:/,/^$/ s|DB_TYPE: .*|DB_TYPE: '"$DB_TYPE_NAME"'|' "${VALUES_FILE}"
-sed -i '/^postgresql:/,/^$/ s|enabled: .*|enabled: '"$PG_ENABLED"'|' "${VALUES_FILE}"
-sed -i '/^postgresql:/,/^$/ s|registry: .*|registry: '"$PG_REGISTRY"'|' "${VALUES_FILE}"
-sed -i '/^postgresql:/,/^$/ s|repository: .*|repository: '"$PG_REPOSITORY"'|' "${VALUES_FILE}"
-
-# 노드 고정 (nodeSelector) 동기화
+# 노드 고정 (nodeSelector) 적용
+NODE_SELECTOR_BLOCK="nodeSelector: {}"
 if [ -n "${TARGET_NODE}" ]; then
     kubectl label nodes "${TARGET_NODE}" "${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}" --overwrite
-    
-    # values.yaml 에서 기존 nodeSelector 블록 삭제 후 새로 추가
-    sed -i '/^nodeSelector:/,/^$/d' "${VALUES_FILE}"
-    cat >> "${VALUES_FILE}" <<EOF
-nodeSelector:
-  ${NODE_LABEL_KEY}: "${NODE_LABEL_VALUE}"
-
-EOF
-else
-    sed -i '/^nodeSelector:/,/^$/d' "${VALUES_FILE}"
-    cat >> "${VALUES_FILE}" <<EOF
-nodeSelector: {}
-
-EOF
+    NODE_SELECTOR_BLOCK="nodeSelector:
+  ${NODE_LABEL_KEY}: \"${NODE_LABEL_VALUE}\""
 fi
 
-# 초기 볼륨 권한 지정을 위한 루트 권한 실행 init 컨테이너 (preExtraInitContainers) 동기화
+# 루트 권한 extra init container 설정
 if [ "${IMAGE_SOURCE}" = "harbor" ]; then
     OS_SHELL_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/os-shell:12-debian-12-r51"
 else
     OS_SHELL_IMAGE="docker.io/bitnamilegacy/os-shell:12-debian-12-r51"
 fi
 
-sed -i '/^preExtraInitContainers:/,/^$/d' "${VALUES_FILE}"
-cat >> "${VALUES_FILE}" <<EOF
+ROOT_URL_VAL="http://gitea.devops.internal"
+if [ -n "${DOMAIN}" ]; then
+    ROOT_URL_VAL="http://${DOMAIN}"
+fi
+
+cat > ./values-infra.yaml <<EOF
+# Gitea v1.25.5 인프라 설정 — install.sh 에 의해 자동 관리됩니다.
+image:
+  registry: "${GITEA_REGISTRY}"
+  repository: "${GITEA_REPOSITORY}"
+
+gitea:
+  admin:
+    username: "${ADMIN_USERNAME}"
+  config:
+    server:
+      ROOT_URL: "${ROOT_URL_VAL}"
+    database:
+      DB_TYPE: "${DB_TYPE_NAME}"
+
+postgresql:
+  enabled: ${PG_ENABLED}
+  image:
+    registry: "${PG_REGISTRY}"
+    repository: "${PG_REPOSITORY}"
+
+${NODE_SELECTOR_BLOCK}
+
 preExtraInitContainers:
   - name: volume-permissions
     image: "${OS_SHELL_IMAGE}"
@@ -299,7 +349,6 @@ preExtraInitContainers:
     volumeMounts:
       - name: data
         mountPath: /data
-
 EOF
 
 # ── 네임스페이스 및 PV 생성 ───────────────────────────────────
@@ -326,7 +375,9 @@ echo ""
 echo ">>> Helm ${DO_UPGRADE:+upgrade}${DO_UPGRADE:-install} 실행 중..."
 helm upgrade --install gitea "${CHART_PATH}" \
     -n "${NAMESPACE}" \
-    -f "${VALUES_FILE}"
+    -f "${VALUES_FILE}" \
+    -f ./values-infra.yaml \
+    --set-string gitea.admin.password="${ADMIN_PASSWORD}"
 
 echo ""
 echo ">>> Gitea Pod 준비 대기 중 (최대 5분)..."

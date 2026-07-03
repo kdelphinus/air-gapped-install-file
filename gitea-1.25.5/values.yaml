@@ -26,7 +26,7 @@ service:
 gitea:
   admin:
     username: gitea-admin
-    password: giteaAdmin123!
+    password: ""
     email: admin@devops.internal
   config:
     server:
