@@ -30,10 +30,14 @@ save_conf() {
 # Harbor 2.10.3 설치 설정 — install.sh 에 의해 자동 관리됩니다.
 IMAGE_LOAD_CHOICE="${IMAGE_LOAD_CHOICE}"
 EXPOSE_CHOICE="${EXPOSE_CHOICE}"
+EXPOSE_TYPE="${EXPOSE_TYPE}"
 EXTERNAL_HOSTNAME="${EXTERNAL_HOSTNAME}"
+EXTERNAL_URL="${EXTERNAL_URL}"
+PROTOCOL="${PROTOCOL}"
 HTTP_NODEPORT="${HTTP_NODEPORT}"
 HTTPS_NODEPORT="${HTTPS_NODEPORT}"
 TLS_ENABLED="${TLS_ENABLED}"
+TLS_CERT_SOURCE="${TLS_CERT_SOURCE}"
 TLS_SECRET_NAME="${TLS_SECRET_NAME}"
 STORAGE_MODE="${STORAGE_MODE}"
 STORAGE_SIZE="${STORAGE_SIZE}"
@@ -47,6 +51,7 @@ REDIS_SIZE="${REDIS_SIZE}"
 JOBLOG_SIZE="${JOBLOG_SIZE}"
 TRIVY_SIZE="${TRIVY_SIZE}"
 ALLOW_CP_TAINT="${ALLOW_CP_TAINT}"
+ENABLE_CP_TOLERATIONS="${ENABLE_CP_TOLERATIONS}"
 TARGET_NODE_NAME="${TARGET_NODE_NAME}"
 MINIMIZE_RESOURCES="${MINIMIZE_RESOURCES}"
 INSTALLED_VERSION="v2.10.3"
@@ -69,17 +74,18 @@ function cleanup_resources() {
       sleep 3
   fi
 
-  # PVC 삭제
-  echo "🗑️  Harbor PVC 삭제 중..."
-  kubectl delete pvc -n "$HARBOR_NAMESPACE" --all --timeout=15s --wait=false 2>/dev/null
-
-  # PV 삭제 여부 ( Retain 정책 보존을 위해 별도 대화형 프롬프트 강제 )
+  # PVC 및 PV 삭제 여부 통합 프롬프트 (데이터 보호)
   echo ""
-  read -p "⚠️  PV도 물리적으로 삭제하시겠습니까? (Harbor 저장 이미지 데이터 전체 유실 주의) (y/n): " DELETE_PV
-  if [[ "$DELETE_PV" =~ ^[Yy]$ ]]; then
-      echo "🗑️  PV 삭제 중..."
+  read -p "⚠️  볼륨(PVC 및 PV)을 완전히 삭제하시겠습니까? (Harbor 저장 이미지 데이터 전체 유실 주의) (y/n): " DELETE_VOLUMES
+  if [[ "$DELETE_VOLUMES" =~ ^[Yy]$ ]]; then
+      echo "🗑️  Harbor PVC 삭제 중..."
+      kubectl delete pvc -n "$HARBOR_NAMESPACE" --all --timeout=15s --wait=false 2>/dev/null
+
+      echo "🗑️  PV 물리적 삭제 중..."
       kubectl delete pv "$PV_NAME" --ignore-not-found=true 2>/dev/null
       kubectl get pv 2>/dev/null | grep "$HARBOR_NAMESPACE" | awk '{print $1}' | xargs -r kubectl delete pv 2>/dev/null
+  else
+      echo "➡️  PVC 및 PV 볼륨 데이터가 보존되었습니다."
   fi
 
   # 네임스페이스 삭제
@@ -434,7 +440,7 @@ spec:
 EOF
 fi
 
-SCHEDULING_BLOCK=""
+COMPONENTS_OVERRIDE_BLOCK=""
 for COMP in nginx portal core jobservice registry trivy exporter; do
     COMP_SCHED=""
     if [ -n "$TARGET_NODE_NAME" ]; then
@@ -452,10 +458,35 @@ for COMP in nginx portal core jobservice registry trivy exporter; do
       effect: \"NoSchedule\"
 "
     fi
-    if [ -n "$COMP_SCHED" ]; then
-        SCHEDULING_BLOCK="${SCHEDULING_BLOCK}
+
+    COMP_RES=""
+    if [ "$MINIMIZE_RESOURCES" == "true" ]; then
+        local REQ_CPU="50m"
+        local REQ_MEM="128Mi"
+        local LIM_CPU="500m"
+        local LIM_MEM="512Mi"
+        if [ "$COMP" == "nginx" ] || [ "$COMP" == "portal" ]; then
+            REQ_MEM="64Mi"
+            LIM_CPU="200m"
+            LIM_MEM="256Mi"
+        elif [ "$COMP" == "jobservice" ]; then
+            LIM_CPU="200m"
+            LIM_MEM="256Mi"
+        fi
+        COMP_RES="  resources:
+    requests:
+      cpu: ${REQ_CPU}
+      memory: ${REQ_MEM}
+    limits:
+      cpu: ${LIM_CPU}
+      memory: ${LIM_MEM}
+"
+    fi
+
+    if [ -n "$COMP_SCHED" ] || [ -n "$COMP_RES" ]; then
+        COMPONENTS_OVERRIDE_BLOCK="${COMPONENTS_OVERRIDE_BLOCK}
 ${COMP}:
-${COMP_SCHED}"
+${COMP_SCHED}${COMP_RES}"
     fi
 done
 
@@ -476,81 +507,37 @@ for COMP in database redis; do
         effect: \"NoSchedule\"
 "
     fi
-    if [ -n "$COMP_SCHED" ]; then
-        SCHEDULING_BLOCK="${SCHEDULING_BLOCK}
+
+    COMP_RES=""
+    if [ "$MINIMIZE_RESOURCES" == "true" ]; then
+        local REQ_CPU="50m"
+        local REQ_MEM="128Mi"
+        local LIM_CPU="200m"
+        local LIM_MEM="512Mi"
+        if [ "$COMP" == "redis" ]; then
+            REQ_MEM="64Mi"
+            LIM_CPU="100m"
+            LIM_MEM="128Mi"
+        elif [ "$COMP" == "database" ]; then
+            LIM_MEM="512Mi"
+        fi
+        COMP_RES="    resources:
+      requests:
+        cpu: ${REQ_CPU}
+        memory: ${REQ_MEM}
+      limits:
+        cpu: ${LIM_CPU}
+        memory: ${LIM_MEM}
+"
+    fi
+
+    if [ -n "$COMP_SCHED" ] || [ -n "$COMP_RES" ]; then
+        COMPONENTS_OVERRIDE_BLOCK="${COMPONENTS_OVERRIDE_BLOCK}
 ${COMP}:
   internal:
-${COMP_SCHED}"
+${COMP_SCHED}${COMP_RES}"
     fi
 done
-
-RESOURCES_BLOCK=""
-if [ "$MINIMIZE_RESOURCES" == "true" ]; then
-    RESOURCES_BLOCK="nginx:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
-
-portal:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 100m
-      memory: 128Mi
-
-core:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-
-jobservice:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
-
-registry:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-
-database:
-  internal:
-    resources:
-      requests:
-        cpu: 50m
-        memory: 128Mi
-      limits:
-        cpu: 200m
-        memory: 512Mi
-
-redis:
-  internal:
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 100m
-        memory: 128Mi"
-fi
 
 TLS_CERT_SOURCE="none"
 if [ "$TLS_ENABLED" == "true" ]; then
@@ -610,7 +597,6 @@ fi
 cat > ./values-infra.yaml <<EOF
 # Harbor 2.10.3 인프라 설정 — install.sh 에 의해 자동 관리됩니다.
 externalURL: ${EXTERNAL_URL}
-harborAdminPassword: "${ADMIN_PASSWORD}"
 
 expose:
   type: ${EXPOSE_TYPE}
@@ -631,8 +617,7 @@ expose:
 
 ${PERSISTENCE_CONFIG}
 
-${SCHEDULING_BLOCK}
-${RESOURCES_BLOCK}
+${COMPONENTS_OVERRIDE_BLOCK}
 EOF
 
 # ==========================================
@@ -652,6 +637,7 @@ helm upgrade --install "$HARBOR_RELEASE_NAME" "$HELM_CHART_PATH" \
     --namespace "$HARBOR_NAMESPACE" \
     -f ./values.yaml \
     -f ./values-infra.yaml \
+    --set harborAdminPassword="${ADMIN_PASSWORD}" \
     --atomic \
     --wait
 

@@ -24,17 +24,18 @@ else
     echo "  - 삭제할 Helm Release가 없습니다."
 fi
 
-# PVC 제거
-echo "🗑️  PVC 삭제 중..."
-kubectl delete pvc -n "$NAMESPACE" --all --ignore-not-found=true
-
-# PV 삭제 여부 (Retain policy — 삭제 시 이미지/데이터 유실)
+# PVC 및 PV 삭제 여부 통합 프롬프트 (데이터 보호 목적)
 echo ""
-read -p "⚠️  PV도 삭제하시겠습니까? (Harbor 저장 이미지 전체 유실 주의) (y/n): " DELETE_PV
-if [[ "$DELETE_PV" =~ ^[Yy]$ ]]; then
+read -p "⚠️  PVC 및 PV를 삭제하시겠습니까? (Harbor 저장 이미지 데이터 전체 유실 주의) (y/n): " DELETE_VOLUMES
+if [[ "$DELETE_VOLUMES" =~ ^[Yy]$ ]]; then
+    echo "🗑️  PVC 삭제 중..."
+    kubectl delete pvc -n "$NAMESPACE" --all --ignore-not-found=true
+
     echo "🗑️  PV 삭제 중..."
     kubectl delete pv harbor-pv --ignore-not-found=true
     kubectl get pv 2>/dev/null | grep "$NAMESPACE" | awk '{print $1}' | xargs -r kubectl delete pv
+else
+    echo "➡️  PVC 및 PV 볼륨 데이터가 보존되었습니다."
 fi
 
 # 네임스페이스 삭제

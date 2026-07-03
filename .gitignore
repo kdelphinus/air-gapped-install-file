@@ -259,3 +259,7 @@ velero-*/velero-v*/
 # 인프라 가변 설정 및 동적 스토리지 리소스 산출물
 **/values-infra.yaml
 **/manifests/*-infra.yaml
+
+# 임시 기획 및 태스크 관리 파일
+/implementation_plan.md
+/task.md

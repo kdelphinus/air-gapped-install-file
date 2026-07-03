@@ -344,3 +344,73 @@ docker exec "${KIND_NODE_NAME}" systemctl restart containerd
 ```
 
 실제 운영 환경에서는 위 예시의 `harbor.example.local:30002` 대신 DNS에 등록된 Harbor 도메인 또는 로드밸런서 주소를 사용합니다. DNS 서버에 등록하지 않았다면 Jenkins agent Pod의 `hostAliases`, Kubernetes worker 노드의 `/etc/hosts`, 또는 사내 DNS 중 하나로 동일한 이름이 해석되도록 맞춰야 합니다.
+
+## Manual Installation & Upgrade
+
+자동화 설치 스크립트(`install.sh`)를 사용하지 않고, 수동으로 Harbor 리소스 및 Helm 릴리스를 배포하고자 할 때 아래 절차를 수행합니다.
+
+### 1. K8s 영구 스토리지(PV/PVC) 수동 생성
+
+볼륨 구성을 위해 `manifests/harbor-persistence-infra.yaml` 파일을 수동으로 편집하여 작성한 뒤 적용합니다 (StorageClass를 사용할 경우 이 단계는 생략 가능).
+
+```bash
+# PV 및 PVC 리소스 배포
+kubectl apply -f manifests/harbor-persistence-infra.yaml
+```
+
+### 2. Helm 오버라이드 설정 파일 생성 (`values-infra.yaml`)
+
+패스워드 정보를 제외한 인프라 사양을 `values-infra.yaml`에 작성합니다.
+
+```yaml
+# values-infra.yaml 수동 예시
+externalURL: http://harbor.devops.internal:30002
+
+expose:
+  type: nodePort
+  nodePort:
+    name: harbor
+    ports:
+      http:
+        port: 80
+        nodePort: 30002
+
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      existingClaim: "harbor-pvc"
+      subPath: registry
+    database:
+      existingClaim: "harbor-pvc"
+      subPath: database
+    jobservice:
+      jobLog:
+        existingClaim: "harbor-pvc"
+        subPath: jobservice-logs
+    redis:
+      existingClaim: "harbor-pvc"
+      subPath: redis
+    trivy:
+      existingClaim: "harbor-pvc"
+      subPath: trivy
+```
+
+### 3. Helm 차트 수동 설치 및 업그레이드
+
+컴포넌트 루트 디렉토리에서 Helm 명령어를 사용하여 릴리스를 배포합니다. 비밀번호(`harborAdminPassword`)는 보안을 위해 명령줄 파라미터(`--set`)로 직접 주입합니다.
+
+```bash
+# 1. Harbor 네임스페이스 생성
+kubectl create namespace harbor --dry-run=client -o yaml | kubectl apply -f -
+
+# 2. Helm 설치 및 업그레이드 구동
+helm upgrade --install harbor ./charts/harbor \
+  --namespace harbor \
+  -f ./values.yaml \
+  -f ./values-infra.yaml \
+  --set harborAdminPassword="<원하는_비밀번호_입력>" \
+  --atomic \
+  --wait
+```
