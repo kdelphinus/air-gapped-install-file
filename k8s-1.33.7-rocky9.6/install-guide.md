@@ -123,7 +123,34 @@ net.ipv4.ip_forward                 = 1
 EOF
 sudo sysctl --system
 
-# 4. 방화벽 비활성화 (보안 정책에 따라 포트 설정도 가능)
+# 4. 파일 디스크립터(FD) 및 시스템 Limits 상향 (정석 설정)
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-limits.conf
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 8192
+EOF
+sudo sysctl --system
+
+cat <<EOF | sudo tee /etc/security/limits.d/99-kubernetes-limits.conf
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+EOF
+
+sudo mkdir -p /etc/systemd/system/kubelet.service.d
+cat <<EOF | sudo tee /etc/systemd/system/kubelet.service.d/limits.conf
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+
+# 5. 방화벽 비활성화 (보안 정책에 따라 포트 설정도 가능)
 sudo systemctl stop firewalld 2>/dev/null || true
 sudo systemctl disable firewalld 2>/dev/null || true
 sudo systemctl stop ufw 2>/dev/null || true
