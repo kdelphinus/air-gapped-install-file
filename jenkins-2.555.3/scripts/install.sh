@@ -75,20 +75,20 @@ function cleanup_resources() {
   # Helm Uninstall
   if helm status jenkins -n $NAMESPACE >/dev/null 2>&1; then
       echo "⏳ Helm 차트 삭제 중..."
-      helm uninstall jenkins -n $NAMESPACE --wait=false 2>/dev/null
+      helm uninstall jenkins -n $NAMESPACE --wait=false 2>/dev/null || true
       sleep 3
   fi
 
   # PVC/PV 삭제
   echo "🗑️  Jenkins PVC/PV 삭제 중..."
-  kubectl delete pvc -n $NAMESPACE jenkins --timeout=10s --wait=false 2>/dev/null
-  kubectl delete pvc -n $NAMESPACE gradle-cache-pvc --timeout=10s --wait=false 2>/dev/null
-  kubectl delete pv jenkins-pv gradle-cache-pv --timeout=10s --wait=false 2>/dev/null
+  kubectl delete pvc -n $NAMESPACE jenkins --ignore-not-found=true --timeout=10s --wait=false 2>/dev/null || true
+  kubectl delete pvc -n $NAMESPACE gradle-cache-pvc --ignore-not-found=true --timeout=10s --wait=false 2>/dev/null || true
+  kubectl delete pv jenkins-pv gradle-cache-pv --ignore-not-found=true --timeout=10s --wait=false 2>/dev/null || true
 
   # 네임스페이스 삭제
   if kubectl get ns $NAMESPACE > /dev/null 2>&1; then
       echo "🗑️  네임스페이스($NAMESPACE) 삭제..."
-      kubectl delete ns $NAMESPACE --timeout=15s --wait=false 2>/dev/null
+      kubectl delete ns $NAMESPACE --ignore-not-found=true --timeout=15s --wait=false 2>/dev/null || true
   fi
 
   if [ "$RESET_MODE" == "reset" ]; then
