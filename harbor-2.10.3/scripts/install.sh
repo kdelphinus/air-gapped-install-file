@@ -154,9 +154,15 @@ if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     [ -f "$CONF_FILE" ] && echo "  📋 저장된 설정 정보:"
     [ -n "$EXTERNAL_HOSTNAME" ] && echo "     - 접속 호스트  : $EXTERNAL_HOSTNAME"
     [ -n "$STORAGE_MODE" ] && echo "     - 스토리지 모드: $STORAGE_MODE (크기: $STORAGE_SIZE)"
+    [ "$STORAGE_MODE" == "hostpath" ] && echo "       · HostPath: ${SAVE_PATH:-미설정} (PV node: ${NODE_NAME:-미설정})"
+    [ "$STORAGE_MODE" == "nfs" ] && echo "       · NFS 정적 PV: ${NFS_SERVER:-미설정}:${NFS_PATH:-미설정}"
+    [ "$STORAGE_MODE" == "nfs-dynamic" ] && echo "       · Dynamic StorageClass: ${STORAGE_CLASS:-미설정}"
     [ -n "$TLS_ENABLED" ] && echo "     - TLS 활성화   : $TLS_ENABLED"
     [ -n "$MINIMIZE_RESOURCES" ] && echo "     - 리소스 최소화: $MINIMIZE_RESOURCES"
 
+    echo ""
+    echo -e "${YELLOW}[주의] 업그레이드는 위 저장 설정을 그대로 사용합니다.${NC}"
+    echo -e "       HostPath/NFS 정적/NFS SC 등 스토리지 백엔드를 바꾸려면 '재설치' 또는 '초기화'를 선택하세요."
     echo ""
     echo "동작을 선택하세요:"
     echo "  1) 업그레이드 (저장된 설정 유지, Helm upgrade)"
@@ -293,9 +299,9 @@ if [ "$DO_UPGRADE" != "true" ]; then
 
     echo ""
     echo "스토리지 타입을 선택하세요:"
-    echo "  1) HostPath (특정 단일 노드 디렉토리 지정)"
-    echo "  2) NFS      (정적 PV / PVC 구성)"
-    echo "  3) NFS SC   (StorageClass 기반 동적 프로비저닝)"
+    echo "  1) HostPath (특정 단일 노드 디렉토리를 정적 PV로 사용)"
+    echo "  2) NFS 정적 할당 (NFS 서버/경로를 정적 PV로 사용)"
+    echo "  3) NFS SC 동적 할당 (StorageClass 기반 동적 프로비저닝)"
     read -p "선택 [1/2/3, 기본 1]: " STORAGE_CHOICE
     STORAGE_CHOICE="${STORAGE_CHOICE:-1}"
 

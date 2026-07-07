@@ -30,8 +30,9 @@
   ./scripts/install.sh
   ```
 * **동작 세부**:
-  1. **대화형 환경 입력**: 이미지 소스(Harbor / Local load / Online), 스토리지 경로(NFS / HostPath / Dynamic), 외부 도메인 등을 수집합니다.
-  2. **Values 자동 동기화**: 수집된 환경 변수는 `sed` 명령어를 통해 `values.yaml` 및 `configmap.yaml` 화이트리스트에 자동으로 동기화 매핑되어 반영됩니다.
+  1. **대화형 환경 입력**: 이미지 소스(Harbor / Local load / Online), 스토리지 백엔드(HostPath 정적 / NAS·NFS 정적 / Dynamic), 외부 도메인 등을 수집합니다.
+  2. **스토리지 설정 보존**: 기존 `install.conf`가 있는 상태에서 업그레이드를 선택하면 저장된 스토리지 백엔드를 그대로 사용합니다. HostPath에서 NAS 정적 또는 Dynamic으로 바꾸려면 재설치 또는 초기화를 선택해 설정을 다시 입력합니다.
+  3. **Values 자동 동기화**: 수집된 환경 변수는 `sed` 명령어를 통해 `values.yaml` 및 `configmap.yaml` 화이트리스트에 자동으로 동기화 매핑되어 반영됩니다.
 
 ---
 
@@ -48,7 +49,7 @@
      gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '1.0.0.0/8']
      ```
   3. **PV 매니페스트 배포**:
-     `manifests/gitlab-omnibus-pv.yaml` 내의 스토리지 저장 경로를 수정한 후 적용합니다:
+     HostPath 정적 PV를 사용할 경우 `manifests/gitlab-omnibus-pv.yaml` 내의 스토리지 저장 경로를 수정한 후 적용합니다. NAS/NFS 정적 PV는 자동화 스크립트가 NFS 서버/경로 입력값으로 별도 PV를 생성합니다:
      ```bash
      kubectl apply -f manifests/gitlab-omnibus-pv.yaml
      ```

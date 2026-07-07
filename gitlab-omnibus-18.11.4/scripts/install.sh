@@ -98,13 +98,16 @@ if [ "$EXIST_HELM" = "yes" ] || [ "$EXIST_K8S" = "yes" ] || [ "$EXIST_NS" = "yes
         echo "     이미지 소스  : ${IMAGE_SOURCE:-미설정}"
         [ "${IMAGE_SOURCE}" = "harbor" ] && echo "     Harbor       : ${HARBOR_REGISTRY}/${HARBOR_PROJECT}"
         echo "     스토리지     : ${STORAGE_TYPE:-미설정}"
-        [ "${STORAGE_TYPE}" = "hostpath" ] && echo "     HostPath     : ${HOSTPATH_DIR}"
-        [ "${STORAGE_TYPE}" = "nfs"      ] && echo "     NFS          : ${NFS_SERVER}:${NFS_PATH}"
-        [ "${STORAGE_TYPE}" = "dynamic"  ] && echo "     StorageClass : ${STORAGE_CLASS}"
+        [ "${STORAGE_TYPE}" = "hostpath" ] && echo "       · HostPath 정적 PV: ${HOSTPATH_DIR:-미설정}"
+        [ "${STORAGE_TYPE}" = "nfs"      ] && echo "       · NAS/NFS 정적 PV: ${NFS_SERVER:-미설정}:${NFS_PATH:-미설정}"
+        [ "${STORAGE_TYPE}" = "dynamic"  ] && echo "       · Dynamic StorageClass: ${STORAGE_CLASS:-미설정}"
         echo "     도메인       : ${DOMAIN_NAME:-미설정}"
         echo "     설치 버전    : ${INSTALLED_VERSION:-미설정}"
     fi
 
+    echo ""
+    echo -e "\033[1;33m[주의] 업그레이드는 위 저장 설정을 그대로 사용합니다.\033[0m"
+    echo "       HostPath/NAS 정적/Dynamic 등 스토리지 백엔드를 바꾸려면 '재설치' 또는 '초기화'를 선택하세요."
     echo ""
     echo "동작을 선택하세요:"
     echo "  1) 업그레이드   — 저장된 설정 유지, Helm upgrade --install"
@@ -197,9 +200,9 @@ fi
 if [ -z "${STORAGE_TYPE}" ]; then
     echo ""
     echo "스토리지 타입을 선택하세요:"
-    echo "  1) HostPath  — 로컬 노드 디렉토리 (단일 노드 환경 권장, 정적 PV)"
-    echo "  2) NAS/NFS   — 네트워크 공유 스토리지 (정적 PV)"
-    echo "  3) Dynamic   — StorageClass 기반 동적 프로비저닝 (Trident, NFS-CSI 등)"
+    echo "  1) HostPath  — 로컬 노드 디렉토리를 정적 PV로 사용"
+    echo "  2) NAS/NFS   — NFS 서버/경로를 정적 PV로 사용"
+    echo "  3) Dynamic   — StorageClass 기반 동적 PVC 사용 (Trident, NFS-CSI 등)"
     read -p "선택 [1/2/3, 기본값: 1]: " _STOR
     _STOR="${_STOR:-1}"
     if [ "$_STOR" = "1" ]; then

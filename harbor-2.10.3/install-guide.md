@@ -53,7 +53,7 @@ sudo ctr -n k8s.io images list | grep harbor
 | :--- | :--- | :--- |
 | `EXTERNAL_HOSTNAME` | Harbor 외부 접속 도메인명 또는 IP 주소 | `harbor.devops.internal` 또는 `<NODE_IP>` |
 | `TLS_ENABLED` / `TLS_SECRET_NAME` | 외부 HTTPS TLS 적용 여부 및 인증서 Secret 명 | `true` / `harbor-tls-secret` |
-| `STORAGE_MODE` | 볼륨 백엔드 모드 (HostPath / NFS 정적 / NFS SC) | `hostpath`, `nfs`, `nfs-dynamic` |
+| `STORAGE_MODE` | 볼륨 백엔드 모드 (HostPath 정적 / NFS 정적 / NFS SC 동적) | `hostpath`, `nfs`, `nfs-dynamic` |
 | `SAVE_PATH` / `NODE_NAME` | HostPath 볼륨 사용 시 디렉토리 경로 및 매핑 노드명 | `/data/harbor` / `worker-01` |
 | `NFS_SERVER` / `NFS_PATH` | NFS 정적 PV 매핑 서버 IP 및 내보내기 디렉토리 경로 | `192.168.1.100` / `/nfs/harbor` |
 | `STORAGE_CLASS` | NFS 동적 프로비저닝을 위한 K8s StorageClass 명칭 | `nfs-client` |
@@ -78,10 +78,12 @@ chmod +x scripts/install.sh scripts/uninstall.sh
 3. **리소스 사양 설정**:
    - **개발 환경 리소스 최소화 (y/N)**: 가상머신 등 리소스가 한정된 로컬 개발 장비에서 테스트할 경우, nginx/core/database 등 주요 파드의 Requests/Limits 제한을 최하위 사양(64Mi/128Mi 단위)으로 축소 오버라이드하여 가동 안정성을 확보합니다.
 4. **스토리지 타입 선택**:
-   - **`1` HostPath**: 단일 노드 로컬 마운트용. 고정 타겟 노드 이름과 로컬 호스트 절대 경로를 지정합니다.
-   - **`2` NFS (정적 할당)**: 정적 볼륨 볼 바인딩. NFS 서버 및 익스포트 디렉토리를 제공하여 PV/PVC를 동적 빌드합니다.
-   - **`3` NFS SC (동적 할당)**: 클러스터의 StorageClass와 컴포넌트별 개별 DB/Redis 용량을 조절해 자동 스토리지 프로비저닝을 위임합니다.
+   - **`1` HostPath**: 특정 단일 노드의 로컬 디렉토리를 정적 PV로 사용합니다. 고정 타겟 노드 이름과 로컬 호스트 절대 경로를 지정합니다.
+   - **`2` NFS 정적 할당**: NFS 서버 및 익스포트 디렉토리를 입력받아 정적 PV/PVC를 생성합니다.
+   - **`3` NFS SC 동적 할당**: 클러스터의 StorageClass와 컴포넌트별 개별 DB/Redis 용량을 조절해 자동 스토리지 프로비저닝을 위임합니다.
 5. **Harbor 관리자(`admin`) 비밀번호**: 최초/재설치 시에만 대화식으로 패스워드 입력을 요구하며, 평문으로 설정파일에 저장되지 않고 보안을 보존합니다. (Upgrade 시에는 기존 K8s Secret에서 자동 추출 및 상속 기동)
+
+> **주의**: 기존 `install.conf`가 있는 상태에서 `업그레이드`를 선택하면 저장된 `STORAGE_MODE`를 그대로 사용합니다. HostPath에서 NFS 정적 또는 Dynamic으로 바꾸려면 `재설치` 또는 `초기화`를 선택해 스토리지 설정을 다시 입력하세요.
 
 ## 4단계: Envoy HTTPRoute 적용 (Envoy Gateway 선택 시)
 
