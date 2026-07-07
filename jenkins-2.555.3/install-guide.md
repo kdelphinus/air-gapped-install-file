@@ -41,7 +41,7 @@ sudo ./build-tofu-jenkins.sh
 - Helm v3.14.0 이상 설치 완료
 - `kubectl` CLI 사용 및 적절한 네임스페이스 권한 소유
 - Harbor 사설 레지스트리 작동 상태 확인 (`<NODE_IP>:30002`)
-- (HostPath PV 사용 시) `/data/jenkins` 디렉토리 사전 생성 권장
+- (정적 PV 사용 시) Jenkins를 고정 배치할 노드에 `/data/jenkins` 디렉토리 준비 권장
 
 ---
 
@@ -78,8 +78,9 @@ sudo ./scripts/install.sh
   * 일반 멀티노드 클러스터에서는 모든 스케줄 가능 노드에 이미지를 로드해야 합니다.
   * `cmp-jenkins-full` 커스텀 이미지는 Harbor 또는 로컬 방식에서 사용합니다.
 * **OpenTofu 커스텀 이미지 활성화 여부**: "y"를 선택하면, 빌드하여 업로드해 둔 `cmp-jenkins-full:2.555.3` 이미지를 `controller.image`로 오버라이드하여 배포합니다.
-* **스토리지 유형**: 
-  * `hostpath` 선택 시 워커 노드의 특정 로컬 디바이스 경로(기본 `/data/jenkins`)를 영구 마운트하며, `manifests/pv-volume.yaml` 리소스를 먼저 생성해줍니다.
+* **스토리지 유형**:
+  * `static` 선택 시 워커 노드의 특정 로컬 경로(기본 `/data/jenkins`)를 사용하는 정적 PV(`manifests/pv-volume.yaml`)를 먼저 생성하고, Jenkins PVC가 `manual` StorageClass로 바인딩되도록 구성합니다.
+  * 기존 `install.conf`에 남아 있는 `hostpath` 값도 호환성을 위해 `static`과 동일하게 처리합니다.
   * `dynamic` 선택 시 사전에 준비된 `StorageClass`(예: NFS dynamic provisioner) 이름을 입력받아 동적으로 PVC를 구성합니다.
 * **YAML 동기화**:
   * 입력된 설정은 `--set` 인자를 사용하는 대신 `values-override.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
@@ -116,14 +117,14 @@ kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-password
    controller:
      serviceType: "NodePort"
      nodePort: 30000
-     persistence:
-       enabled: true
-       storageClass: "manual"
-       size: "20Gi"
+   persistence:
+     enabled: true
+     storageClass: "manual"
+     size: "20Gi"
    ```
 3. Kubernetes 볼륨 매니페스트 및 Helm 배포를 직접 적용합니다.
    ```bash
-   # HostPath PV 적용 (HostPath 사용 시)
+   # 정적 PV 적용 (Static 선택 시)
    kubectl apply -f ./manifests/pv-volume.yaml
    
    # Gradle 캐시 공유 PV/PVC 적용

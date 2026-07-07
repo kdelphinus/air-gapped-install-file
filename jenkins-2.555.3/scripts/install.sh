@@ -52,6 +52,10 @@ EOF
     echo -e "  ✅ 설정이 ${GREEN}${CONF_FILE}${NC} 에 저장되었습니다."
 }
 
+is_static_storage() {
+    [ "$STORAGE_TYPE" == "static" ] || [ "$STORAGE_TYPE" == "hostpath" ]
+}
+
 # ==========================================
 # [함수] 클린업 로직
 # ==========================================
@@ -370,17 +374,19 @@ if [ "$DO_UPGRADE" != "true" ]; then
     # 2-4. 스토리지 타입 선택
     echo ""
     echo "Jenkins Home 영구 볼륨 스토리지 유형을 선택하세요:"
-    echo "  1) HostPath (로컬 노드의 특정 경로 직접 사용)"
-    echo "  2) Dynamic  (StorageClass 기반 동적 PVC)"
+    echo "  1) Static  (HostPath 기반 정적 PV를 먼저 생성해 PVC 바인딩)"
+    echo "  2) Dynamic (StorageClass 기반 동적 PVC)"
     read -p "선택 [1/2, 기본값 1]: " _STORAGE_SEL
     _STORAGE_SEL="${_STORAGE_SEL:-1}"
 
     if [ "$_STORAGE_SEL" == "1" ]; then
-        STORAGE_TYPE="hostpath"
-        read -p "호스트 디렉토리 경로 지정 (기본 /data/jenkins): " HOSTPATH_DIR
+        STORAGE_TYPE="static"
+        STORAGE_CLASS="manual"
+        read -p "정적 PV HostPath 경로 지정 (기본 /data/jenkins): " HOSTPATH_DIR
         HOSTPATH_DIR="${HOSTPATH_DIR:-/data/jenkins}"
     else
         STORAGE_TYPE="dynamic"
+        HOSTPATH_DIR=""
         read -p "StorageClass 이름 입력 (예: nfs-client): " STORAGE_CLASS
     fi
 
@@ -493,7 +499,7 @@ EOF
 fi
 
 # 스토리지 볼륨 설정 추가. Jenkins chart의 persistence는 controller 하위가 아닌 top-level 키입니다.
-if [ "$STORAGE_TYPE" == "hostpath" ]; then
+if is_static_storage; then
     cat >> ./values-temp.yaml <<EOF
 
 persistence:
@@ -523,10 +529,10 @@ kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f 
 prepare_buildah_agent_image
 render_buildah_values
 
-# HostPath PV 수동 생성
-if [ "$STORAGE_TYPE" == "hostpath" ]; then
+# 정적 HostPath PV 수동 생성
+if is_static_storage; then
     prepare_hostpath_permissions "$HOSTPATH_DIR"
-    echo "   → HostPath 영구볼륨(PV) 생성 중..."
+    echo "   → 정적 HostPath 영구볼륨(PV) 생성 중..."
     sed "s|/data/jenkins|${HOSTPATH_DIR}|g" "$PV_FILE" | kubectl apply -f -
 fi
 

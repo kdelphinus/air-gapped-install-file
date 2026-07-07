@@ -10,5 +10,7 @@ spec:
     storage: 20Gi
   accessModes:
     - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
   hostPath:
     path: "/data/jenkins" # 실제 서버에 이 폴더가 있어야 함
+    type: DirectoryOrCreate
