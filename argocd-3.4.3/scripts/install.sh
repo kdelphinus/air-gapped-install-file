@@ -48,6 +48,8 @@ STORAGE_CLASS="${STORAGE_CLASS}"
 HOSTPATH_REDIS="${HOSTPATH_REDIS}"
 HOSTPATH_REPO="${HOSTPATH_REPO}"
 TARGET_NODE="${TARGET_NODE}"
+ALLOW_CP_TAINT="${ALLOW_CP_TAINT}"
+ENABLE_CP_TOLERATIONS="${ENABLE_CP_TOLERATIONS}"
 INSTALLED_VERSION="v3.4.3"
 EOF
     echo -e "  ✅ 설정이 ${GREEN}${CONF_FILE}${NC} 에 저장되었습니다."
@@ -114,6 +116,7 @@ if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
     [ -n "$DOMAIN" ] && echo "     - 도메인 주소  : $DOMAIN"
     [ -n "$REDIS_HA_ENABLED" ] && echo "     - Redis HA 활성: $REDIS_HA_ENABLED"
     [ -n "$TARGET_NODE" ] && echo "     - 노드 고정 배치: $TARGET_NODE"
+    [ -n "$ENABLE_CP_TOLERATIONS" ] && echo "     - Master 배치 허용: $ENABLE_CP_TOLERATIONS"
 
     echo ""
     echo "동작을 선택하세요:"
@@ -240,6 +243,13 @@ if [ "$DO_UPGRADE" != "true" ]; then
     kubectl get nodes -o wide
     read -p "ArgoCD를 고정 배치할 노드 이름 (없으면 비워둠): " TARGET_NODE
 
+    echo ""
+    read -p "Control Plane(Master) 노드의 Taint를 허용하여 ArgoCD Pod을 배치하겠습니까? (y/N): " ALLOW_CP_TAINT
+    ENABLE_CP_TOLERATIONS="false"
+    if [[ "$ALLOW_CP_TAINT" =~ ^[yY]([eE][sS])?$ ]]; then
+        ENABLE_CP_TOLERATIONS="true"
+    fi
+
     # 2-5. Redis HA (Sentinel) 활성화 여부
     echo ""
     read -p "Redis HA (Sentinel 고가용성) 구성을 활성화하시겠습니까? (y/n, 기본 n): " _HA_YN
@@ -247,6 +257,21 @@ if [ "$DO_UPGRADE" != "true" ]; then
         REDIS_HA_ENABLED="true"
     else
         REDIS_HA_ENABLED="false"
+    fi
+fi
+
+if [ "$DO_UPGRADE" == "true" ]; then
+    echo ""
+    _DEFAULT_CP_TOL="n"
+    [ "$ENABLE_CP_TOLERATIONS" == "true" ] && _DEFAULT_CP_TOL="y"
+    read -p "Control Plane(Master) 노드 Taint toleration을 적용/유지하시겠습니까? (y/n, 기본 ${_DEFAULT_CP_TOL}): " _CP_TOL_YN
+    _CP_TOL_YN="${_CP_TOL_YN:-$_DEFAULT_CP_TOL}"
+    if [[ "$_CP_TOL_YN" =~ ^[yY]([eE][sS])?$ ]]; then
+        ALLOW_CP_TAINT="$_CP_TOL_YN"
+        ENABLE_CP_TOLERATIONS="true"
+    else
+        ALLOW_CP_TAINT="$_CP_TOL_YN"
+        ENABLE_CP_TOLERATIONS="false"
     fi
 fi
 
@@ -283,15 +308,25 @@ if [ "$TLS_ENABLED" == "true" ]; then
 fi
 ARGOCD_URL="${PROTOCOL}://${DOMAIN}"
 
-# 3-1. global 설정 조립 (노드 고정 및 로컬 이미지)
+# 3-1. global 설정 조립 (노드 고정, control-plane toleration 및 로컬 이미지)
 GLOBAL_CONTENT=""
-if [ -n "$TARGET_NODE" ] || [ "${IMAGE_SOURCE}" = "local" ]; then
+if [ -n "$TARGET_NODE" ] || [ "${IMAGE_SOURCE}" = "local" ] || [ "$ENABLE_CP_TOLERATIONS" == "true" ]; then
     GLOBAL_CONTENT="global:"
     if [ -n "$TARGET_NODE" ]; then
         GLOBAL_CONTENT="${GLOBAL_CONTENT}
   nodeSelector:
     kubernetes.io/os: linux
-    kubernetes.io/hostname: \"${TARGET_NODE}\""
+    kubernetes.io/hostname: ${TARGET_NODE}"
+    fi
+    if [ "$ENABLE_CP_TOLERATIONS" == "true" ]; then
+        GLOBAL_CONTENT="${GLOBAL_CONTENT}
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule"
     fi
     if [ "${IMAGE_SOURCE}" = "local" ]; then
         GLOBAL_CONTENT="${GLOBAL_CONTENT}

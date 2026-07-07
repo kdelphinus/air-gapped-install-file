@@ -62,7 +62,8 @@ sudo ./scripts/install.sh
 ### 스크립트 동작 및 입력 가이드
 1. **기존 상태 감지**: 기존 헬름 릴리즈가 존재하거나 `install.conf`가 존재할 시, `Upgrade(업그레이드)`, `Reinstall(재설치)`, `Reset(초기화)` 분기 메뉴를 제공합니다.
 2. **설정값 수집 및 보존**: 사용자가 입력한 모든 정보는 `install.conf` 파일에 저장되어 멱등성을 보장합니다.
-3. **YAML 동기화**: 입력된 설정은 `--set` 인자를 사용하는 대신 `values-infra.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
+3. **Control Plane 배치 허용**: Control Plane(Master) 노드에 고정 배치할 경우 taint toleration을 `values-infra.yaml`의 `global.tolerations`에 자동 반영합니다.
+4. **YAML 동기화**: 입력된 설정은 `--set` 인자를 사용하는 대신 `values-infra.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
 
 ---
 
