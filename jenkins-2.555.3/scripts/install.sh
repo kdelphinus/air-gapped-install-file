@@ -12,6 +12,7 @@ NAMESPACE="jenkins"
 CHART_PATH="./charts/jenkins"
 CONF_FILE="./install.conf"
 PV_FILE="./manifests/pv-volume.yaml"
+NAS_PV_FILE="./manifests/nas-pv.yaml"
 
 # 임시 파일 자동 클린업 trap 설정
 trap 'rm -f ./values-temp.yaml ./values-cicd-buildah.local.yaml' EXIT
@@ -43,6 +44,9 @@ BUILDAH_AGENT_IMAGE="${BUILDAH_AGENT_IMAGE}"
 STORAGE_TYPE="${STORAGE_TYPE}"
 STORAGE_CLASS="${STORAGE_CLASS}"
 HOSTPATH_DIR="${HOSTPATH_DIR}"
+NAS_SERVER="${NAS_SERVER}"
+NAS_PATH="${NAS_PATH}"
+STORAGE_SIZE="${STORAGE_SIZE}"
 SVC_TYPE="${SVC_TYPE}"
 TLS_ENABLED="${TLS_ENABLED}"
 DOMAIN="${DOMAIN}"
@@ -52,8 +56,12 @@ EOF
     echo -e "  ✅ 설정이 ${GREEN}${CONF_FILE}${NC} 에 저장되었습니다."
 }
 
-is_static_storage() {
-    [ "$STORAGE_TYPE" == "static" ] || [ "$STORAGE_TYPE" == "hostpath" ]
+is_hostpath_storage() {
+    [ "$STORAGE_TYPE" == "hostpath" ] || [ "$STORAGE_TYPE" == "static" ]
+}
+
+is_static_pv_storage() {
+    is_hostpath_storage || [ "$STORAGE_TYPE" == "nas" ]
 }
 
 # ==========================================
@@ -374,21 +382,53 @@ if [ "$DO_UPGRADE" != "true" ]; then
     # 2-4. 스토리지 타입 선택
     echo ""
     echo "Jenkins Home 영구 볼륨 스토리지 유형을 선택하세요:"
-    echo "  1) Static  (HostPath 기반 정적 PV를 먼저 생성해 PVC 바인딩)"
-    echo "  2) Dynamic (StorageClass 기반 동적 PVC)"
-    read -p "선택 [1/2, 기본값 1]: " _STORAGE_SEL
+    echo "  1) HostPath (특정 노드의 로컬 디렉터리를 정적 PV로 사용)"
+    echo "  2) NAS 정적 할당 (NFS 서버/경로를 정적 PV로 사용)"
+    echo "  3) Dynamic  (StorageClass 기반 동적 PVC)"
+    read -p "선택 [1/2/3, 기본값 1]: " _STORAGE_SEL
     _STORAGE_SEL="${_STORAGE_SEL:-1}"
 
-    if [ "$_STORAGE_SEL" == "1" ]; then
-        STORAGE_TYPE="static"
-        STORAGE_CLASS="manual"
-        read -p "정적 PV HostPath 경로 지정 (기본 /data/jenkins): " HOSTPATH_DIR
-        HOSTPATH_DIR="${HOSTPATH_DIR:-/data/jenkins}"
-    else
-        STORAGE_TYPE="dynamic"
-        HOSTPATH_DIR=""
-        read -p "StorageClass 이름 입력 (예: nfs-client): " STORAGE_CLASS
-    fi
+    STORAGE_SIZE="${STORAGE_SIZE:-20Gi}"
+    case "$_STORAGE_SEL" in
+        1)
+            STORAGE_TYPE="hostpath"
+            STORAGE_CLASS="manual"
+            NAS_SERVER=""
+            NAS_PATH=""
+            read -p "HostPath 경로 지정 (기본 /data/jenkins): " HOSTPATH_DIR
+            HOSTPATH_DIR="${HOSTPATH_DIR:-/data/jenkins}"
+            ;;
+        2)
+            STORAGE_TYPE="nas"
+            STORAGE_CLASS="manual"
+            HOSTPATH_DIR=""
+            read -p "NFS 서버 주소 (예: 192.168.1.100): " NAS_SERVER
+            if [ -z "$NAS_SERVER" ]; then
+                echo -e "${RED}[오류] NFS 서버 주소는 필수입니다.${NC}"
+                exit 1
+            fi
+            read -p "NFS Jenkins Home 경로 (예: /nas/jenkins): " NAS_PATH
+            if [ -z "$NAS_PATH" ]; then
+                echo -e "${RED}[오류] NFS 경로는 필수입니다.${NC}"
+                exit 1
+            fi
+            read -p "Jenkins Home 볼륨 크기 (기본 ${STORAGE_SIZE}): " _STORAGE_SIZE
+            STORAGE_SIZE="${_STORAGE_SIZE:-$STORAGE_SIZE}"
+            ;;
+        3)
+            STORAGE_TYPE="dynamic"
+            HOSTPATH_DIR=""
+            NAS_SERVER=""
+            NAS_PATH=""
+            read -p "StorageClass 이름 입력 (예: nfs-client): " STORAGE_CLASS
+            read -p "Jenkins Home 볼륨 크기 (기본 ${STORAGE_SIZE}): " _STORAGE_SIZE
+            STORAGE_SIZE="${_STORAGE_SIZE:-$STORAGE_SIZE}"
+            ;;
+        *)
+            echo -e "${RED}[오류] 스토리지 유형은 1, 2, 3 중 하나를 선택해야 합니다.${NC}"
+            exit 1
+            ;;
+    esac
 
     # 2-5. 서비스 노출 및 도메인
     echo ""
@@ -499,13 +539,13 @@ EOF
 fi
 
 # 스토리지 볼륨 설정 추가. Jenkins chart의 persistence는 controller 하위가 아닌 top-level 키입니다.
-if is_static_storage; then
+if is_static_pv_storage; then
     cat >> ./values-temp.yaml <<EOF
 
 persistence:
   enabled: true
   storageClass: "manual"
-  size: "20Gi"
+  size: "${STORAGE_SIZE:-20Gi}"
 EOF
 else
     cat >> ./values-temp.yaml <<EOF
@@ -513,7 +553,7 @@ else
 persistence:
   enabled: true
   storageClass: "${STORAGE_CLASS}"
-  size: "20Gi"
+  size: "${STORAGE_SIZE:-20Gi}"
 EOF
 fi
 
@@ -529,11 +569,24 @@ kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f 
 prepare_buildah_agent_image
 render_buildah_values
 
-# 정적 HostPath PV 수동 생성
-if is_static_storage; then
+# HostPath 정적 PV 생성
+if is_hostpath_storage; then
     prepare_hostpath_permissions "$HOSTPATH_DIR"
-    echo "   → 정적 HostPath 영구볼륨(PV) 생성 중..."
-    sed "s|/data/jenkins|${HOSTPATH_DIR}|g" "$PV_FILE" | kubectl apply -f -
+    echo "   → HostPath 정적 영구볼륨(PV) 생성 중..."
+    sed \
+        -e "s|/data/jenkins|${HOSTPATH_DIR}|g" \
+        -e "s|20Gi|${STORAGE_SIZE:-20Gi}|g" \
+        "$PV_FILE" | kubectl apply -f -
+fi
+
+# NAS(NFS) 정적 PV 생성
+if [ "$STORAGE_TYPE" == "nas" ]; then
+    echo "   → NAS(NFS) 정적 영구볼륨(PV) 생성 중..."
+    sed \
+        -e "s|192.168.1.100|${NAS_SERVER}|g" \
+        -e "s|/nas/jenkins|${NAS_PATH}|g" \
+        -e "s|20Gi|${STORAGE_SIZE:-20Gi}|g" \
+        "$NAS_PV_FILE" | kubectl apply -f -
 fi
 
 # Gradle 캐시용 PV/PVC 구성
