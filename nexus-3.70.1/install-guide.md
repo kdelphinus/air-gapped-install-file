@@ -9,10 +9,7 @@
 > **주의**: 이 작업은 폐쇄망 내부가 아닌, 외부망에서 사전에 수행되어야 합니다. (Docker 또는 containerd(`ctr`), `helm` CLI 설치 필수)
 
 ```bash
-# 컴포넌트 스크립트 디렉토리로 이동
-cd scripts/
-
-# 실행 권한 부여 및 다운로드 스크립트 실행
+# 컴포넌트 루트 디렉토리에서 실행 권한 부여 및 다운로드 스크립트 실행
 chmod +x ./scripts/download_assets_offline.sh
 sudo ./scripts/download_assets_offline.sh
 ```
@@ -39,7 +36,7 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 모든 작업은 컴포넌트 루트 디렉토리에서 실행합니다.
 
 ```bash
-# 헬름 설치 (루트의 values.yaml 자동 반영)
+# 헬름 설치 (루트의 values.yaml 및 values-infra.yaml 자동 반영)
 chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
@@ -56,4 +53,45 @@ kubectl exec -it nexus-0 -n nexus -- cat /nexus-data/admin.password
 
 ```bash
 ./scripts/uninstall.sh
+```
+
+삭제 시 PV/PVC 삭제 여부를 선택합니다. PV 는 `Retain` 정책이므로 PVC 삭제 후에도 호스트 데이터는 유지됩니다.
+
+## Manual Installation & Upgrade
+
+자동화 설치 스크립트(`install.sh`)를 사용하지 않고, 수동으로 Nexus 리소스 및 Helm 릴리스를 배포하고자 할 때 아래 절차를 수행합니다.
+
+### 1. Helm 오버라이드 설정 파일 생성 (`values-infra.yaml`)
+
+사용 환경에 맞는 인프라 사양을 `values-infra.yaml`에 작성합니다.
+
+```yaml
+# values-infra.yaml 수동 예시
+image:
+  repository: "harbor.example.com/library/nexus3"
+  tag: "3.70.1"
+  pullPolicy: "IfNotPresent"
+
+persistence:
+  enabled: true
+  accessMode: "ReadWriteOnce"
+  storageClass: "nfs-provisioner"
+  size: "100Gi"
+
+nodeSelector: {}
+```
+
+### 2. Helm 차트 수동 설치 및 업그레이드
+
+컴포넌트 루트 디렉토리에서 Helm 명령어를 사용하여 릴리스를 배포합니다.
+
+```bash
+# 1. Nexus 네임스페이스 생성
+kubectl create namespace nexus --dry-run=client -o yaml | kubectl apply -f -
+
+# 2. Helm 설치 및 업그레이드 구동
+helm upgrade --install nexus ./charts/nexus-repository-manager \
+  --namespace nexus \
+  -f ./values.yaml \
+  -f ./values-infra.yaml
 ```
