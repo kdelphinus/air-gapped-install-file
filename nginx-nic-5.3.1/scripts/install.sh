@@ -1,25 +1,50 @@
 #!/bin/bash
-# 스크립트 위치 기준으로 컴포넌트 루트로 이동
-cd "$(dirname "$0")/.." || exit 1
 set -e
 
-# =================================================================
-# --- 설정 변수 (사용자 환경에 맞게 이 부분을 수정하세요) ---
-# =================================================================
+# 스크립트 위치 기준으로 컴포넌트 루트로 이동
+cd "$(dirname "$0")/.." || exit 1
 
+# =================================================================
+# --- 설정 변수 ---
+# =================================================================
 NAMESPACE="nginx-ingress"
 RELEASE_NAME="nginx-ingress"
 HELM_CHART_PATH="./charts/nginx-ingress-5.3.1"
-# 로컬 차트 경로 사용 시 --version 플래그는 Helm이 무시함 (참고용)
-# Chart version: 2.4.1 / App version: 5.3.1
+VALUES_FILE="./values.yaml"
+CONF_FILE="./install.conf"
 
-# =================================================================
-# --- 메인 스크립트 로직 ---
-# =================================================================
+# 색상 코드
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# ── install.conf 로드 / 저장 ──────────────────────────────
+load_conf() {
+    if [ -f "$CONF_FILE" ]; then
+        source "$CONF_FILE"
+    fi
+}
+
+save_conf() {
+    cat > "$CONF_FILE" <<EOF
+# NGINX Ingress Controller v5.3.1 설치 설정 — install.sh 에 의해 자동 관리됩니다.
+IMAGE_SOURCE="${IMAGE_SOURCE}"
+HARBOR_REGISTRY="${HARBOR_REGISTRY}"
+HARBOR_PROJECT="${HARBOR_PROJECT}"
+REPLICAS="${REPLICAS}"
+INGRESS_CLASS="${INGRESS_CLASS}"
+HTTP_NODEPORT="${HTTP_NODEPORT}"
+HTTPS_NODEPORT="${HTTPS_NODEPORT}"
+DEFAULT_TLS_SECRET="${DEFAULT_TLS_SECRET}"
+INSTALLED_VERSION="v5.3.1"
+EOF
+    echo -e "  ✅ 설정이 ${GREEN}${CONF_FILE}${NC} 에 저장되었습니다."
+}
 
 check_command() {
     if ! command -v "$1" &> /dev/null; then
-        echo "오류: '$1' 명령어를 찾을 수 없습니다."
+        echo -e "${RED}[오류] '$1' 명령어를 찾을 수 없습니다.${NC}"
         exit 1
     fi
 }
@@ -33,55 +58,153 @@ check_command kubectl
 check_command helm
 
 if [ ! -d "$HELM_CHART_PATH" ]; then
-    echo "오류: Helm 차트 디렉토리 '$HELM_CHART_PATH'을 찾을 수 없습니다."
-    echo "  → charts/nginx-ingress-5.3.1/ 디렉토리를 먼저 준비하세요."
-    echo "    (git clone https://github.com/nginx/kubernetes-ingress.git 후"
-    echo "     git checkout v5.3.1, 이후 deployments/helm-chart/ 를"
-    echo "     charts/nginx-ingress-5.3.1/ 로 복사)"
+    echo -e "${RED}[오류] Helm 차트 디렉토리 '$HELM_CHART_PATH'을 찾을 수 없습니다.${NC}"
     exit 1
 fi
 
-# 2. 기존 릴리스 확인 및 처리
-if helm status "$RELEASE_NAME" -n "$NAMESPACE" &>/dev/null; then
-    echo "기존 릴리스 '$RELEASE_NAME'이 감지되었습니다."
-    read -p "삭제 후 재설치하시겠습니까? (y/N): " DELETE_EXISTING
-    if [[ "$DELETE_EXISTING" =~ ^[yY]([eE][sS])?$ ]]; then
-        echo "기존 Helm 릴리스 삭제 중..."
-        helm uninstall "$RELEASE_NAME" -n "$NAMESPACE" || true
-        sleep 5
-    else
-        echo "설치를 중단합니다."
-        exit 1
-    fi
+# 2. 기존 설치 감지 및 설정 로드
+load_conf
+EXIST_HELM=$(helm status "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1 && echo "yes" || echo "no")
+DO_UPGRADE=false
+
+if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
+    echo ""
+    echo -e "⚠️  ${YELLOW}기존 설치 또는 설정이 감지되었습니다.${NC}"
+    [ -f "$CONF_FILE" ] && echo "  📋 저장된 설정 정보:"
+    [ -n "$IMAGE_SOURCE" ] && echo "     - 이미지 소스 : $IMAGE_SOURCE"
+    [ -n "$HARBOR_REGISTRY" ] && echo "     - Harbor 주소 : $HARBOR_REGISTRY"
+    [ -n "$HARBOR_PROJECT" ] && echo "     - 프로젝트명  : $HARBOR_PROJECT"
+    [ -n "$REPLICAS" ] && echo "     - 복제본 수   : $REPLICAS"
+    [ -n "$INGRESS_CLASS" ] && echo "     - 인그레스클래스: $INGRESS_CLASS"
+    [ -n "$HTTP_NODEPORT" ] && echo "     - HTTP 포트   : $HTTP_NODEPORT"
+    [ -n "$HTTPS_NODEPORT" ] && echo "     - HTTPS 포트  : $HTTPS_NODEPORT"
+
+    echo ""
+    echo "동작을 선택하세요:"
+    echo "  1) 업그레이드 (저장된 설정 유지, Helm upgrade --install 무중단 배포)"
+    echo "  2) 초기화     (모든 설정 및 리소스 완전 삭제)"
+    echo "  3) 취소"
+    read -p "선택 [1/2/3]: " ACTION
+
+    case "$ACTION" in
+        1) DO_UPGRADE=true ;;
+        2)
+            # 초기화 경로 (uninstall.sh --reset 연동 후 종료)
+            if [ -f "./scripts/uninstall.sh" ]; then
+                bash ./scripts/uninstall.sh --reset
+            else
+                echo -e "${RED}[오류] 삭제 스크립트가 존재하지 않습니다.${NC}"
+            fi
+            exit 0
+            ;;
+        *) echo "취소되었습니다."; exit 0 ;;
+    esac
 fi
 
-# 3. CRD 적용 (Helm 차트에 crds/ 없음 — 차트 외부에서 선적용 필요)
-echo "CRD 적용 중 (manifests/)..."
+# 3. 신규 설치 또는 기존 설정 파일 부재 시 사용자 입력 획득
+if [ "$DO_UPGRADE" != "true" ] || [ ! -f "$CONF_FILE" ]; then
+    if [ "$DO_UPGRADE" == "true" ] && [ ! -f "$CONF_FILE" ]; then
+        echo -e "${YELLOW}  ℹ️  설정 파일(install.conf)이 존재하지 않아 인프라 사양 입력을 진행합니다.${NC}"
+    fi
+    echo ""
+    echo "이미지 소스를 선택하세요:"
+    echo "  1) Harbor 레지스트리 사용 (폐쇄망 권장)"
+    echo "  2) 로컬에 사전 로드된 이미지 사용 (기본 docker.io 경로 승계)"
+    read -p "선택 [1/2, 기본값 1]: " _IMG_SRC
+    case "${_IMG_SRC:-1}" in
+        1)
+            IMAGE_SOURCE="harbor"
+            read -p "Harbor 주소 (예: 192.168.1.10:30002): " HARBOR_REGISTRY
+            read -p "Harbor 프로젝트 (예: library): " HARBOR_PROJECT
+            ;;
+        2)
+            IMAGE_SOURCE="online"
+            HARBOR_REGISTRY=""
+            HARBOR_PROJECT=""
+            ;;
+        *)
+            echo -e "${RED}[오류] 올바르지 않은 입력입니다.${NC}"
+            exit 1
+            ;;
+    esac
+
+    echo ""
+    read -p "복제본(Replica) 수 입력 (기본값 1): " REPLICAS
+    REPLICAS="${REPLICAS:-1}"
+
+    read -p "Ingress Class 이름 입력 (기본값 nginx): " INGRESS_CLASS
+    INGRESS_CLASS="${INGRESS_CLASS:-nginx}"
+
+    read -p "HTTP NodePort 포트 입력 (기본값 30080): " HTTP_NODEPORT
+    HTTP_NODEPORT="${HTTP_NODEPORT:-30080}"
+
+    read -p "HTTPS NodePort 포트 입력 (기본값 30443): " HTTPS_NODEPORT
+    HTTPS_NODEPORT="${HTTPS_NODEPORT:-30443}"
+
+    read -p "기본 TLS Secret 지정 (필요 시 namespace/secret 형식 입력, 기본값 없음): " DEFAULT_TLS_SECRET
+fi
+
+save_conf
+
+# =================================================================
+# 4. values-infra.yaml 인프라 파일 단일 템플릿 생성
+# =================================================================
+echo ""
+echo "🔧 인프라 설정 파일(values-infra.yaml) 생성 중..."
+
+if [ "$IMAGE_SOURCE" == "harbor" ]; then
+    IMAGE_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/nginx-ingress"
+else
+    IMAGE_REPO="nginx/nginx-ingress"
+fi
+
+cat > ./values-infra.yaml <<EOF
+# F5 NGINX Ingress Controller v5.3.1 인프라 설정 — install.sh 에 의해 자동 관리됩니다.
+controller:
+  image:
+    repository: "${IMAGE_REPO}"
+    tag: "5.3.1"
+    pullPolicy: "IfNotPresent"
+  replicaCount: ${REPLICAS}
+  ingressClass:
+    name: "${INGRESS_CLASS}"
+  service:
+    type: NodePort
+    httpPort:
+      port: 80
+      nodePort: ${HTTP_NODEPORT}
+    httpsPort:
+      port: 443
+      nodePort: ${HTTPS_NODEPORT}
+  defaultTLS:
+    secret: "${DEFAULT_TLS_SECRET}"
+EOF
+
+# 5. CRD 적용
+echo "🚀 [1/2] CRD 리소스 적용 중 (manifests/)..."
 kubectl apply -k ./manifests/
 
-# 4. 네임스페이스 생성
+# 6. 네임스페이스 생성
 echo "네임스페이스 '$NAMESPACE' 생성 중..."
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# 5. Helm 설치
-echo "Helm으로 F5 NIC를 배포합니다..."
+# 7. Helm 멱등 배포
+echo ""
+echo -e "🚀 [2/2] NGINX Ingress Controller 배포 중... (${DO_UPGRADE:+업그레이드}${DO_UPGRADE:-설치})"
 helm upgrade --install "$RELEASE_NAME" "$HELM_CHART_PATH" \
     --namespace "$NAMESPACE" \
-    --atomic \
-    --wait \
-    -f ./values.yaml
+    -f "$VALUES_FILE" \
+    -f ./values-infra.yaml \
+    --wait
 
-# 6. 설치 확인
 echo ""
-echo "========================================================================"
-echo " F5 NGINX Ingress Controller 설치 완료"
-echo "========================================================================"
-sleep 3
-
+echo "========================================================"
+echo -e "${GREEN}🎉 F5 NGINX Ingress Controller 설치 완료!${NC}"
+echo "설정 파일 : $CONF_FILE"
+echo "HTTP  진입점: http://<NODE_IP>:$HTTP_NODEPORT (NodePort)"
+echo "HTTPS 진입점: https://<NODE_IP>:$HTTPS_NODEPORT (NodePort)"
+echo "========================================================"
+echo ""
 kubectl get pods -n "$NAMESPACE"
 echo ""
 kubectl get svc -n "$NAMESPACE"
-echo ""
-echo "HTTP  진입점: http://<NODE_IP>:30080"
-echo "HTTPS 진입점: https://<NODE_IP>:30443"
-echo "========================================================================"
