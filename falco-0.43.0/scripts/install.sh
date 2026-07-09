@@ -223,7 +223,12 @@ if [ "$IMAGE_SOURCE" == "harbor" ]; then
 falcosidekick:
   image:
     registry: \"${HARBOR_REGISTRY}\"
-    repository: \"${HARBOR_PROJECT}/falcosidekick\""
+    repository: \"${HARBOR_PROJECT}/falcosidekick\"
+  testConnection:
+    image:
+      registry: \"${HARBOR_REGISTRY}\"
+      repository: \"${HARBOR_PROJECT}/curl\"
+      tag: \"latest\""
 else
     IMAGE_REGISTRY_BLOCK="image:
   registry: \"\"
@@ -232,7 +237,12 @@ else
 falcosidekick:
   image:
     registry: \"\"
-    repository: \"falcosecurity/falcosidekick\""
+    repository: \"falcosecurity/falcosidekick\"
+  testConnection:
+    image:
+      registry: \"\"
+      repository: \"appropriate/curl\"
+      tag: \"latest\""
 fi
 
 cat > ./values-infra.yaml <<EOF

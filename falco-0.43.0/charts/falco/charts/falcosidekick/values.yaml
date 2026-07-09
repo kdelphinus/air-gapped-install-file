@@ -1417,3 +1417,10 @@ webui:
 
     # -- Affinity for the Web UI Redis pods
     affinity: {}
+
+# -- Connection test options
+testConnection:
+  image:
+    registry: docker.io
+    repository: appropriate/curl
+    tag: latest

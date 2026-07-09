@@ -13,7 +13,7 @@ metadata:
 spec:
   containers:
     - name: curl
-      image: appropriate/curl
+      image: "{{ .Values.testConnection.image.registry }}/{{ .Values.testConnection.image.repository }}:{{ .Values.testConnection.image.tag }}"
       command: ['curl']
       args:  ["-X", "POST", '{{ include "falcosidekick.fullname" . }}:{{ .Values.service.port }}/ping']
   restartPolicy: Never

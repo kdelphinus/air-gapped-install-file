@@ -66,7 +66,7 @@ chmod +x scripts/install.sh
 
 2. 준비된 테스트 시나리오를 실행하여 탐지 알림을 확인합니다.
    ```bash
-   kubectl apply -f manifests/test-scenarios.yaml
+   kubectl apply -f manifests/test-pod.yaml
    ```
 
 ---
