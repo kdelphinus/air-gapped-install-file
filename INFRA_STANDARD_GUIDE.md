@@ -61,7 +61,6 @@
 ### ⚠️ 업데이트 필요 (Non-compliant)
 
 - **ArgoCD**: `argocd-2.12.1`
-- **Jenkins**: `jenkins-2.528.3`
 - **Monitoring**: `monitoring-0.89.0`
 - **NGINX Ingress Controller**: `nginx-nic-5.3.1`
 - **Falco**: `falco-0.43.0`
@@ -76,6 +75,7 @@
 - **Harbor**: `harbor-2.10.3`
 - **Gitea**: `gitea-1.25.5`
 - **Nexus**: `nexus-3.70.1`
+- **Jenkins**: `jenkins-2.528.3`
 - **Envoy**: `envoy-1.37.2` (Standard Reference / 표준 모델)
 - **Cilium**: `cilium-1.19.3`
 - **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`

@@ -9,17 +9,12 @@
 > **주의**: 이 작업은 폐쇄망 내부가 아닌, 외부망에서 사전에 수행되어야 합니다. (Docker 또는 containerd(`ctr`), `helm` CLI 설치 필수)
 
 ```bash
-# 컴포넌트 스크립트 디렉토리로 이동
-cd scripts/
-
-# 실행 권한 부여 및 다운로드 스크립트 실행
+# 컴포넌트 루트 디렉토리에서 실행 권한 부여 및 다운로드 스크립트 실행
 chmod +x ./scripts/download_assets_offline.sh
 sudo ./scripts/download_assets_offline.sh
 ```
 
 스크립트 실행이 완료되면 `charts/` 디렉토리에 `.tgz` 차트 파일이, `images/` 디렉토리에 `.tar` 이미지 파일들이 생성됩니다. 전체 프로젝트 폴더를 압축하여 폐쇄망 내부로 반입하십시오.
-
-
 
 ## 전제 조건
 
@@ -99,4 +94,76 @@ kubectl get secret jenkins -n jenkins \
 
 ```bash
 ./scripts/uninstall.sh
+```
+
+## Manual Installation & Upgrade
+
+자동화 설치 스크립트(`install.sh`)를 사용하지 않고, 수동으로 Jenkins 리소스 및 Helm 릴리스를 배포하고자 할 때 아래 절차를 수행합니다.
+
+### 1. K8s 네임스페이스 및 정적 PV/PVC 생성
+
+정적 볼륨 매니페스트를 먼저 생성해야 합니다.
+
+```bash
+# 1. 네임스페이스 생성
+kubectl create namespace jenkins --dry-run=client -o yaml | kubectl apply -f -
+
+# 2. Jenkins 홈 PV 적용
+kubectl apply -f ./manifests/pv-volume.yaml
+
+# 3. Gradle 캐시 PV/PVC 적용
+kubectl apply -f ./manifests/gradle-cache-pv-pvc.yaml
+```
+
+### 2. Helm 오버라이드 설정 파일 생성 (`values-infra.yaml`)
+
+사용 환경에 맞는 인프라 사양을 `values-infra.yaml`에 작성합니다. 관리자 비밀번호(`controller.admin.password`)는 절대 수동으로 작성하지 않고 비워두어 Helm이 무작위 비밀번호를 안전히 자동 생성하도록 합니다.
+
+```yaml
+# values-infra.yaml 수동 예시
+controller:
+  image:
+    registry: "harbor.example.com"
+    repository: "library/cmp-jenkins-full"
+    tag: "2.528.3"
+    pullPolicy: "Always"
+  imagePullSecrets:
+    - name: "regcred"
+  serviceType: "NodePort"
+  nodePort: "30000"
+  nodeSelector: {}
+  runAsUser: 1000
+  fsGroup: 1000
+  installPlugins: false
+  sidecars:
+    configAutoReload:
+      image:
+        registry: "harbor.example.com"
+        repository: "library/k8s-sidecar"
+        tag: "1.30.7"
+        pullPolicy: "IfNotPresent"
+
+agent:
+  image:
+    registry: "harbor.example.com"
+    repository: "library/inbound-agent"
+    tag: "latest"
+    pullPolicy: "IfNotPresent"
+  imagePullSecrets:
+    - name: "regcred"
+
+persistence:
+  storageClass: "manual"
+  size: "20Gi"
+```
+
+### 3. Helm 차트 수동 설치 및 업그레이드
+
+컴포넌트 루트 디렉토리에서 Helm 명령어를 사용하여 릴리스를 배포합니다.
+
+```bash
+helm upgrade --install jenkins ./charts/jenkins \
+  --namespace jenkins \
+  -f ./values.yaml \
+  -f ./values-infra.yaml
 ```
