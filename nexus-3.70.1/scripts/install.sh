@@ -61,14 +61,10 @@ cleanup_resources() {
     fi
 
     local DELETE_VOLUMES="no"
-    if [ "$RESET_MODE" == "reset" ]; then
+    echo ""
+    read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_DATA
+    if [[ "${DELETE_DATA}" =~ ^[Yy]$ ]]; then
         DELETE_VOLUMES="yes"
-    else
-        echo ""
-        read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_DATA
-        if [[ "${DELETE_DATA}" =~ ^[Yy]$ ]]; then
-            DELETE_VOLUMES="yes"
-        fi
     fi
 
     if [ "$DELETE_VOLUMES" == "yes" ]; then

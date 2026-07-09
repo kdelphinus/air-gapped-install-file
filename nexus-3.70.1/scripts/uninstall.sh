@@ -13,16 +13,11 @@ if [[ "$1" == "--reset" || "$1" == "reset" ]]; then
     RESET_MODE="true"
 fi
 
-if [ "$RESET_MODE" == "true" ]; then
-    CONFIRM="y"
-    DELETE_PV="y"
-else
-    read -p "❓ 정말 삭제하시겠습니까? (y/n): " CONFIRM
-    [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "취소되었습니다."; exit 0; }
+read -p "❓ 정말 삭제하시겠습니까? (y/n): " CONFIRM
+[[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "취소되었습니다."; exit 0; }
 
-    echo ""
-    read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_PV
-fi
+echo ""
+read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_PV
 
 # Helm 제거
 if helm status $RELEASE_NAME -n $NAMESPACE > /dev/null 2>&1; then
@@ -65,14 +60,16 @@ if [[ "${DELETE_PV}" =~ ^[Yy]$ ]]; then
     echo "  ⚠️  호스트 데이터는 수동으로 삭제하세요."
 fi
 
-# install.conf 및 values-infra.yaml 삭제
-if [ -f "./install.conf" ]; then
-    rm -f "./install.conf"
-    echo "🗑️  설정 파일(install.conf) 삭제 완료."
-fi
-if [ -f "./values-infra.yaml" ]; then
-    rm -f "./values-infra.yaml"
-    echo "🗑️  인프라 설정 파일(values-infra.yaml) 삭제 완료."
+# install.conf 및 values-infra.yaml 삭제 (Reset 모드 시에만 초기화 진행)
+if [ "$RESET_MODE" == "true" ]; then
+    if [ -f "./install.conf" ]; then
+        rm -f "./install.conf"
+        echo "🗑️  설정 파일(install.conf) 삭제 완료."
+    fi
+    if [ -f "./values-infra.yaml" ]; then
+        rm -f "./values-infra.yaml"
+        echo "🗑️  인프라 설정 파일(values-infra.yaml) 삭제 완료."
+    fi
 fi
 
 echo ""
