@@ -49,6 +49,7 @@ fi
 images=(
   "docker.io/falcosecurity/falco:$ENGINE_VERSION"
   "docker.io/falcosecurity/falcosidekick:$SIDEKICK_VERSION"
+  "docker.io/appropriate/curl:latest"
 )
 
 if [ "$DOWNLOAD_IMAGES" = true ]; then
