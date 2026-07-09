@@ -1,0 +1,93 @@
+// 사내 GitLab 소스를 kind Jenkins Buildah agent에서 빌드하고 Harbor로 push하는 예시입니다.
+pipeline {
+  agent {
+    label 'buildah'
+  }
+
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '5'))
+    disableConcurrentBuilds()
+  }
+
+  parameters {
+    string(name: 'GIT_URL', defaultValue: 'https://gitlab.strato.co.kr/strato-solution/strato-marketplace.git', description: 'Git clone URL', trim: true)
+    string(name: 'GIT_BRANCH', defaultValue: 'uzbek', description: 'Git branch', trim: true)
+    string(name: 'ACTIVE_PROFILE', defaultValue: 'uzbek', description: 'Spring active profile', trim: true)
+    string(name: 'IMAGE_NAME', defaultValue: 'uzbek/strato-software-catalog-backend', description: '컨테이너 이미지 이름. 예: lgcns/sample-backend', trim: true)
+    string(name: 'IMAGE_VERSION', defaultValue: '1.0.1', description: '이미지 버전. 예: 1.0.0, dev-20260615', trim: true)
+    string(name: 'HARBOR_URL', defaultValue: 'http://harbor.test-cluster.com:30080', description: 'Harbor URL. 예: http://harbor.test-cluster.com:30080', trim: true)
+  }
+
+  environment {
+    GIT_CREDENTIALS = 'gitlab.strato.co.kr'
+    HARBOR_CREDENTIALS = '0-harbor-product-Credential'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        echo '>>>>>STAGE: CHECKOUT'
+        deleteDir()
+        git branch: params.GIT_BRANCH,
+          credentialsId: env.GIT_CREDENTIALS,
+          url: params.GIT_URL
+      }
+    }
+
+    stage('Gradle Build') {
+      steps {
+        echo '>>>>>STAGE: GRADLE BUILD'
+        container('buildah') {
+          dir('backend') {
+            sh '''
+              set -eu
+              chmod +x ./gradlew
+              ./gradlew clean build -x test -Dspring.profiles.active="${ACTIVE_PROFILE}"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Build And Push Image') {
+      steps {
+        echo '>>>>>STAGE: BUILDAH BUILD/PUSH'
+        container('buildah') {
+          withCredentials([usernamePassword(credentialsId: env.HARBOR_CREDENTIALS, usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASSWORD')]) {
+            script {
+              def harborUrl = params.HARBOR_URL.trim().replaceAll(/\/+$/, '')
+              def harborHost = harborUrl.replaceFirst(/^https?:\/\//, '')
+              def tlsVerify = harborUrl.startsWith('https://') ? 'true' : 'false'
+              env.HARBOR_REGISTRY = harborHost
+              env.REMOTE_IMAGE = "${harborHost}/${params.IMAGE_NAME}:${params.IMAGE_VERSION}"
+              env.BUILDAH_TLS_VERIFY = tlsVerify
+            }
+
+            sh '''
+              set -eu
+              cd backend
+
+              ARTIFACT_NAME="$(ls build/libs/*.jar | head -n 1 | xargs -n 1 basename)"
+              cp "build/libs/${ARTIFACT_NAME}" .
+
+              sed -i "s/ARTIFACT_NAME/${ARTIFACT_NAME//./\\.}/g" Dockerfile
+              sed -i "s/ARTIFACT_NAME/${ARTIFACT_NAME//./\\.}/g" docker-entrypoint.sh
+
+              buildah bud --tls-verify="${BUILDAH_TLS_VERIFY}" -t "${REMOTE_IMAGE}" .
+              buildah login --tls-verify="${BUILDAH_TLS_VERIFY}" --username "${HARBOR_USER}" --password "${HARBOR_PASSWORD}" "${HARBOR_REGISTRY}"
+              buildah push --tls-verify="${BUILDAH_TLS_VERIFY}" "${REMOTE_IMAGE}"
+
+              rm -f "${ARTIFACT_NAME}"
+            '''
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "Pushed image: ${env.REMOTE_IMAGE}"
+    }
+  }
+}

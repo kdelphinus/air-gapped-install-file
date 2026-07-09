@@ -29,7 +29,8 @@ cd jenkins-2.555.3
 sudo ./scripts/download_assets_offline.sh
 ```
 
-Buildah agent 이미지를 빌드하고 tar 파일로 저장합니다.
+Buildah agent 이미지를 빌드하고 tar 파일로 저장합니다. 기본 실행은 기존 호환성을 위해
+JDK 17 agent를 `jenkins-buildah-agent:1.41.4` 태그로 생성합니다.
 
 ```bash
 cd jenkins-build/buildah-agent
@@ -41,6 +42,31 @@ chmod +x build-buildah-agent.sh
 
 ```text
 jenkins-2.555.3/images/jenkins-buildah-agent_1.41.4.tar
+```
+
+서비스별로 JDK 버전이 다르면 `--jdk` 옵션으로 버전별 agent 이미지를 생성합니다.
+
+```bash
+./build-buildah-agent.sh --jdk 17
+./build-buildah-agent.sh --jdk 21
+```
+
+많이 사용하는 JDK 버전 이미지를 한 번에 준비하려면 `--all` 옵션을 사용합니다.
+기본 대상은 JDK 8, 11, 17, 21입니다. 실제 빌드 전에 생성될 이미지명만 확인하려면
+`--dry-run`을 함께 사용합니다.
+
+```bash
+./build-buildah-agent.sh --all --dry-run
+./build-buildah-agent.sh --all
+```
+
+버전별 빌드의 이미지 태그와 tar 파일명은 다음 규칙을 사용합니다.
+
+```text
+jenkins-buildah-agent:jdk17-1.41.4
+jenkins-buildah-agent:jdk21-1.41.4
+jenkins-2.555.3/images/jenkins-buildah-agent_jdk17_1.41.4.tar
+jenkins-2.555.3/images/jenkins-buildah-agent_jdk21_1.41.4.tar
 ```
 
 준비가 끝나면 `jenkins-2.555.3` 전체 디렉터리를 폐쇄망으로 반입합니다.
@@ -57,13 +83,17 @@ sudo ./scripts/upload_images_to_harbor_v3-lite.sh
 업로드 모드는 `2) Harbor 레지스트리로 업로드`를 선택합니다. Harbor 프로젝트는
 예시 기준으로 `devops`를 사용합니다.
 
-업로드 후 다음 이미지가 존재해야 합니다.
+업로드 후 다음 이미지가 존재해야 합니다. JDK 버전별 agent를 생성한 경우에는
+`jdk17-1.41.4`, `jdk21-1.41.4`처럼 서비스 빌드 JDK에 맞는 태그도 함께
+확인합니다.
 
 ```text
 <HARBOR_REGISTRY>/devops/jenkins:2.555.3-jdk21
 <HARBOR_REGISTRY>/devops/inbound-agent:3355.v388858a_47b_33-22
 <HARBOR_REGISTRY>/devops/k8s-sidecar:2.7.3
 <HARBOR_REGISTRY>/devops/jenkins-buildah-agent:1.41.4
+<HARBOR_REGISTRY>/devops/jenkins-buildah-agent:jdk17-1.41.4
+<HARBOR_REGISTRY>/devops/jenkins-buildah-agent:jdk21-1.41.4
 ```
 
 ## 4. Secret 생성
@@ -153,7 +183,35 @@ Jenkins image 예: harbor.example.local:30080/devops/sample-app:<TAG>
 
 ### 5.2. Buildah agent override 적용
 
-`values-cicd-buildah.yaml`의 Harbor placeholder를 폐쇄망 주소로 치환합니다.
+`values-cicd-buildah.yaml`의 Harbor placeholder를 폐쇄망 주소로 치환합니다. JDK 21이
+필요한 서비스라면 agent image tag를 `jenkins-buildah-agent:jdk21-1.41.4`처럼
+서비스 빌드 버전에 맞게 지정합니다.
+
+여러 JDK 버전을 동시에 운영하려면 podTemplate을 label별로 나누고 Jenkinsfile에서
+서비스에 맞는 label을 선택합니다.
+
+```yaml
+agent:
+  podTemplates:
+    buildah-jdk17: |
+      - name: buildah-jdk17
+        label: buildah-jdk17
+        containers:
+          - name: buildah
+            image: harbor.example.local:30080/devops/jenkins-buildah-agent:jdk17-1.41.4
+    buildah-jdk21: |
+      - name: buildah-jdk21
+        label: buildah-jdk21
+        containers:
+          - name: buildah
+            image: harbor.example.local:30080/devops/jenkins-buildah-agent:jdk21-1.41.4
+```
+
+```groovy
+agent {
+  label 'buildah-jdk21'
+}
+```
 
 ```bash
 cp values-cicd-buildah.yaml values-cicd-buildah.local.yaml
@@ -194,7 +252,72 @@ MANIFEST_REPO_URL = 'http://gitlab.devops.internal/root/sample-app-manifests.git
 MANIFEST_PATH = 'deploy/overlays/prod/deployment.yaml'
 ```
 
-## 7. Argo CD Application 생성
+## 7. 사내 GitLab 소스 빌드 예시
+
+사내 Jenkins에서 사용하던 파라미터 기반 Pipeline을 kind Jenkins에서 그대로 쓰려면
+Git 저장소는 사내 GitLab URL을 유지하고, 실행 agent만 Kubernetes Buildah agent로
+변경합니다. 예시는 `examples/Jenkinsfile.strato-gitlab-buildah`를 사용합니다.
+
+이 방식에서는 Jenkins와 Jenkins agent Pod가 사내 GitLab에 접근할 수 있어야
+합니다. 사내 GitLab이 사설 인증서를 사용하면 Buildah agent 이미지 또는 Jenkins
+truststore에 해당 CA 인증서를 추가해야 합니다.
+
+이 예시는 Gradle 빌드를 Buildah agent 안에서 실행하므로 Buildah agent 이미지에
+JDK 17이 포함되어 있어야 합니다. 제공 Dockerfile은 `java-17-openjdk-devel`을
+포함하도록 구성합니다.
+
+폐쇄망 또는 사내망 환경에서는 Gradle wrapper의 `distributionUrl`이 접근 가능한
+사내 미러를 바라보거나, 필요한 Gradle distribution이 사전에 캐시되어 있어야
+합니다. 또한 `backend/Dockerfile`의 base image도 Buildah agent가 pull할 수 있는
+Harbor 주소로 지정되어 있어야 합니다.
+
+Jenkins Credential은 기존 사내 ID를 그대로 맞추거나 Jenkinsfile의 값을 수정합니다.
+
+| Credential ID | 종류 | 용도 |
+| --- | --- | --- |
+| `gitlab.strato.co.kr` | Username with password 또는 token | 사내 GitLab checkout |
+| `0-harbor-product-Credential` | Username with password | Harbor login/push |
+
+Jenkins Job은 Pipeline script 또는 Pipeline from SCM 방식으로 만들 수 있습니다.
+Pipeline script로 붙여 넣는 경우 다음 기본 파라미터를 환경에 맞게 조정합니다.
+
+```groovy
+GIT_URL = 'https://gitlab.strato.co.kr/strato-solution/strato-marketplace.git'
+GIT_BRANCH = 'uzbek'
+ACTIVE_PROFILE = 'uzbek'
+IMAGE_NAME = 'uzbek/strato-software-catalog-backend'
+IMAGE_VERSION = '1.0.1'
+HARBOR_URL = 'http://harbor.test-cluster.com:30080'
+```
+
+기존 사내 Jenkinsfile의 `docker.build`, `withDockerRegistry`, `docker push`는
+Docker daemon이 있는 Jenkins 환경을 전제로 합니다. kind의 Kubernetes agent에서는
+Docker daemon 대신 Buildah를 사용하므로 다음 명령으로 대체합니다.
+
+```bash
+buildah bud -t "${REMOTE_IMAGE}" .
+buildah login --tls-verify=false \
+  --username "${HARBOR_USER}" \
+  --password "${HARBOR_PASSWORD}" \
+  "${HARBOR_REGISTRY}"
+buildah push --tls-verify=false "${REMOTE_IMAGE}"
+```
+
+Harbor가 HTTPS 인증서를 사용하는 운영 환경이면 `HARBOR_URL`을 `https://...`로
+입력하고, HTTP 테스트 환경이면 `http://...`로 입력합니다. Jenkinsfile 예시는 URL
+scheme에 따라 Buildah의 `--tls-verify` 값을 자동으로 선택합니다.
+
+Argo CD까지 배포를 이어가려면 Argo CD가 감시하는 매니페스트 저장소도 사내
+GitLab에 있어야 하며, Argo CD Pod가 해당 GitLab에 접근 가능해야 합니다. Jenkins가
+이미지를 push하는 것만으로는 Argo CD가 자동 배포하지 않으므로 다음 중 하나를
+선택합니다.
+
+1. Jenkins가 빌드 후 매니페스트 저장소의 image tag를 commit/push합니다.
+1. Argo CD Image Updater를 별도로 구성합니다.
+1. 매니페스트가 고정 태그 대신 환경별로 갱신되는 Helm/Kustomize 값을 참조하도록
+   구성합니다.
+
+## 8. Argo CD Application 생성
 
 샘플 Application을 환경에 맞게 수정한 뒤 적용합니다.
 
@@ -206,7 +329,7 @@ Argo CD는 GitLab 매니페스트 저장소의 `deploy/overlays/prod` 경로를 
 Jenkins는 빌드된 Harbor 이미지 태그를 매니페스트 저장소에 commit/push하고,
 Argo CD가 자동으로 변경분을 동기화합니다.
 
-## 8. 검증
+## 9. 검증
 
 Buildah agent Pod 동작을 확인합니다.
 

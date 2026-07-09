@@ -1,6 +1,8 @@
 ARG BUILDAH_BASE_IMAGE=quay.io/buildah/stable:v1.41.4
 FROM ${BUILDAH_BASE_IMAGE}
 
+ARG JDK_PACKAGE=java-17-openjdk-devel
+
 USER root
 
 RUN dnf -y install \
@@ -8,6 +10,7 @@ RUN dnf -y install \
       findutils \
       git \
       grep \
+      "${JDK_PACKAGE}" \
       openssh-clients \
       sed \
       shadow-utils \
