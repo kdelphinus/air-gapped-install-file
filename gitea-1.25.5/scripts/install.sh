@@ -74,14 +74,13 @@ cleanup_resources() {
     kubectl delete httproute gitea-route -n "${NAMESPACE}" --ignore-not-found=true
 
     local DELETE_VOLUMES="no"
+    echo ""
     if [ "$RESET_MODE" == "reset" ]; then
+        echo "⚠️  Reset 은 설정 파일을 삭제하지만, PV/PVC 데이터 삭제는 별도 동의가 필요합니다."
+    fi
+    read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_DATA
+    if [[ "${DELETE_DATA}" =~ ^[Yy]$ ]]; then
         DELETE_VOLUMES="yes"
-    else
-        echo ""
-        read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_DATA
-        if [[ "${DELETE_DATA}" =~ ^[Yy]$ ]]; then
-            DELETE_VOLUMES="yes"
-        fi
     fi
 
     if [ "$DELETE_VOLUMES" == "yes" ]; then

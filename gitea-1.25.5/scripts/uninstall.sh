@@ -15,7 +15,8 @@ fi
 
 if [ "$RESET_MODE" == "true" ]; then
     CONFIRM="y"
-    DELETE_PV="y"
+    echo "⚠️  Reset 은 설정 파일을 삭제하지만, PV/PVC 데이터 삭제는 별도 동의가 필요합니다."
+    read -p "⚠️  PV/PVC 도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_PV
 else
     read -p "❓ 정말 삭제하시겠습니까? (y/n): " CONFIRM
     [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "취소되었습니다."; exit 0; }
@@ -57,14 +58,18 @@ if [[ "${DELETE_PV}" =~ ^[Yy]$ ]]; then
     echo "  ⚠️  호스트 데이터 (/data/gitea) 는 수동으로 삭제하세요."
 fi
 
-# install.conf 및 values-infra.yaml 삭제
-if [ -f "./install.conf" ]; then
-    rm -f "./install.conf"
-    echo "🗑️  설정 파일(install.conf) 삭제 완료."
-fi
-if [ -f "./values-infra.yaml" ]; then
-    rm -f "./values-infra.yaml"
-    echo "🗑️  인프라 설정 파일(values-infra.yaml) 삭제 완료."
+# install.conf 및 values-infra.yaml 삭제 (Reset 전용)
+if [ "$RESET_MODE" == "true" ]; then
+    if [ -f "./install.conf" ]; then
+        rm -f "./install.conf"
+        echo "🗑️  설정 파일(install.conf) 삭제 완료."
+    fi
+    if [ -f "./values-infra.yaml" ]; then
+        rm -f "./values-infra.yaml"
+        echo "🗑️  인프라 설정 파일(values-infra.yaml) 삭제 완료."
+    fi
+else
+    echo "➡️  일반 uninstall 모드이므로 install.conf 및 values-infra.yaml 을 보존합니다."
 fi
 
 echo ""
