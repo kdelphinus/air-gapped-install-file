@@ -10,7 +10,7 @@
 
 ### 0.1. 기본 이미지 및 Helm 차트 다운로드
 ```bash
-cd jenkins-2.555.3/scripts/
+# 컴포넌트 루트 디렉토리에서 실행 권한 부여 및 다운로드 스크립트 실행
 chmod +x ./scripts/download_assets_offline.sh
 sudo ./scripts/download_assets_offline.sh
 ```
@@ -20,7 +20,7 @@ sudo ./scripts/download_assets_offline.sh
 사용자의 인프라 사양(대상 CSP, Tofu 버전 등)에 맞추어 **가변형 이미지 빌드 툴체인**을 실행합니다.
 
 ```bash
-cd ../jenkins-build/
+cd ./jenkins-build/
 chmod +x *.sh
 sudo ./build-tofu-jenkins.sh
 ```
@@ -85,7 +85,7 @@ sudo ./scripts/install.sh
   * `dynamic` 선택 시 사전에 준비된 `StorageClass`(예: NFS dynamic provisioner) 이름을 입력받아 동적으로 PVC를 구성합니다.
   * 기존 `install.conf`에 남아 있는 `static` 값은 호환성을 위해 `hostpath`와 동일하게 처리합니다.
 * **YAML 동기화**:
-  * 입력된 설정은 `--set` 인자를 사용하는 대신 `values-override.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
+  * 입력된 설정은 `--set` 인자를 사용하는 대신 `values-infra.yaml`을 생성하여 base인 `values.yaml`과 병합 배포하므로 **Single Source of Truth**가 보장됩니다.
 
 ---
 
@@ -114,7 +114,7 @@ kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-password
 ### 5.1. 수동 설치 진행
 1. `values.yaml` 내의 이미지 레지스트리 주소(예: `jenkins/jenkins` 등)를 사내 사설 Harbor 도메인 주소로 교체합니다.
    * OpenTofu 커스텀 이미지를 쓸 경우 `cmp-jenkins-full`로 변경합니다.
-2. `values-override.yaml` 파일을 작성하여 로컬 사양(스토리지, NodePort 노출 사양)을 지정합니다.
+2. `values-infra.yaml` 파일을 작성하여 로컬 사양(스토리지, NodePort 노출 사양)을 지정합니다.
    ```yaml
    controller:
      serviceType: "NodePort"
@@ -126,20 +126,23 @@ kubectl get secret jenkins -n jenkins -o jsonpath="{.data.jenkins-admin-password
    ```
 3. Kubernetes 볼륨 매니페스트 및 Helm 배포를 직접 적용합니다.
    ```bash
-   # HostPath PV 적용 (HostPath 선택 시)
+   # 1. 네임스페이스 생성
+   kubectl create namespace jenkins --dry-run=client -o yaml | kubectl apply -f -
+
+   # 2. HostPath PV 적용 (HostPath 선택 시)
    kubectl apply -f ./manifests/pv-volume.yaml
 
-   # NAS 정적 PV 적용 (NAS 정적 할당 선택 시)
+   # 3. NAS 정적 PV 적용 (NAS 정적 할당 선택 시)
    kubectl apply -f ./manifests/nas-pv.yaml
    
-   # Gradle 캐시 공유 PV/PVC 적용
+   # 4. Gradle 캐시 공유 PV/PVC 적용
    kubectl apply -f ./manifests/gradle-cache-pv-pvc.yaml -n jenkins
    
-   # Helm 배포
+   # 5. Helm 배포
    helm upgrade --install jenkins ./charts/jenkins \
-     -n jenkins --create-namespace \
+     -n jenkins \
      -f ./values.yaml \
-     -f ./values-override.yaml
+     -f ./values-infra.yaml
    ```
 
 ---
@@ -177,16 +180,11 @@ cd ../../
 sudo ./scripts/upload_images_to_harbor_v3-lite.sh
 
 # Jenkins에 Buildah agent podTemplate 적용
-cp values-cicd-buildah.yaml values-cicd-buildah.local.yaml
-sed -i \
-  -e 's|<HARBOR_REGISTRY>|harbor.example.local:30080|g' \
-  -e 's|<HARBOR_PROJECT>|devops|g' \
-  values-cicd-buildah.local.yaml
-
+# (자동화 install.sh를 사용하지 않는 경우, 아래 예시처럼 values-infra.yaml에 해당 설정을 수동 병합해 설치합니다)
 helm upgrade --install jenkins ./charts/jenkins \
-  -n jenkins --create-namespace \
+  -n jenkins \
   -f values.yaml \
-  -f values-cicd-buildah.local.yaml
+  -f values-infra.yaml
 ```
 
 표준 Jenkinsfile 예시는 `examples/Jenkinsfile.buildah`를 사용합니다.

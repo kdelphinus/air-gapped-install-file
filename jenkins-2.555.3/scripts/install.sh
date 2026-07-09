@@ -4,20 +4,24 @@ set -e
 # 스크립트 위치 기준으로 컴포넌트 루트로 이동
 cd "$(dirname "$0")/.." || exit 1
 
-
 # ==========================================
 # [설정] 기본 변수
 # ==========================================
 NAMESPACE="jenkins"
+RELEASE_NAME="jenkins"
 CHART_PATH="./charts/jenkins"
+VALUES_FILE="./values.yaml"
 CONF_FILE="./install.conf"
 PV_FILE="./manifests/pv-volume.yaml"
 NAS_PV_FILE="./manifests/nas-pv.yaml"
-
-# 임시 파일 자동 클린업 trap 설정
-trap 'rm -f ./values-temp.yaml ./values-cicd-buildah.local.yaml' EXIT
-
 GRADLE_CACHE_FILE="./manifests/gradle-cache-pv-pvc.yaml"
+NODE_LABEL_KEY="jenkins-node"
+NODE_LABEL_VALUE="true"
+
+# 이미지 태그 정보 고정
+CONTROLLER_TAG="2.555.3"
+AGENT_TAG="latest"
+SIDECAR_TAG="1.30.7"
 
 # 색상 코드
 GREEN='\033[0;32m'
@@ -67,38 +71,72 @@ is_static_pv_storage() {
 # ==========================================
 # [함수] 클린업 로직
 # ==========================================
-function cleanup_resources() {
-  local RESET_MODE=$1 # "reset" 이면 install.conf 도 삭제
-  echo ""
-  echo -e "🧹 ${YELLOW}[Clean Up] 기존 Jenkins 리소스 제거 시작...${NC}"
+cleanup_resources() {
+    local RESET_MODE=$1
+    echo ""
+    echo -e "🧹 ${YELLOW}[Clean Up] 기존 Jenkins 리소스 제거 시작...${NC}"
 
-  # Helm Uninstall
-  if helm status jenkins -n $NAMESPACE >/dev/null 2>&1; then
-      echo "⏳ Helm 차트 삭제 중..."
-      helm uninstall jenkins -n $NAMESPACE --wait=false 2>/dev/null || true
-      sleep 3
-  fi
+    # 1. PV/PVC 삭제 여부 프롬프트 먼저 획득 (P0 준수)
+    local DELETE_VOLUMES="no"
+    echo ""
+    read -p "⚠️  PV/PVC도 함께 삭제하시겠습니까? (데이터 영구 삭제, y/n): " DELETE_DATA
+    if [[ "${DELETE_DATA}" =~ ^[Yy]$ ]]; then
+        DELETE_VOLUMES="yes"
+    fi
 
-  # PVC/PV 삭제
-  echo "🗑️  Jenkins PVC/PV 삭제 중..."
-  kubectl delete pvc -n $NAMESPACE jenkins --ignore-not-found=true --timeout=10s --wait=false 2>/dev/null || true
-  kubectl delete pvc -n $NAMESPACE gradle-cache-pvc --ignore-not-found=true --timeout=10s --wait=false 2>/dev/null || true
-  kubectl delete pv jenkins-pv gradle-cache-pv --ignore-not-found=true --timeout=10s --wait=false 2>/dev/null || true
+    # 2. 볼륨 보존 시 helm uninstall에 의한 PVC 자동 제거 방지 (keep 어노테이션 주입)
+    if [ "$DELETE_VOLUMES" != "yes" ]; then
+        if kubectl get pvc jenkins -n "$NAMESPACE" >/dev/null 2>&1; then
+            echo "🛡️  볼륨 보존을 위해 PVC 'jenkins'에 keep resource-policy를 설정합니다..."
+            kubectl annotate pvc jenkins -n "$NAMESPACE" "helm.sh/resource-policy=keep" --overwrite 2>/dev/null || true
+        fi
+    fi
 
-  # 네임스페이스 삭제
-  if kubectl get ns $NAMESPACE > /dev/null 2>&1; then
-      echo "🗑️  네임스페이스($NAMESPACE) 삭제..."
-      kubectl delete ns $NAMESPACE --ignore-not-found=true --timeout=15s --wait=false 2>/dev/null || true
-  fi
+    # 3. Helm Uninstall
+    if helm status "$RELEASE_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+        echo "⏳ Helm 차트 삭제 중..."
+        helm uninstall "$RELEASE_NAME" -n "$NAMESPACE" --wait=false 2>/dev/null
+        sleep 3
+    fi
 
-  if [ "$RESET_MODE" == "reset" ]; then
-      rm -f "$CONF_FILE"
-      rm -f "./values-temp.yaml"
-      echo -e "🗑️  설정 파일 및 임시 파일 삭제 완료 (Reset)."
-  fi
+    # 노드 라벨 제거 (Reset 모드 시에만 초기화 진행)
+    if [ "$RESET_MODE" == "reset" ]; then
+        echo "🗑️  노드 라벨 '$NODE_LABEL_KEY' 제거 중..."
+        kubectl label nodes --all ${NODE_LABEL_KEY}- > /dev/null 2>&1 || true
+    fi
 
-  echo -e "${GREEN}✅ 초기화 작업이 완료되었습니다.${NC}"
-  echo ""
+    # 4. PVC/PV 삭제 처리
+    if [ "$DELETE_VOLUMES" == "yes" ]; then
+        echo "   - PVC 삭제 중..."
+        kubectl delete pvc -n $NAMESPACE jenkins --ignore-not-found=true 2>/dev/null || true
+        kubectl delete pvc -n $NAMESPACE gradle-cache-pvc --ignore-not-found=true 2>/dev/null || true
+    else
+        echo "➡️  PVC 및 PV 볼륨 데이터가 보존되었습니다."
+    fi
+
+    # 네임스페이스 삭제 (볼륨 보존 시 cascade delete 방지를 위해 우회)
+    if [ "$DELETE_VOLUMES" == "yes" ]; then
+        if kubectl get ns "$NAMESPACE" >/dev/null 2>&1; then
+            echo "   - 네임스페이스 삭제 중 (완료까지 시간이 걸릴 수 있습니다)..."
+            kubectl delete namespace "$NAMESPACE" --ignore-not-found --timeout=30s 2>/dev/null
+        fi
+    else
+        echo "➡️  볼륨 보존 선택에 따라 Namespace '${NAMESPACE}' 삭제 단계를 생략합니다."
+    fi
+
+    if [ "$DELETE_VOLUMES" == "yes" ]; then
+        echo "   - PV 삭제 중..."
+        kubectl delete pv jenkins-pv gradle-cache-pv --ignore-not-found=true 2>/dev/null || true
+    fi
+
+    if [ "$RESET_MODE" == "reset" ]; then
+        rm -f "$CONF_FILE"
+        rm -f "./values-infra.yaml"
+        echo -e "🗑️  설정 파일 및 생성된 인프라 파일 삭제 완료 (Reset)."
+    fi
+
+    echo -e "${GREEN}✅ 초기화 완료.${NC}"
+    echo ""
 }
 
 prepare_hostpath_permissions() {
@@ -204,27 +242,22 @@ prepare_buildah_agent_image() {
     load_image_archive_to_cluster "$buildah_tar"
 }
 
-render_buildah_values() {
-    [ "$ENABLE_CICD_BUILDAH" == "true" ] || return 0
-
-    cp -f ./values-cicd-buildah.yaml ./values-cicd-buildah.local.yaml
-    if [ "$IMAGE_SOURCE" == "harbor" ]; then
-        sed -i \
-            -e "s|<HARBOR_REGISTRY>|${HARBOR_REGISTRY}|g" \
-            -e "s|<HARBOR_PROJECT>|${HARBOR_PROJECT}|g" \
-            ./values-cicd-buildah.local.yaml
-    else
-        sed -i \
-            -e "s|<HARBOR_REGISTRY>/<HARBOR_PROJECT>/jenkins-buildah-agent:1.41.4|${BUILDAH_AGENT_IMAGE}|g" \
-            -e '/imagePullSecretName: harbor-regcred/d' \
-            ./values-cicd-buildah.local.yaml
+# 쉘 명령어 사전 체크
+check_command() {
+    if ! command -v "$1" &> /dev/null; then
+        echo -e "${RED}[오류] '$1' 명령어를 찾을 수 없습니다. 설치 후 다시 진행하십시오.${NC}"
+        exit 1
     fi
 }
+
 # ==========================================
 # [1] 기존 설치 감지 및 메뉴
 # ==========================================
 load_conf
-EXIST_HELM=$(helm status jenkins -n $NAMESPACE > /dev/null 2>&1 && echo "yes" || echo "no")
+check_command kubectl
+check_command helm
+
+EXIST_HELM=$(helm status "$RELEASE_NAME" -n "$NAMESPACE" > /dev/null 2>&1 && echo "yes" || echo "no")
 DO_UPGRADE=false
 
 if [ "$EXIST_HELM" == "yes" ] || [ -f "$CONF_FILE" ]; then
@@ -286,6 +319,8 @@ if [ "$DO_UPGRADE" != "true" ]; then
             ;;
         2)
             IMAGE_SOURCE="local"
+            HARBOR_REGISTRY=""
+            HARBOR_PROJECT=""
             ;;
         3)
             IMAGE_SOURCE="online"
@@ -300,7 +335,6 @@ if [ "$DO_UPGRADE" != "true" ]; then
     esac
 
     if [ "$IMAGE_SOURCE" == "local" ]; then
-        
         shopt -s nullglob
         IMAGE_ARCHIVES=(./images/*.tar*)
         shopt -u nullglob
@@ -471,103 +505,156 @@ fi
 save_conf
 
 # ==========================================
-# [3] YAML 동기화 (Single Source of Truth)
+# [3] YAML 동기화 및 values-infra.yaml 생성
 # ==========================================
 echo ""
-echo "🔧 임시 설정 파일(values-temp.yaml) 생성 및 치환 중..."
+echo "🔧 인프라 설정 파일(values-infra.yaml) 생성 중..."
 
-# 1. 템플릿 복사 분기
+# 이미지 변수들 셋업
+IMAGE_PULL_SECRET="regcred"
 if [ "${IMAGE_SOURCE}" = "harbor" ]; then
-    cp -f ./values.yaml ./values-temp.yaml
-    # Harbor 사용 시 이미지 레지스트리 주소 치환
-    sed -i \
-        -e "s|<HARBOR_REGISTRY>|${HARBOR_REGISTRY}|g" \
-        -e "s|<HARBOR_PROJECT>|${HARBOR_PROJECT}|g" \
-        ./values-temp.yaml
-else
-    # local/online 모드는 공개 이미지 기본값을 사용합니다.
-    # local 모드는 위 단계에서 tar를 클러스터 런타임에 먼저 로드합니다.
-    cp -f ./values-local.yaml ./values-temp.yaml
-fi
-
-# 2. 커스텀 OpenTofu 이미지 설정 값 준비
-CONTROLLER_IMAGE_REGISTRY=""
-CONTROLLER_IMAGE_REPOSITORY=""
-CONTROLLER_IMAGE_PULL_POLICY="IfNotPresent"
-if [ "$USE_CUSTOM_IMAGE" == "true" ]; then
-    echo "   → OpenTofu 커스텀 이미지(cmp-jenkins-full) 설정을 values-temp.yaml에 적용..."
-    if [ "$IMAGE_SOURCE" == "harbor" ]; then
-        CONTROLLER_IMAGE_REGISTRY="${HARBOR_REGISTRY}"
+    CONTROLLER_IMAGE_REGISTRY="${HARBOR_REGISTRY}"
+    if [ "$USE_CUSTOM_IMAGE" == "true" ]; then
         CONTROLLER_IMAGE_REPOSITORY="${HARBOR_PROJECT}/cmp-jenkins-full"
     else
-        CONTROLLER_IMAGE_REGISTRY="docker.io"
-        CONTROLLER_IMAGE_REPOSITORY="library/cmp-jenkins-full"
+        CONTROLLER_IMAGE_REPOSITORY="${HARBOR_PROJECT}/jenkins"
     fi
+    AGENT_IMAGE_REGISTRY="${HARBOR_REGISTRY}"
+    AGENT_IMAGE_REPOSITORY="${HARBOR_PROJECT}/inbound-agent"
+    SIDECAR_IMAGE_REGISTRY="${HARBOR_REGISTRY}"
+    SIDECAR_IMAGE_REPOSITORY="${HARBOR_PROJECT}/k8s-sidecar"
+else
+    CONTROLLER_IMAGE_REGISTRY="docker.io"
+    if [ "$USE_CUSTOM_IMAGE" == "true" ]; then
+        CONTROLLER_IMAGE_REPOSITORY="library/cmp-jenkins-full"
+    else
+        CONTROLLER_IMAGE_REPOSITORY="jenkins/jenkins"
+    fi
+    AGENT_IMAGE_REGISTRY="docker.io"
+    AGENT_IMAGE_REPOSITORY="jenkins/inbound-agent"
+    SIDECAR_IMAGE_REGISTRY="docker.io"
+    SIDECAR_IMAGE_REPOSITORY="kiwigrid/k8s-sidecar"
 fi
 
-# 3. 인프라 가변 설정 오버라이드 덧붙이기
-cat >> ./values-temp.yaml <<EOF
+# 노드 고정 (nodeSelector) 설정
+NODE_SELECTOR_VAL="{}"
+if [ -n "${TARGET_NODE}" ]; then
+    kubectl label nodes "${TARGET_NODE}" "${NODE_LABEL_KEY}=${NODE_LABEL_VALUE}" --overwrite 2>/dev/null || true
+    NODE_SELECTOR_VAL="${NODE_LABEL_KEY}: \"${NODE_LABEL_VALUE}\""
+fi
 
+# 스토리지 사양 정의
+if is_static_pv_storage; then
+    RESOLVED_STORAGE_CLASS="manual"
+else
+    RESOLVED_STORAGE_CLASS="${STORAGE_CLASS}"
+fi
+
+# Buildah agent 설정 블록 조립
+BUILDAH_AGENT_YAML_BLOCK=""
+BUILDAH_SA_YAML_BLOCK=""
+if [ "$ENABLE_CICD_BUILDAH" == "true" ]; then
+    BUILDAH_AGENT_YAML_BLOCK="  imagePullSecretName: harbor-regcred
+  podTemplates:
+    buildah: |
+      - name: buildah
+        label: buildah
+        serviceAccount: jenkins-agent
+        containers:
+          - name: buildah
+            image: \"${BUILDAH_AGENT_IMAGE}\"
+            command: \"sleep\"
+            args: \"999999\"
+            ttyEnabled: true
+            privileged: false
+            resourceRequestCpu: \"500m\"
+            resourceRequestMemory: \"1Gi\"
+            resourceLimitCpu: \"2\"
+            resourceLimitMemory: \"4Gi\"
+            envVars:
+              - envVar:
+                  key: BUILDAH_ISOLATION
+                  value: chroot
+              - envVar:
+                  key: STORAGE_DRIVER
+                  value: vfs
+              - envVar:
+                  key: XDG_RUNTIME_DIR
+                  value: /tmp
+              - envVar:
+                  key: HOME
+                  value: /home/jenkins
+              - envVar:
+                  key: CONTAINERS_STORAGE_CONF
+                  value: /home/jenkins/.config/containers/storage.conf
+        volumes:
+          - emptyDirVolume:
+              mountPath: /home/jenkins/.local/share/containers
+              memory: false
+          - emptyDirVolume:
+              mountPath: /tmp
+              memory: false"
+
+    BUILDAH_SA_YAML_BLOCK="serviceAccountAgent:
+  create: true
+  name: jenkins-agent
+  imagePullSecretName: harbor-regcred"
+fi
+
+# 단일 cat > 구조를 사용해 중복 키를 완벽 방지하는 values-infra.yaml 작성
+cat > ./values-infra.yaml <<EOF
+# Jenkins v2.555.3 인프라 설정 — install.sh 에 의해 자동 관리됩니다.
 controller:
-  serviceType: "${SVC_TYPE}"
-EOF
-
-# NodePort 설정 시 포트 지정
-if [ "$SVC_TYPE" == "NodePort" ]; then
-    cat >> ./values-temp.yaml <<EOF
-  nodePort: 30000
-EOF
-fi
-
-# 커스텀 Jenkins 컨트롤러 이미지 설정
-if [ -n "$CONTROLLER_IMAGE_REPOSITORY" ]; then
-    cat >> ./values-temp.yaml <<EOF
   image:
     registry: "${CONTROLLER_IMAGE_REGISTRY}"
     repository: "${CONTROLLER_IMAGE_REPOSITORY}"
-    tag: "2.555.3"
-    pullPolicy: "${CONTROLLER_IMAGE_PULL_POLICY}"
-EOF
-fi
-
-# 노드 고정 배치(nodeSelector) 추가
-if [ -n "$TARGET_NODE" ]; then
-    cat >> ./values-temp.yaml <<EOF
+    tag: "${CONTROLLER_TAG}"
+    pullPolicy: "Always"
+  imagePullSecrets:
+    - name: "${IMAGE_PULL_SECRET}"
+  serviceType: "${SVC_TYPE}"
+  nodePort: 30000
   nodeSelector:
-    kubernetes.io/hostname: "${TARGET_NODE}"
-EOF
-fi
+    ${NODE_SELECTOR_VAL}
+  runAsUser: 1000
+  fsGroup: 1000
+  installPlugins: false
+  sidecars:
+    configAutoReload:
+      image:
+        registry: "${SIDECAR_IMAGE_REGISTRY}"
+        repository: "${SIDECAR_IMAGE_REPOSITORY}"
+        tag: "${SIDECAR_TAG}"
+        pullPolicy: "IfNotPresent"
 
-# 스토리지 볼륨 설정 추가. Jenkins chart의 persistence는 controller 하위가 아닌 top-level 키입니다.
-if is_static_pv_storage; then
-    cat >> ./values-temp.yaml <<EOF
+agent:
+  image:
+    registry: "${AGENT_IMAGE_REGISTRY}"
+    repository: "${AGENT_IMAGE_REPOSITORY}"
+    tag: "${AGENT_TAG}"
+    pullPolicy: "IfNotPresent"
+  imagePullSecrets:
+    - name: "${IMAGE_PULL_SECRET}"
+${BUILDAH_AGENT_YAML_BLOCK}
 
 persistence:
   enabled: true
-  storageClass: "manual"
+  storageClass: "${RESOLVED_STORAGE_CLASS}"
   size: "${STORAGE_SIZE:-20Gi}"
-EOF
-else
-    cat >> ./values-temp.yaml <<EOF
 
-persistence:
-  enabled: true
-  storageClass: "${STORAGE_CLASS}"
-  size: "${STORAGE_SIZE:-20Gi}"
+${BUILDAH_SA_YAML_BLOCK}
 EOF
-fi
 
 # ==========================================
 # [4] Kubernetes 리소스 준비 및 설치
 # ==========================================
 echo ""
-echo "🚀 [1/3] Kubernetes 네임스페이스 및 스토리지 구성 중..."
+echo -e "🚀 ${GREEN}[1/3] Kubernetes 네임스페이스 및 스토리지 구성 중...${NC}"
 
 # 네임스페이스 생성
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
 prepare_buildah_agent_image
-render_buildah_values
 
 # HostPath 정적 PV 생성
 if is_hostpath_storage; then
@@ -593,23 +680,25 @@ fi
 echo "   → Gradle Build 캐시용 PV/PVC 생성 중..."
 kubectl apply -f "$GRADLE_CACHE_FILE" -n $NAMESPACE
 
+# Helm이 직접 생성하지 않은 PVC를 관리할 수 있도록 adoption 레이블/어노테이션 추가
+kubectl label pvc jenkins -n "${NAMESPACE}" "app.kubernetes.io/managed-by=Helm" --overwrite 2>/dev/null || true
+kubectl annotate pvc jenkins -n "${NAMESPACE}" "meta.helm.sh/release-name=jenkins" "meta.helm.sh/release-namespace=${NAMESPACE}" --overwrite 2>/dev/null || true
+
 # 2. 노드 라벨 지정 (필요 시)
 if [ -n "$TARGET_NODE" ]; then
     echo "   → 대상 노드(${TARGET_NODE})에 jenkins-node=true 라벨 추가..."
     kubectl label nodes "$TARGET_NODE" jenkins-node=true --overwrite >/dev/null 2>&1 || true
 fi
 
-# 3. Helm 배포
+# 3. Helm 배포 (upgrade --install 명령 고정으로 멱등성 보장)
 echo ""
 echo -e "🚀 [2/3] Jenkins Helm 차트 배포 중... (${DO_UPGRADE:+업그레이드}${DO_UPGRADE:-설치})"
 if [ -d "$CHART_PATH" ]; then
-    HELM_VALUES=(-f ./values-temp.yaml)
-    if [ "$ENABLE_CICD_BUILDAH" == "true" ]; then
-        HELM_VALUES+=( -f ./values-cicd-buildah.local.yaml )
-    fi
     helm upgrade --install jenkins "$CHART_PATH" \
         -n "$NAMESPACE" \
-        "${HELM_VALUES[@]}"
+        -f "$VALUES_FILE" \
+        -f ./values-infra.yaml \
+        --wait
 else
     echo -e "${RED}[오류] Helm 차트 디렉토리('${CHART_PATH}')가 존재하지 않습니다.${NC}"
     exit 1
@@ -617,7 +706,7 @@ fi
 
 echo ""
 echo "========================================================"
-echo -e "🎉 구성 완료! (Jenkins v2.555.3 / Chart v5.9.26)"
+echo -e "${GREEN}🎉 구성 완료! (Jenkins v2.555.3 / Chart v5.9.26)${NC}"
 echo "설정 파일 : $CONF_FILE"
 if [ "$ENABLE_CICD_BUILDAH" == "true" ]; then
     echo "Buildah CI : enabled (${BUILDAH_AGENT_IMAGE})"
