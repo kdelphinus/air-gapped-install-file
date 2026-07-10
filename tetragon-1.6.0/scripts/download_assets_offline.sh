@@ -47,6 +47,7 @@ fi
 images=(
   "quay.io/cilium/tetragon:$CHART_VERSION"
   "quay.io/cilium/tetragon-operator:$CHART_VERSION"
+  "quay.io/cilium/hubble-export-stdout:v1.1.0"
 )
 
 if [ "$DOWNLOAD_IMAGES" = true ]; then
