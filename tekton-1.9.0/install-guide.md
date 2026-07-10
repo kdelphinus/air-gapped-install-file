@@ -46,6 +46,8 @@ chmod +x images/upload_images_to_harbor_v3-lite.sh
 > **태깅 규칙 주의**: `upload_images_to_harbor_v3-lite.sh` 는 tar 파일 내 이미지명의 **마지막 세그먼트**만 Harbor 경로로 사용합니다.
 > 예: `ghcr.io/tektoncd/pipeline/controller-10a3e32792f33651396d02b6855a6e36:v1.9.0`
 > → `<HARBOR>/library/controller-10a3e32792f33651396d02b6855a6e36:v1.9.0`
+>
+> **Windows 노드 미지원 안내**: 원본 매니페스트 내 Windows 전용 파워셸 이미지(`mcr.microsoft.com/powershell`)도 수집 및 치환 범위에는 포함되어 있으나, 본 가이드는 리눅스 노드 전용이므로 해당 윈도우 파드 기동은 고려 대상에서 제외됩니다.
 
 ---
 

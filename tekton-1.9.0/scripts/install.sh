@@ -107,14 +107,20 @@ rewrite_manifest() {
 
     if [ "${IMAGE_SOURCE}" = "1" ]; then
         # ghcr.io/tektoncd 및 gcr.io/tekton-releases 하위의 모든 이미지 경로를 유연하게 치환
-        # @sha256: 다이제스트 제거 및 Harbor 저장 경로 단일 레벨 변환 보장
+        # cgr.dev 및 mcr.microsoft.com 이미지 치환 규칙 추가 반영
         sed -E \
             -e "s,(ghcr\.io/tektoncd|gcr\.io/tekton-releases)/[^/]+/([^:\"' ]*):([^@\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
+            -e "s,(ghcr\.io/tektoncd|gcr\.io/tekton-releases)/[^/]+/([^@:\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:latest,g" \
             -e "s,(ghcr\.io/tektoncd|gcr\.io/tekton-releases)/[^/]+/([^:\"' ]*):([^@\"' ]*),${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
+            -e "s,(cgr\.dev/chainguard|mcr\.microsoft\.com/powershell)/([^:\"' ]*):([^@\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
+            -e "s,(cgr\.dev/chainguard|mcr\.microsoft\.com/powershell)/([^@:\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:latest,g" \
+            -e "s,(cgr\.dev/chainguard|mcr\.microsoft\.com/powershell)/([^:\"' ]*):([^@\"' ]*),${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
             "$src" > "$dst"
     else
-        # 로컬 import 사용 시 원본 그대로 복사
-        cp "$src" "$dst"
+        # 로컬 import 사용 시 원본 이미지 경로에서 @sha256 다이제스트만 완벽 소거하여 로컬 캐시 태그와 매치 보장
+        sed -E \
+            -e "s|@sha256:[a-zA-Z0-9:]*||g" \
+            "$src" > "$dst"
     fi
 }
 
