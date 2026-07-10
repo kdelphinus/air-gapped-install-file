@@ -1,11 +1,15 @@
-ARG BUILDAH_BASE_IMAGE=quay.io/buildah/stable:v1.41.4
+ARG BUILDAH_BASE_IMAGE=rockylinux:9
 FROM ${BUILDAH_BASE_IMAGE}
 
-ARG JDK_PACKAGE=java-17-openjdk-devel
+ARG JDK_PACKAGE=java-21-openjdk-devel
 
 USER root
 
-RUN dnf -y install \
+COPY repos/ /tmp/buildah-agent-repos/
+
+RUN find /tmp/buildah-agent-repos -name '*.repo' -exec cp {} /etc/yum.repos.d/ \; \
+    && dnf -y install \
+      buildah \
       ca-certificates \
       findutils \
       git \

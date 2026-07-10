@@ -5,67 +5,69 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 COMPONENT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 IMAGE_DIR="${COMPONENT_DIR}/images"
 
-BUILDAH_VERSION="${BUILDAH_VERSION:-1.41.4}"
-BASE_IMAGE="${BASE_IMAGE:-quay.io/buildah/stable:v${BUILDAH_VERSION}}"
+AGENT_VERSION="${AGENT_VERSION:-rocky9}"
+BASE_IMAGE="${BASE_IMAGE:-rockylinux:9}"
 IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-jenkins-buildah-agent}"
-COMMON_JDK_VERSIONS=(8 11 17 21)
+DEFAULT_JDK_VERSION="${DEFAULT_JDK_VERSION:-21}"
+KNOWN_JDK_VERSIONS=(17 21)
 
-BUILD_ALL="false"
 DRY_RUN="false"
 ENV_JDK_VERSION="${JDK_VERSION:-}"
 EXPLICIT_JDK="false"
-JDK_VERSION="${ENV_JDK_VERSION:-17}"
+JDK_VERSION="${ENV_JDK_VERSION:-${DEFAULT_JDK_VERSION}}"
 if [[ -n "$ENV_JDK_VERSION" ]]; then
     EXPLICIT_JDK="true"
 fi
 
 usage() {
     cat <<EOF
-Usage: $0 [--jdk <8|11|17|21>] [--all] [--list] [--dry-run]
+Usage: $0 [--jdk <17|21>] [--list] [--dry-run]
 
 Options:
   --jdk <version>   지정한 JDK 버전용 Buildah agent 이미지를 빌드합니다.
-  --all             많이 쓰는 JDK 버전(${COMMON_JDK_VERSIONS[*]}) 이미지를 모두 빌드합니다.
   --list            지원하는 JDK 버전과 패키지명을 출력합니다.
   --dry-run         실제 빌드 없이 생성될 이미지명과 tar 경로만 출력합니다.
   -h, --help        도움말을 출력합니다.
 
 Environment:
-  BUILDAH_VERSION   Buildah base image 버전. 기본값: ${BUILDAH_VERSION}
-  BASE_IMAGE        Buildah base image. 기본값: ${BASE_IMAGE}
-  IMAGE_REPOSITORY  생성할 이미지 repository. 기본값: ${IMAGE_REPOSITORY}
-  TARGET_IMAGE      단일 빌드 시 사용할 전체 이미지명. --all에서는 무시됩니다.
-  TAR_PATH          단일 빌드 시 사용할 tar 출력 경로. --all에서는 무시됩니다.
+  AGENT_VERSION        Agent image tag suffix. 기본값: ${AGENT_VERSION}
+  BASE_IMAGE           Agent base image. 기본값: ${BASE_IMAGE}
+  DEFAULT_JDK_VERSION  옵션 없이 실행할 때 사용할 JDK 버전. 기본값: ${DEFAULT_JDK_VERSION}
+  IMAGE_REPOSITORY     생성할 이미지 repository. 기본값: ${IMAGE_REPOSITORY}
+  TARGET_IMAGE         생성할 전체 이미지명.
+  TAR_PATH             tar 출력 경로.
 
 Examples:
   $0
   $0 --jdk 21
-  $0 --all
-  $0 --all --dry-run
-  IMAGE_REPOSITORY=harbor.example.local/devops/jenkins-buildah-agent $0 --jdk 17
+  $0 --jdk 17
+  $0 --jdk 21 --dry-run
+  BASE_IMAGE=<JDK17_RPM_REPO_ENABLED_ROCKY_IMAGE> $0 --jdk 17
+  IMAGE_REPOSITORY=harbor.example.local/devops/jenkins-buildah-agent $0 --jdk 21
 EOF
 }
 
 jdk_package() {
     case "$1" in
-        8) echo "java-1.8.0-openjdk-devel" ;;
-        11) echo "java-11-openjdk-devel" ;;
         17) echo "java-17-openjdk-devel" ;;
         21) echo "java-21-openjdk-devel" ;;
         *)
             echo "[ERROR] 지원하지 않는 JDK 버전입니다: $1" >&2
-            echo "        지원 버전: ${COMMON_JDK_VERSIONS[*]}" >&2
+            echo "        지원 버전: ${KNOWN_JDK_VERSIONS[*]}" >&2
             exit 1
             ;;
     esac
 }
 
 list_versions() {
-    for version in "${COMMON_JDK_VERSIONS[@]}"; do
-        printf 'JDK %s -> %s\n' "$version" "$(jdk_package "$version")"
+    for version in "${KNOWN_JDK_VERSIONS[@]}"; do
+        if [[ "$version" == "$DEFAULT_JDK_VERSION" ]]; then
+            printf 'JDK %s -> %s (default)\n' "$version" "$(jdk_package "$version")"
+        else
+            printf 'JDK %s -> %s\n' "$version" "$(jdk_package "$version")"
+        fi
     done
 }
-
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --jdk)
@@ -76,10 +78,6 @@ while [[ $# -gt 0 ]]; do
             JDK_VERSION="$2"
             EXPLICIT_JDK="true"
             shift 2
-            ;;
-        --all)
-            BUILD_ALL="true"
-            shift
             ;;
         --list)
             list_versions
@@ -124,17 +122,13 @@ build_one() {
 
     jdk_package_name="$(jdk_package "$jdk_version")"
 
-    if [[ "$BUILD_ALL" == "true" || "$EXPLICIT_JDK" == "true" ]]; then
-        target_image="${IMAGE_REPOSITORY}:jdk${jdk_version}-${BUILDAH_VERSION}"
-        tar_path="${IMAGE_DIR}/jenkins-buildah-agent_jdk${jdk_version}_${BUILDAH_VERSION}.tar"
-    else
-        target_image="${TARGET_IMAGE:-${IMAGE_REPOSITORY}:${BUILDAH_VERSION}}"
-        tar_path="${TAR_PATH:-${IMAGE_DIR}/jenkins-buildah-agent_${BUILDAH_VERSION}.tar}"
-    fi
+    target_image="${TARGET_IMAGE:-${IMAGE_REPOSITORY}:jdk${jdk_version}-${AGENT_VERSION}}"
+    tar_path="${TAR_PATH:-${IMAGE_DIR}/jenkins-buildah-agent_jdk${jdk_version}_${AGENT_VERSION}.tar}"
 
     echo "==> Buildah Jenkins agent image build"
     echo "    build cli   : ${BUILD_CLI}"
     echo "    base image  : ${BASE_IMAGE}"
+    echo "    agent suffix: ${AGENT_VERSION}"
     echo "    jdk version : ${jdk_version}"
     echo "    jdk package : ${jdk_package_name}"
     echo "    target image: ${target_image}"
@@ -175,10 +169,4 @@ build_one() {
     echo "==> 완료: ${tar_path}"
 }
 
-if [[ "$BUILD_ALL" == "true" ]]; then
-    for version in "${COMMON_JDK_VERSIONS[@]}"; do
-        build_one "$version"
-    done
-else
-    build_one "$JDK_VERSION"
-fi
+build_one "$JDK_VERSION"

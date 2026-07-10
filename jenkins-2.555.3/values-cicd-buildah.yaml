@@ -19,7 +19,7 @@ agent:
                   - harbor.test-cluster.com
         containers:
           - name: buildah
-            image: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/jenkins-buildah-agent:1.41.4
+            image: <HARBOR_REGISTRY>/<HARBOR_PROJECT>/jenkins-buildah-agent:jdk21-rocky9
             command: "sleep"
             args: "999999"
             ttyEnabled: true

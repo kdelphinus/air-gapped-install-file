@@ -209,10 +209,10 @@ load_image_archive_to_cluster() {
 prepare_buildah_agent_image() {
     [ "$ENABLE_CICD_BUILDAH" == "true" ] || return 0
 
-    local buildah_tar="./images/jenkins-buildah-agent_1.41.4.tar"
+    local buildah_tar="./images/jenkins-buildah-agent_jdk21_rocky9.tar"
 
     if [ "$IMAGE_SOURCE" == "harbor" ]; then
-        BUILDAH_AGENT_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/jenkins-buildah-agent:1.41.4"
+        BUILDAH_AGENT_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/jenkins-buildah-agent:jdk21-rocky9"
         echo "   → Buildah agent 이미지는 Harbor에서 pull합니다: ${BUILDAH_AGENT_IMAGE}"
         read -p "Jenkins namespace에 harbor-regcred Secret을 생성/갱신하시겠습니까? (y/N): " _CREATE_REGCRED
         if [[ "$_CREATE_REGCRED" =~ ^[Yy]([Ee][Ss])?$ ]]; then
@@ -228,7 +228,7 @@ prepare_buildah_agent_image() {
         return 0
     fi
 
-    BUILDAH_AGENT_IMAGE="jenkins-buildah-agent:1.41.4"
+    BUILDAH_AGENT_IMAGE="jenkins-buildah-agent:jdk21-rocky9"
     if [ ! -f "$buildah_tar" ]; then
         if [ "$IMAGE_SOURCE" != "online" ]; then
             echo -e "${RED}[오류] Buildah agent tar가 없습니다: ${buildah_tar}${NC}"
@@ -496,9 +496,9 @@ fi
 
 if [ "$ENABLE_CICD_BUILDAH" == "true" ]; then
     if [ "$IMAGE_SOURCE" == "harbor" ]; then
-        BUILDAH_AGENT_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/jenkins-buildah-agent:1.41.4"
+        BUILDAH_AGENT_IMAGE="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/jenkins-buildah-agent:jdk21-rocky9"
     else
-        BUILDAH_AGENT_IMAGE="jenkins-buildah-agent:1.41.4"
+        BUILDAH_AGENT_IMAGE="jenkins-buildah-agent:jdk21-rocky9"
     fi
 fi
 
