@@ -22,29 +22,21 @@ curl -L https://storage.googleapis.com/tekton-releases/triggers/previous/v0.34.0
 curl -L https://storage.googleapis.com/tekton-releases/dashboard/previous/v0.65.0/release.yaml -o "${MANIFEST_DIR}/dashboard-v0.65.0-release.yaml"
 
 echo "[2/2] 컨테이너 이미지 다운로드 및 저장 중..."
-# Pipelines v1.9.0
-IMAGES=(
-    "ghcr.io/tektoncd/pipeline/cmd/controller:v1.9.0"
-    "ghcr.io/tektoncd/pipeline/cmd/webhook:v1.9.0"
-    "ghcr.io/tektoncd/pipeline/cmd/entrypoint:v1.9.0"
-    "ghcr.io/tektoncd/pipeline/cmd/kubeconfigwriter:v1.9.0"
-    "ghcr.io/tektoncd/pipeline/cmd/imagedigestexporter:v1.9.0"
-    "ghcr.io/tektoncd/pipeline/cmd/pullrequest-init:v1.9.0"
-    "ghcr.io/tektoncd/pipeline/cmd/workingdirinit:v1.9.0"
-)
-# Triggers v0.34.0
-IMAGES+=(
-    "ghcr.io/tektoncd/triggers/cmd/controller:v0.34.0"
-    "ghcr.io/tektoncd/triggers/cmd/webhook:v0.34.0"
-    "ghcr.io/tektoncd/triggers/cmd/eventlistenersink:v0.34.0"
-)
-# Dashboard v0.65.0
-IMAGES+=(
-    "ghcr.io/tektoncd/dashboard/cmd/dashboard:v0.65.0"
-)
+
+# 매니페스트 파일들에서 실제 ghcr.io 및 gcr.io 이미지 주소를 동적으로 파싱
+# @sha256: 다이제스트는 pull 단계 이전에 제거하여 순수 이미지명:태그 구조 확보
+echo "-> 매니페스트 디렉토리($MANIFEST_DIR)에서 이미지 목록 동적 추출 중..."
+mapfile -t IMAGES < <(grep -o -E '(ghcr\.io/tektoncd|gcr\.io/tekton-releases)/[^"'\'' ]*' "$MANIFEST_DIR"/*.yaml 2>/dev/null | sed 's/@sha256.*//' | sort -u)
+
+if [ ${#IMAGES[@]} -eq 0 ]; then
+    echo -e "\033[0;31m[오류] 매니페스트에서 이미지 목록을 추출하지 못했습니다.\033[0m"
+    exit 1
+fi
+
+echo "-> 추출 완료: 총 ${#IMAGES[@]} 개의 고유 이미지 감지됨"
 
 for IMG in "${IMAGES[@]}"; do
-    FILENAME=$(echo $IMG | tr ':/' '-')
+    FILENAME=$(echo "$IMG" | tr ':/' '-')
     echo "-> 다운로드: $IMG"
     sudo ctr images pull "$IMG"
     echo "-> 저장: ${IMAGE_DIR}/${FILENAME}.tar"

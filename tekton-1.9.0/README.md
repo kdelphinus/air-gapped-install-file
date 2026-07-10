@@ -1,82 +1,59 @@
 # Tekton v1.9.0 LTS
 
 Kubernetes-native CI/CD 프레임워크.
-공식 Helm 차트 없음 — 공식 release YAML 매니페스트 기반으로 설치.
+공식 Helm 차트가 없으므로, 공식 release YAML 매니페스트를 에어갭 환경에 맞춰 동적 치환하여 설치합니다.
 
-## 구성 명세
+---
+
+## 📌 구성 명세
 
 | 항목 | 값 |
 | :--- | :--- |
 | Tekton Pipelines | v1.9.0 LTS (EOL: 2027-01-30) |
-| Tekton Triggers | v0.34.x (선택) |
+| Tekton Triggers | v0.34.0 (선택) |
 | Tekton Dashboard | v0.65.0 (선택) |
 | Namespace | tekton-pipelines |
 | Dashboard NodePort | 30004 (Dashboard 설치 시) |
 
-## 이미지 목록
+---
 
-| 이미지 | 태그 | 파일명 | 필수 |
-| :--- | :--- | :--- | :--- |
-| Pipelines 이미지 묶음 | v1.9.0 | `tekton-pipelines.tar` | ✅ |
-| Triggers 이미지 묶음 | v0.34.x | `tekton-triggers.tar` | 선택 |
-| Dashboard 이미지 | v0.65.0 | `tekton-dashboard.tar` | 선택 |
-
-> 이미지는 release.yaml 에서 `grep 'image:'` 로 추출 후 `docker pull && docker save` 로 준비.
-
-## 디렉토리 구조
+## 📂 디렉토리 구조
 
 ```text
 tekton-1.9.0/
 ├── manifests/
 │   ├── pipelines-v1.9.0-release.yaml    # 필수 (사전 다운로드)
-│   ├── triggers-v0.34.x-release.yaml    # 선택
+│   ├── triggers-v0.34.0-release.yaml    # 선택
 │   └── dashboard-v0.65.0-release.yaml   # 선택
 ├── images/
-│   ├── tekton-pipelines.tar
-│   ├── tekton-triggers.tar              # 선택
-│   ├── tekton-dashboard.tar             # 선택
 │   └── upload_images_to_harbor_v3-lite.sh
 └── scripts/
-    ├── install.sh
-    └── uninstall.sh
+    ├── download_assets_offline.sh       # 에셋 동적 파싱 및 다운로드
+    ├── install.sh                       # 대화형 멱등 설치
+    └── uninstall.sh                     # 멱등 제거 및 초기화
 ```
 
-## 사전 준비 (인터넷 환경)
+---
 
-```bash
-# 매니페스트 다운로드
-curl -L https://storage.googleapis.com/tekton-releases/pipeline/previous/v1.9.0/release.yaml \
-  -o manifests/pipelines-v1.9.0-release.yaml
+## 🛠️ 주요 설정 및 특이사항
 
-# 선택 컴포넌트
-curl -L https://storage.googleapis.com/tekton-releases/triggers/previous/v0.34.0/release.yaml \
-  -o manifests/triggers-v0.34.x-release.yaml
+### 1. 매니페스트 기반 이미지 동적 수집
+Tekton 릴리즈 매니페스트는 빌드 SHA 해시가 결합된 이미지 주소(`controller-10a3e327...:v1.9.0` 등)를 참조합니다.
+`download_assets_offline.sh` 는 매니페스트 전체를 파싱하여 실존하는 이미지 경로를 동적으로 추출·수집하므로 수동 리스트 구성 시 일어나는 누락을 방지합니다.
 
-curl -L https://storage.googleapis.com/tekton-releases/dashboard/previous/v0.65.0/release.yaml \
-  -o manifests/dashboard-v0.65.0-release.yaml
-```
+### 2. 다중 레지스트리 대응 rewrite 체계
+`install.sh` 는 매니페스트 내 이미지 경로를 `sed` 정규식으로 Harbor 주소로 교체합니다.
+`ghcr.io/tektoncd` 와 `gcr.io/tekton-releases` 레지스트리 양쪽 모두의 주소를 파싱하여 로컬 Harbor 경로로의 다중 맵 치환을 수행하며, `@sha256:` digest 지정을 제거합니다.
 
-## 빠른 시작
+### 3. 멱등 라이프사이클 관리
+인프라 가변 정보는 `install.conf` 에 보존되어 업그레이드 시 기존 입력 정보를 멱등하게 유지하며, 일반 언인스톨과 `--reset` 초기화 수명주기를 완벽히 분리하였습니다.
 
-```bash
-# 1. 이미지 Harbor 업로드
-./images/upload_images_to_harbor_v3-lite.sh
+---
 
-# 2. 설치
-chmod +x scripts/install.sh
-./scripts/install.sh
-```
+## 🚀 시작하기
 
-자세한 내용은 `install-guide.md` 참조.
+상세한 설치 및 차단 테스트 방법은 **[install-guide.md](./install-guide.md)**를 참조하세요.
 
-## 이미지 경로 rewrite 주의사항
-
-`install.sh` 는 release.yaml 내 이미지 경로를 `sed` 로 Harbor 주소로 교체합니다.
-Tekton v1.9.0 이미지 레지스트리는 `ghcr.io/tektoncd` 기준으로 작성되어 있습니다.
-`gcr.io/tekton-releases` 를 사용하는 경우 `install.sh` 의 sed 패턴을 수정하세요.
-
-실제 이미지 경로 확인 방법:
-
-```bash
-grep 'image:' manifests/pipelines-v1.9.0-release.yaml | sort -u
-```
+1. **에셋 준비:** `./scripts/download_assets_offline.sh` (외부망)
+2. **이미지 업로드:** `./images/upload_images_to_harbor_v3-lite.sh` (폐쇄망)
+3. **설치 실행:** `./scripts/install.sh` (폐쇄망)
