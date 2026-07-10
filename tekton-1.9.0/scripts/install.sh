@@ -112,9 +112,12 @@ rewrite_manifest() {
             -e "s,(ghcr\.io/tektoncd|gcr\.io/tekton-releases)/[^/]+/([^:\"' ]*):([^@\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
             -e "s,(ghcr\.io/tektoncd|gcr\.io/tekton-releases)/[^/]+/([^@:\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:latest,g" \
             -e "s,(ghcr\.io/tektoncd|gcr\.io/tekton-releases)/[^/]+/([^:\"' ]*):([^@\"' ]*),${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
-            -e "s,(cgr\.dev/chainguard|mcr\.microsoft\.com/powershell)/([^:\"' ]*):([^@\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
-            -e "s,(cgr\.dev/chainguard|mcr\.microsoft\.com/powershell)/([^@:\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:latest,g" \
-            -e "s,(cgr\.dev/chainguard|mcr\.microsoft\.com/powershell)/([^:\"' ]*):([^@\"' ]*),${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\2:\3,g" \
+            -e "s,cgr\.dev/chainguard/([^:\"' ]*):([^@\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\1:\2,g" \
+            -e "s,cgr\.dev/chainguard/([^@:\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\1:latest,g" \
+            -e "s,cgr\.dev/chainguard/([^:\"' ]*):([^@\"' ]*),${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\1:\2,g" \
+            -e "s,mcr\.microsoft\.com/([^:\"' ]*):([^@\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\1:\2,g" \
+            -e "s,mcr\.microsoft\.com/([^@:\"' ]*)@sha256:[a-zA-Z0-9:]*,${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\1:latest,g" \
+            -e "s,mcr\.microsoft\.com/([^:\"' ]*):([^@\"' ]*),${HARBOR_REGISTRY}/${HARBOR_PROJECT}/\1:\2,g" \
             "$src" > "$dst"
     else
         # 로컬 import 사용 시 원본 이미지 경로에서 @sha256 다이제스트만 완벽 소거하여 로컬 캐시 태그와 매치 보장

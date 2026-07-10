@@ -26,7 +26,7 @@ echo "[2/2] 컨테이너 이미지 다운로드 및 저장 중..."
 # 매니페스트 파일들에서 실제 ghcr.io, gcr.io 및 cgr.dev, mcr.microsoft.com 이미지 주소를 동적으로 파싱
 # @sha256: 다이제스트는 pull 단계 이전에 제거하여 순수 이미지명:태그 구조 확보
 echo "-> 매니페스트 디렉토리($MANIFEST_DIR)에서 이미지 목록 동적 추출 중..."
-mapfile -t IMAGES < <(grep -o -E '(ghcr\.io/tektoncd|gcr\.io/tekton-releases|cgr\.dev/chainguard|mcr\.microsoft\.com/powershell)/[^"'\'' ]*' "$MANIFEST_DIR"/*.yaml 2>/dev/null | sed 's/@sha256.*//' | sort -u)
+mapfile -t IMAGES < <(grep -o -E '(ghcr\.io/tektoncd|gcr\.io/tekton-releases|cgr\.dev/chainguard|mcr\.microsoft\.com)/[^"'\'' ]*' "$MANIFEST_DIR"/*.yaml 2>/dev/null | sed 's/@sha256.*//' | sort -u)
 
 if [ ${#IMAGES[@]} -eq 0 ]; then
     echo -e "\033[0;31m[오류] 매니페스트에서 이미지 목록을 추출하지 못했습니다.\033[0m"
