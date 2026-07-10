@@ -127,7 +127,7 @@ for tar_file in "${image_archives[@]}"; do
         target_image="$HARBOR_REGISTRY/$HARBOR_PROJECT/$image_name_tag"
 
         echo -e "   └─ 2. Convert/Tag: $target_image"
-        
+
         ctr -n "$CTR_NAMESPACE" images rm "$target_image" > /dev/null 2>&1
         ctr -n "$CTR_NAMESPACE" images convert \
             --platform "$TARGET_PLATFORM" \
@@ -141,7 +141,7 @@ for tar_file in "${image_archives[@]}"; do
                 continue
             fi
         fi
-        
+
         # 3. Push
         echo -n "   └─ 3. Push... "
         if ctr -n "$CTR_NAMESPACE" images push $PUSH_OPTS --user "$HARBOR_USER:$HARBOR_PASSWORD" "$target_image" > /dev/null 2>&1; then

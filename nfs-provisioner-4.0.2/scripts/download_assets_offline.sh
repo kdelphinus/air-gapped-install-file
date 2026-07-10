@@ -38,7 +38,7 @@ if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
     helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/ --force-update
     helm repo update
-    helm pull nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --version 4.0.18 -d "$CHART_DIR"
+    helm pull nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --version 4.0.18 -d "$CHART_DIR" --untar
 fi
 
 IMAGES=(

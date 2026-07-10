@@ -50,7 +50,7 @@ if [ "${RESET_MODE}" == "reset" ]; then
     echo -e "${RED}⚠️  [주의] 데이터 완전 초기화 모드입니다.${NC}"
     echo "    - 로컬 설정 파일 및 values-infra.yaml 정보가 영구적으로 제거됩니다."
     echo ""
-    
+
     # 2차 정밀 y/N 프롬프트 데이터 소거 확인
     read -p "❓ 정말 모든 인프라 설정 파일을 완전히 삭제하시겠습니까? (y/N): " RESET_CONFIRM
     if [[ "${RESET_CONFIRM}" =~ ^[Yy]$ ]]; then
