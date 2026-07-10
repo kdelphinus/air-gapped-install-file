@@ -61,7 +61,6 @@
 ### ⚠️ 업데이트 필요 (Non-compliant)
 
 - **ArgoCD**: `argocd-2.12.1`
-- **NFS Provisioner**: `nfs-provisioner-4.0.2`
 
 ### ✅ 준수 완료 (Compliant)
 
@@ -76,6 +75,7 @@
 - **Tetragon**: `tetragon-1.6.0`
 - **Tekton**: `tekton-1.9.0`
 - **Redis Stream**: `redis-stream-8.6.2-official`
+- **NFS Provisioner**: `nfs-provisioner-4.0.2`
 - **Envoy**: `envoy-1.37.2` (Standard Reference / 표준 모델)
 - **Cilium**: `cilium-1.19.3`
 - **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`

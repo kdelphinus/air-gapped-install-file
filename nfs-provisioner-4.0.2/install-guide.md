@@ -1,89 +1,76 @@
-# NFS Provisioner v4.0.2 설치 가이드
+# 🚀 NFS Provisioner 에어갭 설치 가이드
 
-본 문서는 **Rocky Linux 9.6 / K8s v1.33.7** 환경에서 NetApp NFS v4.1을 백엔드로 연동하는 절차를 설명합니다.
+본 문서는 오프라인(폐쇄망) 환경에서 NetApp NFS를 백엔드로 연동하는 NFS Subdir External Provisioner의 배포 절차를 기술합니다.
 
 ---
 
-## 0. 오프라인 설치 자산 준비 (인터넷 환경)
+## 📌 버전 정의 명세
 
-폐쇄망에 반입할 Helm 차트와 컨테이너 이미지(.tar)가 `charts/` 및 `images/` 디렉토리에 없는 경우, **인터넷이 연결된 외부 PC(리눅스)**에서 아래 스크립트를 실행하여 자산을 다운로드해야 합니다.
+사용자 혼선을 예방하기 위해 본 패키지의 Chart 및 App/Image 버전을 다음과 같이 정의합니다.
 
-> **주의**: 이 작업은 폐쇄망 내부가 아닌, 외부망에서 사전에 수행되어야 합니다. (Docker 또는 containerd(`ctr`), `helm` CLI 설치 필수)
+* **Helm Chart Version**: `4.0.18` (nfs-subdir-external-provisioner)
+* **App / Provisioner Image Version**: `v4.0.2`
+
+---
+
+## 0. 오프라인 설치 에셋 수집 (외부망 - 인터넷 환경)
+
+폐쇄망 내부로 반입할 Helm 차트와 컨테이너 이미지(`.tar`) 자산을 수집하기 위해, **인터넷이 연결된 외부 리눅스 PC**에서 아래 단계를 수행합니다.
 
 ```bash
-# 컴포넌트 스크립트 디렉토리로 이동
-cd scripts/
-
-# 실행 권한 부여 및 다운로드 스크립트 실행
+# 컴포넌트 루트 디렉토리에서 실행 권한 부여 및 에셋 수집 스크립트 실행
 chmod +x ./scripts/download_assets_offline.sh
 sudo ./scripts/download_assets_offline.sh
 ```
 
-스크립트 실행이 완료되면 `charts/` 디렉토리에 `.tgz` 차트 파일이, `images/` 디렉토리에 `.tar` 이미지 파일들이 생성됩니다. 전체 프로젝트 폴더를 압축하여 폐쇄망 내부로 반입하십시오.
+* **수집되는 자산:**
+  * `./charts/nfs-subdir-external-provisioner-4.0.18.tgz` (tar 풀린 형태로 charts/nfs-subdir-external-provisioner 디렉토리에 위치)
+  * `./images/registry.k8s.io-sig-storage-nfs-subdir-external-provisioner-v4.0.2.tar`
 
+에셋 수집이 완료되면 전체 디렉토리를 압축하여 폐쇄망 내부로 안전하게 반입합니다.
 
+---
 
-## 📋 사전 준비 사항
+## 1. 이미지 로드 및 마이그레이션 (폐쇄망 환경)
 
-### 1. (온라인인 경우) 헬름 차트 다운로드
-설치 스크립트 실행 전, 공식 차트를 아래 명령어로 확보해야 합니다.
+반입 완료 후 환경에 따라 다음 모드 중 하나를 선택해 기동합니다.
+
 ```bash
-cd nfs-provisioner-4.0.2/charts
-helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
-helm pull nfs-subdir-external-provisioner/nfs-subdir-external-provisioner --version 4.0.18 --untar
+# 이미지 마이그레이션 스크립트 권한 부여 및 실행
+chmod +x ./images/upload_images_to_harbor_v3-lite.sh
+sudo ./images/upload_images_to_harbor_v3-lite.sh
 ```
 
-### 2. OS 패키지 설치 (전체 워커 노드)
-NFS 마운트를 위해 모든 노드에 관련 패키지가 설치되어 있어야 합니다.
-- **Rocky 9**: `sudo dnf install -y nfs-utils`
-- **Ubuntu 24**: `sudo apt install -y nfs-common`
+* **방식 1 (로컬 이미지 로드):** 실행 모드에서 `1`을 선택하여 containerd(`k8s.io` 네임스페이스)에 직접 로드합니다.
+* **방식 2 (Harbor 레지스트리 업로드):** 실행 모드에서 `2`를 선택하여 Harbor 주소 및 프로젝트 경로를 대화형으로 입력 후 이미지 업로드를 완료합니다.
 
 ---
 
-## 🛠️ 단계별 설치 프로세스
+## 2. 대화형 멱등 설치 (install.sh)
 
-### Step 1: 설치 스크립트 실행
+설치 스크립트는 컴포넌트 루트에서 기동하며, 실행 시 자동으로 오프라인 에셋 존재 여부(`charts/`, `images/`)를 사전 검증하여 안전하게 종료 흐름을 제어합니다.
+
 ```bash
-cd scripts/
-chmod +x install.sh
-./install.sh
+chmod +x ./scripts/install.sh
+./scripts/install.sh
 ```
 
-### Step 2: 정보 입력
-- **NFS 서버 IP**: NetApp Vserver의 LIF IP 입력.
-- **NFS 공유 경로**: `/k8s/data` 등 실제 Export된 경로 입력.
+### 주요 입력 사항 및 수명주기 동작
+
+1. **이미지 소스:**
+   * `1` (Harbor 레지스트리 주소 및 프로젝트 경로 입력)
+   * `2` (로컬 tar 직접 import)
+2. **NFS 서버 정보:**
+   * NFS 서버 IP 및 실제 공유 경로 입력 (예: `/data/nfs-share`)
+3. **설정 영구화 및 멱등 배포:**
+   * 입력된 설정 정보는 `install.conf` 및 `values-infra.yaml`에 보존되어, 향후 재기동 시 입력 프롬프트를 생략하고 업그레이드를 수행합니다.
+4. **수명주기 메뉴:**
+   * 기존 설치나 `install.conf` 감지 시 표준 메뉴(`1) Upgrade`, `2) Reinstall`, `3) Reset`, `4) Cancel`) 분기가 작동합니다.
 
 ---
 
-## 💡 NetApp NFS v4.1 최적화 내용 (Rationale)
+## 3. 설치 검증
 
-본 패키지의 `values.yaml`에는 NetApp 벤더 권장 최적화 옵션이 기본 적용되어 있습니다.
-
-- **`vers=4.1`**: v3에서 발생하는 파일 잠금(Locking) 문제를 해결하고 고가용성을 확보합니다.
-- **`proto=tcp`**: 전송 안정성을 보장합니다.
-- **`rsize/wsize=1048576`**: 1MB 단위 대용량 입출력을 통해 성능을 극대화합니다.
-- **`hard`**: 네트워크 일시 단절 시 데이터 유실 방지를 위해 마운트를 유지합니다.
-- **`noresvport`**: 클라이언트 재접속 시 포트 제약 없이 즉시 연결하도록 설정합니다.
-
----
-
-## 📁 다중 StorageClass 운영 (Multi-SC)
-
-기본적으로 `nfs-app` StorageClass가 생성됩니다. 추가로 백업이나 테스트용이 필요한 경우 아래 명령어를 참고하십시오.
-
-1. `manifests/additional-sc.yaml` 파일에서 원하는 이름과 설정을 확인합니다.
-2. 설치 스크립트 실행 시 자동으로 함께 적용됩니다.
-3. 수동 적용 시: `kubectl apply -f manifests/additional-sc.yaml`
-
-| SC 명칭 | 용도 | 삭제 시 데이터 정책 |
-| :--- | :--- | :--- |
-| **nfs-app** | 일반 애플리케이션 | Archive (보관) |
-| **nfs-backup** | DB 백업 등 | Retain (완전 유지) |
-| **nfs-test** | 임시 테스트 | Delete (즉시 삭제) |
-
----
-
-## ✅ 설치 검증
 ```bash
 # 1. StorageClass 상태 확인
 kubectl get sc
@@ -105,5 +92,28 @@ spec:
     requests:
       storage: 1Gi
 EOF
+
+# PVC 상태 확인 (Bound 인지 대조)
 kubectl get pvc nfs-test-pvc
+```
+
+---
+
+## 4. 서비스 삭제 및 초기화
+
+### 일반 삭제 (인프라 설정 유지)
+
+NFS Provisioner 릴리즈 및 추가 StorageClass(`additional-sc.yaml`)만 안전하게 제거하며, 로컬 설정 백업 자산인 `install.conf` 와 `values-infra.yaml` 은 **보존**합니다.
+
+```bash
+chmod +x ./scripts/uninstall.sh
+./scripts/uninstall.sh
+```
+
+### 완전 초기화 (설정 완전 삭제)
+
+헬름 릴리즈 삭제 후, 2차 정밀 y/N 프롬프트를 거쳐 로컬 설정 파일(`install.conf`, `values-infra.yaml`)까지 완벽하게 소거합니다.
+
+```bash
+./scripts/uninstall.sh --reset
 ```
