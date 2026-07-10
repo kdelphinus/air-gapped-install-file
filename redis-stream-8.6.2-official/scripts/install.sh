@@ -201,9 +201,6 @@ fi
 # [2] 설치 설정 입력 (새로 설치 시에만)
 # ==========================================
 if [ "$DO_UPGRADE" != "true" ] || [ ! -f "$CONF_FILE" ] || [ "$_FORCE_REINPUT" == "true" ]; then
-    # Namespace 생성
-    kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
-
     # 2-1. 이미지 소스 선택
     echo ""
     echo "이미지 소스를 선택하세요:"
@@ -279,13 +276,6 @@ if [ "$DO_UPGRADE" != "true" ] || [ ! -f "$CONF_FILE" ] || [ "$_FORCE_REINPUT" =
         echo ""
         read -p "   디렉토리 생성을 완료했으면 Enter를 눌러 계속..."
 
-        # PV 생성 (sed 치환 적용 — __NAMESPACE__ 추가)
-        sed -e "s|__NODE_NAME__|${NODE_NAME}|g" \
-            -e "s|__BASE_PATH__|${HOST_BASE_PATH}|g" \
-            -e "s|__STORAGE_SIZE__|${STORAGE_SIZE}|g" \
-            -e "s|__NAMESPACE__|${NAMESPACE}|g" \
-            "${MANIFEST_DIR}/10-pv-hostpath.yaml" | kubectl apply -f -
-
         NFS_SERVER=""
         NFS_BASE_PATH=""
     elif [ "${STORAGE_TYPE}" = "nfs" ]; then
@@ -304,13 +294,6 @@ if [ "$DO_UPGRADE" != "true" ] || [ ! -f "$CONF_FILE" ] || [ "$_FORCE_REINPUT" =
         echo "     chmod 777 ${NFS_BASE_PATH}/{node-0,node-1,node-2}"
         echo ""
         read -p "   디렉토리 생성을 완료했으면 Enter를 눌러 계속..."
-
-        # PV 생성 (sed 치환 적용 — __NAMESPACE__ 추가)
-        sed -e "s|__NFS_SERVER__|${NFS_SERVER}|g" \
-            -e "s|__NFS_BASE_PATH__|${NFS_BASE_PATH}|g" \
-            -e "s|__STORAGE_SIZE__|${STORAGE_SIZE}|g" \
-            -e "s|__NAMESPACE__|${NAMESPACE}|g" \
-            "${MANIFEST_DIR}/10-pv-nfs.yaml" | kubectl apply -f -
 
         NODE_NAME=""
         HOST_BASE_PATH=""
@@ -336,6 +319,40 @@ fi
 # 설정 값 저장
 save_conf
 save_values_infra
+
+# ==========================================
+# [수명주기 보장] Namespace 및 PV 강제 보정 함수
+# ==========================================
+ensure_namespace_and_pv() {
+    echo ""
+    echo -e "🚀 [수명주기 보장] Namespace 및 PV 상태 점검 및 보장..."
+
+    # 1. Namespace 보장
+    kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+    # 2. PV 생성 (기존 입력/저장된 설정을 기반으로 멱등하게 재생성/적용)
+    if [ "${STORAGE_TYPE}" = "hostpath" ]; then
+        if [ -n "${NODE_NAME}" ] && [ -n "${HOST_BASE_PATH}" ] && [ -n "${STORAGE_SIZE}" ]; then
+            echo "   - HostPath PV 생성 중..."
+            sed -e "s|__NODE_NAME__|${NODE_NAME}|g" \
+                -e "s|__BASE_PATH__|${HOST_BASE_PATH}|g" \
+                -e "s|__STORAGE_SIZE__|${STORAGE_SIZE}|g" \
+                -e "s|__NAMESPACE__|${NAMESPACE}|g" \
+                "${MANIFEST_DIR}/10-pv-hostpath.yaml" | kubectl apply -f -
+        fi
+    elif [ "${STORAGE_TYPE}" = "nfs" ]; then
+        if [ -n "${NFS_SERVER}" ] && [ -n "${NFS_BASE_PATH}" ] && [ -n "${STORAGE_SIZE}" ]; then
+            echo "   - NFS PV 생성 중..."
+            sed -e "s|__NFS_SERVER__|${NFS_SERVER}|g" \
+                -e "s|__NFS_BASE_PATH__|${NFS_BASE_PATH}|g" \
+                -e "s|__STORAGE_SIZE__|${STORAGE_SIZE}|g" \
+                -e "s|__NAMESPACE__|${NAMESPACE}|g" \
+                "${MANIFEST_DIR}/10-pv-nfs.yaml" | kubectl apply -f -
+        fi
+    fi
+}
+
+ensure_namespace_and_pv
 
 # ==========================================
 # [4] Helm 배포 기동

@@ -63,7 +63,11 @@ Fully-qualified 이름 (release prefix 포함)
 
 {{/* 컨테이너 이미지 전체 경로 */}}
 {{- define "redis-sentinel.image" -}}
+{{- if .Values.global.imageRegistry -}}
 {{- printf "%s/%s:%s" .Values.global.imageRegistry .Values.image.repository .Values.image.tag }}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.repository .Values.image.tag }}
+{{- end }}
 {{- end }}
 
 {{/* 공통 레이블 */}}
