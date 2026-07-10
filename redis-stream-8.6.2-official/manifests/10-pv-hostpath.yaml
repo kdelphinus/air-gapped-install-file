@@ -3,6 +3,7 @@
 #   __NODE_NAME__  → 선택된 Kubernetes 노드 이름
 #   __BASE_PATH__  → 호스트 데이터 기본 경로 (예: /data/redis-official)
 #   __STORAGE_SIZE__ → PV 크기 (예: 10Gi)
+#   __NAMESPACE__  → 배포 대상 네임스페이스
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -20,7 +21,7 @@ spec:
     type: DirectoryOrCreate
   claimRef:
     name: redis-data-redis-node-0
-    namespace: redis-stream-official
+    namespace: __NAMESPACE__
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -46,7 +47,7 @@ spec:
     type: DirectoryOrCreate
   claimRef:
     name: redis-data-redis-node-1
-    namespace: redis-stream-official
+    namespace: __NAMESPACE__
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -72,7 +73,7 @@ spec:
     type: DirectoryOrCreate
   claimRef:
     name: redis-data-redis-node-2
-    namespace: redis-stream-official
+    namespace: __NAMESPACE__
   nodeAffinity:
     required:
       nodeSelectorTerms:

@@ -3,6 +3,7 @@
 #   __NFS_SERVER__    → NFS 서버 IP (예: 192.168.1.100)
 #   __NFS_BASE_PATH__ → NFS 기본 경로 (예: /nfs/redis-official)
 #   __STORAGE_SIZE__  → PV 크기 (예: 10Gi)
+#   __NAMESPACE__     → 배포 대상 네임스페이스
 #
 # NFS 서버에서 사전 생성 필요:
 #   mkdir -p /nfs/redis-official/{node-0,node-1,node-2}
@@ -24,7 +25,7 @@ spec:
     path: __NFS_BASE_PATH__/node-0
   claimRef:
     name: redis-data-redis-node-0
-    namespace: redis-stream-official
+    namespace: __NAMESPACE__
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -42,7 +43,7 @@ spec:
     path: __NFS_BASE_PATH__/node-1
   claimRef:
     name: redis-data-redis-node-1
-    namespace: redis-stream-official
+    namespace: __NAMESPACE__
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -60,4 +61,4 @@ spec:
     path: __NFS_BASE_PATH__/node-2
   claimRef:
     name: redis-data-redis-node-2
-    namespace: redis-stream-official
+    namespace: __NAMESPACE__

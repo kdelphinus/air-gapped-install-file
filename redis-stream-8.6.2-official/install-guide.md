@@ -1,47 +1,36 @@
-# Redis Stream 7.2 공식 이미지 — Helm Chart 설치 가이드
+# 🚀 Redis Stream (HA) 폐쇄망 설치 가이드 (v8.6.2-official)
+
+공식 Redis 이미지를 기반으로 3-Node Master-Replica 복제본 및 3-Node Sentinel HA를 구축하고, Redis Stream을 폐쇄망 환경에 설치하는 가이드입니다.
+
+---
 
 ## 0. 오프라인 설치 자산 준비 (인터넷 환경)
 
-폐쇄망에 반입할 Helm 차트와 컨테이너 이미지(.tar)가 `charts/` 및 `images/` 디렉토리에 없는 경우, **인터넷이 연결된 외부 PC(리눅스)**에서 아래 스크립트를 실행하여 자산을 다운로드해야 합니다.
+폐쇄망에 반입할 YAML 매니페스트와 컨테이너 이미지(.tar)가 `manifests/` 및 `images/` 디렉토리에 없는 경우, **인터넷이 연결된 외부 PC(리눅스)**에서 아래 스크립트를 실행하여 자산을 다운로드해야 합니다.
 
 > **주의**: 이 작업은 폐쇄망 내부가 아닌, 외부망에서 사전에 수행되어야 합니다. (Docker 또는 containerd(`ctr`), `helm` CLI 설치 필수)
 
 ```bash
-# 컴포넌트 스크립트 디렉토리로 이동
-cd scripts/
-
-# 실행 권한 부여 및 다운로드 스크립트 실행
+# 컴포넌트 루트 디렉토리에서 스크립트 실행 권한 부여 및 자산 다운로드
 chmod +x ./scripts/download_assets_offline.sh
 sudo ./scripts/download_assets_offline.sh
 ```
 
-스크립트 실행이 완료되면 `charts/` 디렉토리에 `.tgz` 차트 파일이, `images/` 디렉토리에 `.tar` 이미지 파일들이 생성됩니다. 전체 프로젝트 폴더를 압축하여 폐쇄망 내부로 반입하십시오.
+스크립트 실행이 완료되면 `images/` 디렉토리에 릴리즈와 동기화된 컨테이너 이미지 `.tar` 파일이 생성됩니다. 전체 프로젝트 폴더를 압축하여 폐쇄망 내부로 반입하십시오.
 
+---
 
+## 1. 사전 준비 (폐쇄망 환경)
 
-## 1. 사전 준비
+환경에 따라 두 가지 방식 중 하나를 선택하여 이미지를 로드합니다.
 
-### 이미지 반입
-
-인터넷 연결된 환경에서 스크립트로 이미지를 저장합니다:
-
-```bash
-bash scripts/save_images.sh
-```
-
-생성된 `docker.io_library_redis_7.2.tar` 파일을 `images/` 디렉토리에 배치합니다.
-
-### 이미지 배포 방식 선택
-
-환경에 따라 두 가지 방식 중 하나를 선택합니다.
-
-#### 방식 A — Harbor 레지스트리 사용 (권장)
+### 방식 A: Harbor 레지스트리 사용 (권장)
 
 Harbor가 구축되어 있다면 업로드 스크립트를 실행합니다:
 
 ```bash
-cd redis-stream-7.2-official
-./images/upload_images_to_harbor_v3-lite.sh
+chmod +x images/upload_images_to_harbor_v3-lite.sh
+sudo ./images/upload_images_to_harbor_v3-lite.sh
 ```
 
 실행 시 대화형으로 다음을 입력합니다:
@@ -53,156 +42,129 @@ cd redis-stream-7.2-official
 | Harbor 프로젝트 | `library` 또는 `oss` 등 |
 | Harbor 비밀번호 | (입력) |
 
-> `HARBOR_REGISTRY`, `HARBOR_PROJECT`, `HARBOR_USER`, `HARBOR_PASSWORD` 환경변수를
-> 사전에 설정하면 대화형 입력을 건너뜁니다.
+### 방식 B: 로컬 tar 직접 import
 
-#### 방식 B — Harbor 없음 (로컬 tar import)
+업로드 스크립트에서 모드 `1` (로컬 이미지 로드 전용)을 선택하여 실행하거나, `./scripts/install.sh` 실행 시 이미지 소스를 `2`로 선택하면 자동으로 containerd `k8s.io` 네임스페이스에 이미지를 import 합니다.
 
-업로드 스크립트에서 모드 `1` (로컬 이미지 로드 전용)을 선택하거나,
-`install.sh` 실행 중 이미지 소스를 `2`로 선택하면 자동으로 `ctr import`합니다.
+---
 
-## 2. 설치
+## 2. 대화형 설치 실행
+
+모든 작업은 컴포넌트 루트 디렉토리(`redis-stream-8.6.2-official/`)에서 실행합니다.
 
 ```bash
+chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-스크립트가 대화형으로 다음을 안내합니다:
+### 주요 입력 정보 및 처리 방식
 
-1. **이미지 소스 선택**
-   - `1` — Harbor 레지스트리 사용 (레지스트리 주소, 프로젝트 입력)
-   - `2` — 로컬 tar import (`./images/*.tar` → containerd `k8s.io` 네임스페이스)
-1. **Redis 비밀번호** 입력
-1. **Storage Type** 선택: `hostpath` 또는 `nfs`
-1. (hostpath) 노드 선택 및 데이터 경로 입력
-1. (nfs) NFS 서버 IP 및 경로 입력
+* **이미지 소스**:
+  * `1` (Harbor) 또는 `2` (로컬 tar 직접 import)
+* **설정 동기화**:
+  * 입력된 설정은 가변 인프라 설정 전용 파일인 `install.conf` 와 `values-infra.yaml` 에 저장되어 재배포 및 업그레이드 시 멱등성을 보장합니다.
+  * **보안 준수 사항**: 보안을 위해 비밀번호(`REDIS_PASSWORD`)는 `install.conf` 와 `values-infra.yaml` 에 평문으로 절대 저장하지 않습니다.
+* **비밀번호 복구 및 입력**:
+  * `Upgrade` 시 기존에 구축된 Secret(`redis-secret`)에서 패스워드를 복구하여 사용합니다.
+  * 복구에 실패한 경우에만 대화식 비밀번호 입력 프롬프트가 표시됩니다.
+* **표준 수명주기**:
+  * 기존 설치나 `install.conf` 감지 시 표준 메뉴(`1) Upgrade`, `2) Reinstall`, `3) Reset`, `4) Cancel`) 분기를 제공합니다.
 
-### HostPath 사전 작업
+### 볼륨 사전 작업
 
-hostpath 선택 시, **해당 노드에서** 미리 디렉토리를 생성해야 합니다:
+* **HostPath 선택 시 (해당 노드에서 직접 실행)**:
+  ```bash
+  sudo mkdir -p /data/redis-official/{node-0,node-1,node-2}
+  sudo chmod 777 /data/redis-official/{node-0,node-1,node-2}
+  ```
+* **NFS 선택 시 (NFS 서버에서 직접 실행)**:
+  ```bash
+  sudo mkdir -p /nfs/redis-official/{node-0,node-1,node-2}
+  sudo chmod 777 /nfs/redis-official/{node-0,node-1,node-2}
+  ```
 
-```bash
-# 노드에서 직접 실행
-sudo mkdir -p /data/redis-official/{node-0,node-1,node-2}
-sudo chmod 777 /data/redis-official/{node-0,node-1,node-2}
-```
+---
 
-스크립트가 Enter 대기 프롬프트를 표시할 때 위 작업을 완료한 뒤 진행합니다.
-
-### NFS 사전 작업
-
-```bash
-# NFS 서버에서 실행
-sudo mkdir -p /nfs/redis-official/{node-0,node-1,node-2}
-sudo chmod 777 /nfs/redis-official/{node-0,node-1,node-2}
-```
-
-### PV 재사용 안내
-
-기존 PV(`redis-official-node-{0,1,2}-pv`)가 이미 존재하는 경우:
-
-- **동일 경로**: 재사용 여부를 Y/n으로 선택합니다.
-- **다른 경로**: PV 경로는 생성 후 변경 불가(Immutable)입니다. 기존 PV를 삭제하고 재생성할지 확인합니다.
-  - 기존 데이터는 호스트 디렉토리에 그대로 보존됩니다.
-
-### StorageClass 주의 사항
-
-이 Chart는 PVC에 `storageClassName: ""`을 사용합니다.
-`""` 설정 시 **storageClassName이 명시적으로 비어 있는 PV**에만 바인딩됩니다.
-
-정적 HostPath PV를 사용할 경우 PV의 `storageClassName`도 `""`(생략 또는 빈 값)이어야 합니다.
-StorageClass가 있는 환경에서 동적 프로비저닝을 원한다면 `values.yaml`에서
-`storage.storageClassName`을 해당 클래스명으로 오버라이드하세요.
-
-## 3. 설치 확인
+## 3. 설치 확인 및 상태 점검
 
 ```bash
+# 전체 Pod 상태
 kubectl get pods -n redis-stream-official
-```
 
-예상 결과:
-
-```text
-redis-node-0       2/2   Running   0   2m
-redis-node-1       2/2   Running   0   2m
-redis-node-2       2/2   Running   0   2m
-redis-sentinel-0   1/1   Running   0   2m
-redis-sentinel-1   1/1   Running   0   2m
-redis-sentinel-2   1/1   Running   0   2m
-```
-
-Replication 상태 확인:
-
-```bash
+# Replication 복제 상태 확인
 kubectl exec -it redis-node-0 -n redis-stream-official -- \
     redis-cli -a <password> --no-auth-warning INFO replication
-```
 
-Sentinel 상태 확인:
-
-```bash
+# Sentinel 마스터 상태 확인
 kubectl exec -it redis-sentinel-0 -n redis-stream-official -- \
     redis-cli -p 26379 --no-auth-warning SENTINEL masters
 ```
 
-## 4. 테스트
+---
 
-```bash
-./scripts/test-stream.sh
-```
-
-## 5. Failover 테스트
+## 4. 장애 복구 (Failover) 테스트
 
 ```bash
 # Master Pod 강제 종료
 kubectl delete pod redis-node-0 -n redis-stream-official
 
-# Sentinel이 새 master 선출 확인 (약 5~10초 후)
+# Sentinel이 새 master 선출하는지 확인 (약 5~10초 후)
 kubectl exec -it redis-sentinel-0 -n redis-stream-official -- \
     redis-cli -p 26379 --no-auth-warning SENTINEL get-master-addr-by-name mymaster
 ```
 
-## 6. 삭제
+---
+
+## 5. 수동 설치 및 업그레이드 가이드 (Manual Setup)
+
+자동화 스크립트 장애 대처용 수동 반영 가이드라인입니다.
+
+1. **PV 매니페스트 `__NAMESPACE__` 치환**:
+   * PV 매니페스트 내 `claimRef.namespace` 에 선언된 `__NAMESPACE__` 치환자를 배포할 대상 네임스페이스명으로 치환해야 볼륨 바인딩(Pending) 실패 결함을 방지할 수 있습니다.
+   ```bash
+   # 예시: HostPath PV 매니페스트의 네임스페이스 치환 및 생성
+   sed -e "s|__NODE_NAME__|worker-node1|g" \
+       -e "s|__BASE_PATH__|/data/redis-official|g" \
+       -e "s|__STORAGE_SIZE__|10Gi|g" \
+       -e "s|__NAMESPACE__|redis-stream-official|g" \
+       manifests/10-pv-hostpath.yaml | kubectl apply -f -
+   ```
+
+2. **Helm 인프라 설정 분리 적용**:
+   * 비밀번호 주입 및 이미지 경로 적용을 위해 `values-infra.yaml` 을 작성합니다.
+   ```yaml
+   global:
+     imageRegistry: "192.168.1.10:30002"
+   image:
+     repository: "library/redis"
+   storage:
+     type: "hostpath"
+     size: "10Gi"
+   ```
+   * 작성된 인프라 파일과 패스워드를 헬름 명령을 통해 주입 배포합니다.
+   ```bash
+   helm upgrade --install redis-stream-official charts/redis-sentinel \
+       --namespace redis-stream-official \
+       -f values.yaml \
+       -f values-infra.yaml \
+       --set redis.password="your-secure-password" \
+       --wait
+   ```
+
+---
+
+## 6. 서비스 삭제 및 초기화
+
+### 일반 삭제 (데이터 및 가변 설정 보존)
 
 ```bash
-./scripts/uninstall.sh
+# 릴리즈만 언인스톨하며 PVC/PV, 설정 파일은 안전하게 보존합니다.
+sudo ./scripts/uninstall.sh
 ```
 
-PV는 `Retain` policy로 데이터가 보존됩니다.
+### 완전 초기화 (데이터 및 네임스페이스, 설정 파일 완전 제거)
 
-## 7. 초기화 동작 원리
-
-### 초기 부팅
-
-1. `redis-node-0` → init container 실행 → Sentinel 없음 감지 → **master 모드**로 시작
-1. `redis-node-1`, `redis-node-2` → init container → Sentinel 없음 → `replicaof redis-node-0.redis-headless` 설정 → **replica 모드**
-1. `redis-sentinel-0/1/2` → init container → `redis-node-0`을 master로 설정 → Sentinel 시작
-
-### Failover 후 재시작
-
-1. Pod 재시작 시 init container가 `redis-sentinel-{0,1,2}`에 쿼리
-1. 현재 master IP를 확인하여 자동으로 역할 결정
-1. 원래 master 노드도 재시작 후 replica로 올바르게 설정됨
-
-> **Sentinel 설정 비영속성**: `sentinel-data` 볼륨은 `emptyDir`입니다.
-> Sentinel Pod 재시작 시 init container가 매번 config를 재생성하므로 정상 동작합니다.
-> Sentinel 설정 파일을 영속화할 필요는 없습니다.
-
-## 8. 주요 차이점 (vs Bitnami 커스텀 빌드 방식)
-
-| 항목 | 공식 이미지 방식 (Helm) | Bitnami 커스텀 빌드 |
-| :--- | :--- | :--- |
-| 이미지 크기 | ~130MB | ~400MB (bitnami rootfs 포함) |
-| Bitnami 의존성 | 없음 | bitnami rootfs 필요 |
-| 설정 방식 | init container 스크립트 | Bitnami 부트스트랩 스크립트 |
-| Helm 필요 | 예 (자체 개발 Chart) | 예 (Bitnami Chart) |
-| 운영 복잡도 | 낮음 (Helm 통합) | 낮음 (Helm 관리) |
-| Failover 강건성 | 양호 (sentinel 쿼리 기반) | 높음 (Bitnami 검증된 로직) |
-
-## 9. 관련 문서
-
-| 문서 | 내용 |
-| :--- | :--- |
-| [DEVELOPER-GUIDE.md](./DEVELOPER-GUIDE.md) | Spring Boot 연결 설정, Producer/Consumer 구현, at-least-once 보장, 폐쇄망 빌드 설정 |
-| [KAFKA-REPLACEMENT-GUIDE.md](./KAFKA-REPLACEMENT-GUIDE.md) | Kafka → Redis Stream 마이그레이션 가이드 |
-| [REPORT.md](./REPORT.md) | 검증 및 수정 이력 |
+```bash
+# 2차 정밀 y/N 프롬프트를 통해 영구 데이터 볼륨 및 Namespace, 설정을 영구 제거합니다.
+sudo ./scripts/uninstall.sh --reset
+```
