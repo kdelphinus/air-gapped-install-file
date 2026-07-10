@@ -24,7 +24,7 @@ sudo ./scripts/download_assets_offline.sh
 ```
 
 * **수집되는 자산:**
-  * `./charts/nfs-subdir-external-provisioner-4.0.18.tgz` (tar 풀린 형태로 charts/nfs-subdir-external-provisioner 디렉토리에 위치)
+  * `./charts/nfs-subdir-external-provisioner/` (helm pull --untar 결과)
   * `./images/registry.k8s.io-sig-storage-nfs-subdir-external-provisioner-v4.0.2.tar`
 
 에셋 수집이 완료되면 전체 디렉토리를 압축하여 폐쇄망 내부로 안전하게 반입합니다.
