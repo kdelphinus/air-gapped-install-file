@@ -264,3 +264,6 @@ velero-*/velero-v*/
 /implementation_plan.md
 /task.md
 /walkthrough.md
+
+# 동적 Helm 차트 압축 해제 디렉토리 배제
+**/charts/nfs-subdir-external-provisioner/
