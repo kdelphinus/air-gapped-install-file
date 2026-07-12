@@ -232,7 +232,7 @@ server:
           port: 8080
       frontendConfig:
         redirectToHttps:
-          enabled: true 
+          enabled: true
       managedCertificate:
         enabled: true
 ```
@@ -337,7 +337,7 @@ Steps to roteate the secret when using the helm chart (bold step is additional t
   ```
 
 ### 6.9.0
-ApplicationSet controller is always created to follow [upstream's manifest](https://github.com/argoproj/argo-cd/blob/v2.11.0/manifests/core-install/kustomization.yaml#L9). 
+ApplicationSet controller is always created to follow [upstream's manifest](https://github.com/argoproj/argo-cd/blob/v2.11.0/manifests/core-install/kustomization.yaml#L9).
 
 ### 6.4.0
 

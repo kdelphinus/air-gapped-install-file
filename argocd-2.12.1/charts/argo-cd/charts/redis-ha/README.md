@@ -162,15 +162,15 @@ The following table lists the configurable parameters of the Redis chart and the
 | `haproxy.enabled`         | Enabled HAProxy LoadBalancing/Proxy                                                                                                                                                                      | `false`                                                                                    |
 | `haproxy.replicas`        | Number of HAProxy instances                                                                                                                                                                              | `3`                                                                                        |
 | `haproxy.servicePort`        | Modify HAProxy service port                                                                                                                                                                           | `6379`                                                                                        |
-| `haproxy.containerPort`        | Modify HAProxy deployment container port                                                                                                                                                                           | `6379` 
+| `haproxy.containerPort`        | Modify HAProxy deployment container port                                                                                                                                                                           | `6379`
 | `haproxy.image.repository`| HAProxy Image Repository                                                                                                                                                                                 | `haproxy`                                                                                  |
 | `haproxy.image.tag`       | HAProxy Image Tag                                                                                                                                                                                        | `2.4.2`                                                                                    |
 | `haproxy.image.pullPolicy`| HAProxy Image PullPolicy                                                                                                                                                                                 | `IfNotPresent`                                                                             |
 | `haproxy.imagePullSecrets`| Reference to one or more secrets to be used when pulling haproxy images                                                                                                                                  | []                                                                                         |
 | `haproxy.tls.enabled`        | If "true" this will enable TLS termination on haproxy                                                                                                                                                                           | `false`
-| `haproxy.tls.secretName`        | Secret containing the .pem file                                                                                                                                                                           | `""` 
+| `haproxy.tls.secretName`        | Secret containing the .pem file                                                                                                                                                                           | `""`
 | `haproxy.tls.certMountPath`        | Path to mount the secret that contains the certificates. haproxy                                                                                                                                                                           | `false`
-| `haproxy.tls.secretName`        | Secret containing the .pem file                                                                                                                                                                           | `""` 
+| `haproxy.tls.secretName`        | Secret containing the .pem file                                                                                                                                                                           | `""`
 | `haproxy.annotations`     | HAProxy template annotations                                                                                                                                                                             | `{}`                                                                                       |
 | `haproxy.customConfig`    | Allows for custom config-haproxy.cfg file to be applied. If this is used then default config will be overwriten                                                                                          |``|
 | `haproxy.extraConfig`     | Allows to place any additional configuration section to add to the default config-haproxy.cfg                                                                                                            |``|
@@ -395,9 +395,9 @@ If any of the checks above fails - the redis server reinitialisation happens (it
 # Change Log
 
 ## 4.14.9 - ** POTENTIAL BREAKING CHANGE. **
-Introduced the ability to change the Haproxy Deployment container pod 
+Introduced the ability to change the Haproxy Deployment container pod
 - Container port in redis-haproxy-deployment.yam has been changed. Was **redis.port** To **haproxy.containerPort**. Default value is 6379.
-- Port in redis-haproxy-service.yaml has been changed. Was **redis.port** To **haproxy.servicePort**. Default value is 6379. 
+- Port in redis-haproxy-service.yaml has been changed. Was **redis.port** To **haproxy.servicePort**. Default value is 6379.
 
 ## 4.21.0 - BREAKING CHANGES (Kubernetes Deprecation)
 This version introduced the deprecation of the PSP and subsequently added fields to the securityContexts that were introduced in Kubernetes v1.19:
