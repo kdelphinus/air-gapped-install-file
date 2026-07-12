@@ -60,11 +60,10 @@
 
 ### ⚠️ 업데이트 필요 (Non-compliant)
 
-- **ArgoCD**: `argocd-2.12.1`
 
 ### ✅ 준수 완료 (Compliant)
 
-- **ArgoCD**: `argocd-3.4.3`
+- **ArgoCD**: `argocd-2.12.1`, `argocd-3.4.3`
 - **Harbor**: `harbor-2.10.3`
 - **Gitea**: `gitea-1.25.5`
 - **Nexus**: `nexus-3.70.1`
