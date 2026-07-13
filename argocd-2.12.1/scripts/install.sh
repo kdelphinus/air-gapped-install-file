@@ -42,32 +42,42 @@ validate_assets() {
 # ── 2. 설정 로드 / 저장 ──────────────────────────────
 load_conf() {
     if [ -f "$CONF_FILE" ]; then
-        source "$CONF_FILE"
+        # source 대신 안전하게 KEY=VALUE 형태로 정규식 검사를 거쳐 셸에 할당
+        while IFS='=' read -r key value; do
+            [[ "$key" =~ ^[[:space:]]*# ]] && continue
+            [[ -z "$key" ]] && continue
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | xargs)
+            if [[ "$key" =~ ^[A-Z0-9_]+$ ]]; then
+                value=$(echo "$value" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
+                eval "$key=\"\$value\""
+            fi
+        done < "$CONF_FILE"
     fi
 }
 
 save_conf() {
     cat > "$CONF_FILE" <<EOF
 # ArgoCD 설치 설정 — install.sh 에 의해 자동 관리됩니다.
-IMAGE_SOURCE="${IMAGE_SOURCE}"
-HARBOR_REGISTRY="${HARBOR_REGISTRY}"
-HARBOR_PROJECT="${HARBOR_PROJECT}"
-STORAGE_TYPE="${STORAGE_TYPE}"
-HOSTPATH_REDIS="${HOSTPATH_REDIS}"
-HOSTPATH_REPO="${HOSTPATH_REPO}"
-NAS_SERVER="${NAS_SERVER}"
-NAS_REDIS_PATH="${NAS_REDIS_PATH}"
-NAS_REPO_PATH="${NAS_REPO_PATH}"
-STORAGE_CLASS="${STORAGE_CLASS}"
-REDIS_SIZE="${REDIS_SIZE}"
-REPO_SIZE="${REPO_SIZE}"
-NODEPORT="${NODEPORT}"
-DOMAIN="${DOMAIN}"
-TLS_ENABLED="${TLS_ENABLED}"
-GATEWAY_NAME="${GATEWAY_NAME}"
-GATEWAY_NAMESPACE="${GATEWAY_NAMESPACE}"
-INSTALLED_CHART_VERSION="7.4.1"
-INSTALLED_APP_VERSION="v2.12.0"
+IMAGE_SOURCE='${IMAGE_SOURCE}'
+HARBOR_REGISTRY='${HARBOR_REGISTRY}'
+HARBOR_PROJECT='${HARBOR_PROJECT}'
+STORAGE_TYPE='${STORAGE_TYPE}'
+HOSTPATH_REDIS='${HOSTPATH_REDIS}'
+HOSTPATH_REPO='${HOSTPATH_REPO}'
+NAS_SERVER='${NAS_SERVER}'
+NAS_REDIS_PATH='${NAS_REDIS_PATH}'
+NAS_REPO_PATH='${NAS_REPO_PATH}'
+STORAGE_CLASS='${STORAGE_CLASS}'
+REDIS_SIZE='${REDIS_SIZE}'
+REPO_SIZE='${REPO_SIZE}'
+NODEPORT='${NODEPORT}'
+DOMAIN='${DOMAIN}'
+TLS_ENABLED='${TLS_ENABLED}'
+GATEWAY_NAME='${GATEWAY_NAME}'
+GATEWAY_NAMESPACE='${GATEWAY_NAMESPACE}'
+INSTALLED_CHART_VERSION='7.4.1'
+INSTALLED_APP_VERSION='v2.12.0'
 EOF
     echo -e "  ✅ 설정이 ${GREEN}${CONF_FILE}${NC} 에 저장되었습니다."
 }
@@ -96,9 +106,6 @@ global:
 server:
   image:
     repository: "${ARGOCD_REPO}"
-repoServer:
-  image:
-    repository: "${ARGOCD_REPO}"
 controller:
   image:
     repository: "${ARGOCD_REPO}"
@@ -108,21 +115,26 @@ applicationSet:
 notifications:
   image:
     repository: "${ARGOCD_REPO}"
-redis:
-  image:
-    repository: "${REDIS_REPO}"
-haproxy:
-  image:
-    repository: "${HAPROXY_REPO}"
 configs:
   cm:
     url: "${PROTOCOL}://${DOMAIN}"
+haproxy:
+  image:
+    repository: "${HAPROXY_REPO}"
+redis-ha:
+  image:
+    repository: "${REDIS_REPO}"
+  haproxy:
+    image:
+      repository: "${HAPROXY_REPO}"
 EOF
 
-    # 볼륨 오버라이드 작성
+    # 1) repoServer 블록 단일 정의 (이미지 + 볼륨 결합)
     if [ "${STORAGE_TYPE}" = "nas" ] || [ "${STORAGE_TYPE}" = "nfs-dynamic" ]; then
         cat >> "values-infra.yaml" <<EOF
 repoServer:
+  image:
+    repository: "${ARGOCD_REPO}"
   volumes:
     - name: argocd-repo-cache
       persistentVolumeClaim:
@@ -130,7 +142,35 @@ repoServer:
   volumeMounts:
     - name: argocd-repo-cache
       mountPath: /home/argocd/cmp-server/cache
+EOF
+    elif [ "${STORAGE_TYPE}" = "hostpath" ]; then
+        cat >> "values-infra.yaml" <<EOF
+repoServer:
+  image:
+    repository: "${ARGOCD_REPO}"
+  volumes:
+    - name: argocd-repo-cache
+      hostPath:
+        path: "${HOSTPATH_REPO}"
+        type: DirectoryOrCreate
+  volumeMounts:
+    - name: argocd-repo-cache
+      mountPath: /home/argocd/cmp-server/cache
+EOF
+    else
+        cat >> "values-infra.yaml" <<EOF
+repoServer:
+  image:
+    repository: "${ARGOCD_REPO}"
+EOF
+    fi
+
+    # 2) redis 블록 단일 정의 (이미지 + 볼륨 결합)
+    if [ "${STORAGE_TYPE}" = "nas" ] || [ "${STORAGE_TYPE}" = "nfs-dynamic" ]; then
+        cat >> "values-infra.yaml" <<EOF
 redis:
+  image:
+    repository: "${REDIS_REPO}"
   volumes:
     - name: redis-data
       persistentVolumeClaim:
@@ -141,16 +181,9 @@ redis:
 EOF
     elif [ "${STORAGE_TYPE}" = "hostpath" ]; then
         cat >> "values-infra.yaml" <<EOF
-repoServer:
-  volumes:
-    - name: argocd-repo-cache
-      hostPath:
-        path: "${HOSTPATH_REPO}"
-        type: DirectoryOrCreate
-  volumeMounts:
-    - name: argocd-repo-cache
-      mountPath: /home/argocd/cmp-server/cache
 redis:
+  image:
+    repository: "${REDIS_REPO}"
   volumes:
     - name: redis-data
       hostPath:
@@ -159,6 +192,12 @@ redis:
   volumeMounts:
     - name: redis-data
       mountPath: /data
+EOF
+    else
+        cat >> "values-infra.yaml" <<EOF
+redis:
+  image:
+    repository: "${REDIS_REPO}"
 EOF
     fi
 
@@ -268,11 +307,33 @@ if [ -n "$EXIST_RELEASE" ] || [ -f "$CONF_FILE" ]; then
         1)
             DO_UPGRADE=true
             _IS_INVALID="false"
-            if [ -z "$IMAGE_SOURCE" ] || [ -z "$STORAGE_TYPE" ] || [ -z "$DOMAIN" ]; then
-                _IS_INVALID="true"
-            elif { [ "$IMAGE_SOURCE" == "1" ] || [ "$IMAGE_SOURCE" == "harbor" ]; } && { [ -z "$HARBOR_REGISTRY" ] || [ -z "$HARBOR_PROJECT" ]; }; then
+            if [ -z "$IMAGE_SOURCE" ] || [ -z "$STORAGE_TYPE" ] || [ -z "$DOMAIN" ] || [ -z "$NODEPORT" ] || [ -z "$TLS_ENABLED" ]; then
                 _IS_INVALID="true"
             fi
+
+            # Harbor 필수 입력 체크
+            if [ "${IMAGE_SOURCE}" = "harbor" ] && { [ -z "${HARBOR_REGISTRY}" ] || [ -z "${HARBOR_PROJECT}" ]; }; then
+                _IS_INVALID="true"
+            fi
+
+            # 스토리지 유형별 세부 필수 체크
+            case "${STORAGE_TYPE}" in
+                hostpath)
+                    if [ -z "${HOSTPATH_REDIS}" ] || [ -z "${HOSTPATH_REPO}" ]; then
+                        _IS_INVALID="true"
+                    fi
+                    ;;
+                nas)
+                    if [ -z "${NAS_SERVER}" ] || [ -z "${NAS_REDIS_PATH}" ] || [ -z "${NAS_REPO_PATH}" ] || [ -z "${REDIS_SIZE}" ] || [ -z "${REPO_SIZE}" ]; then
+                        _IS_INVALID="true"
+                    fi
+                    ;;
+                nfs-dynamic)
+                    if [ -z "${STORAGE_CLASS}" ] || [ -z "${REDIS_SIZE}" ] || [ -z "${REPO_SIZE}" ]; then
+                        _IS_INVALID="true"
+                    fi
+                    ;;
+            esac
 
             if [ "$_IS_INVALID" == "true" ]; then
                 echo -e "${YELLOW}  ℹ️  저장된 설정 정보가 불완전합니다. 설치 설정을 다시 입력해 주십시오.${NC}"
