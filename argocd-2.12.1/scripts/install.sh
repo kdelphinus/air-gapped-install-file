@@ -42,15 +42,25 @@ validate_assets() {
 # ── 2. 설정 로드 / 저장 ──────────────────────────────
 load_conf() {
     if [ -f "$CONF_FILE" ]; then
-        # source 대신 안전하게 KEY=VALUE 형태로 정규식 검사를 거쳐 셸에 할당
+        # source 대신 안전하게 KEY=VALUE 형태로 정규식 검사를 거쳐 화이트리스트 대상만 셸에 할당
         while IFS='=' read -r key value; do
             [[ "$key" =~ ^[[:space:]]*# ]] && continue
             [[ -z "$key" ]] && continue
             key=$(echo "$key" | xargs)
             value=$(echo "$value" | xargs)
             if [[ "$key" =~ ^[A-Z0-9_]+$ ]]; then
-                value=$(echo "$value" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
-                printf -v "$key" '%s' "$value"
+                case "$key" in
+                    IMAGE_SOURCE|HARBOR_REGISTRY|HARBOR_PROJECT|STORAGE_TYPE|\
+                    HOSTPATH_REDIS|HOSTPATH_REPO|NAS_SERVER|NAS_REDIS_PATH|NAS_REPO_PATH|\
+                    STORAGE_CLASS|REDIS_SIZE|REPO_SIZE|NODEPORT|DOMAIN|TLS_ENABLED|\
+                    GATEWAY_NAME|GATEWAY_NAMESPACE|INSTALLED_CHART_VERSION|INSTALLED_APP_VERSION)
+                        value=$(echo "$value" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
+                        printf -v "$key" '%s' "$value"
+                        ;;
+                    *)
+                        # 화이트리스트 이외의 모든 대문자 변수(예: PATH, NAMESPACE 등)는 덮어쓰기 방지를 위해 차단 및 무시
+                        ;;
+                esac
             fi
         done < "$CONF_FILE"
     fi
