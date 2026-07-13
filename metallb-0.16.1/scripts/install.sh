@@ -121,10 +121,11 @@ cleanup_resources() {
 
     # ⚠️ 서비스 단절 및 초기화 영향 경고
     if [ "${RESET_MODE}" == "reset" ]; then
-        echo -e "${RED}⚠️  [주의] 초기화 시 IP 풀 설정, L2 Advertisement 및 네임스페이스가 완전히 영구 삭제됩니다."
-        echo -e "          기존 외부 LoadBalancer IP 통신이 전면 영구 중단됩니다.${NC}"
-        read -p "❓ 정말 모든 설정을 삭제하시겠습니까? (y/N): " RESET_CONFIRM
-        if [[ ! "${RESET_CONFIRM}" =~ ^[Yy]$ ]]; then
+        echo -e "${RED}⚠️  [주의] 데이터 완전 초기화 모드입니다."
+        echo -e "          네임스페이스와 함께 IPAddressPool, L2Advertisement 가 즉시 완전 제거됩니다."
+        echo -e "          로컬 설정 백업 파일(install.conf, values-infra.yaml)도 함께 소거됩니다.${NC}"
+        read -p "❓ 모든 설정 데이터를 삭제하고 네임스페이스를 완전히 소거하시겠습니까? (y/N): " RESET_CONFIRM_2
+        if [[ ! "${RESET_CONFIRM_2}" =~ ^[Yy]$ ]]; then
             echo "취소되었습니다."
             exit 0
         fi
@@ -140,7 +141,15 @@ cleanup_resources() {
 
     # 1. Helm Uninstall
     echo "   - Helm Release 삭제 중..."
-    helm uninstall "${RELEASE_NAME}" -n "${NAMESPACE}" --wait=false 2>/dev/null || true
+    if [ "${RESET_MODE}" == "reinstall" ]; then
+        # Reinstall의 경우 기존 리소스가 완전히 삭제(Terminating 완료)될 때까지 동기적으로 기다려
+        # 신규 설치와 기존 자원 간의 충돌 및 오동작을 방지합니다.
+        # 실패 상태를 명확히 노출하기 위해 에러를 임의로 은폐(|| true)하지 않습니다.
+        helm uninstall "${RELEASE_NAME}" -n "${NAMESPACE}" --wait --timeout 5m
+    else
+        # 일반 초기화(Reset)의 경우 Namespace가 소거되므로 비동기식 삭제 정책을 유지합니다.
+        helm uninstall "${RELEASE_NAME}" -n "${NAMESPACE}" --wait=false 2>/dev/null || true
+    fi
 
     # 2. Reset 시에만 Namespace, IP 풀 및 CRD 자원 완전 파괴
     if [ "${RESET_MODE}" == "reset" ]; then
@@ -205,7 +214,17 @@ if [ -n "$EXIST_RELEASE" ] || [ -f "$CONF_FILE" ]; then
             fi
             ;;
         2) cleanup_resources "reinstall" ;;
-        3) cleanup_resources "reset"; exit 0 ;;
+        3)
+            echo -e "${RED}⚠️  [경고] 초기화 시 IP 풀 설정, L2 Advertisement 및 네임스페이스가 완전히 영구 삭제됩니다."
+            echo -e "          기존 외부 LoadBalancer IP 통신이 전면 영구 중단됩니다.${NC}"
+            read -p "❓ 정말 모든 데이터와 설정을 지우는 초기화 작업을 기동하시겠습니까? (y/N): " RESET_CONFIRM_1
+            if [[ ! "${RESET_CONFIRM_1}" =~ ^[Yy]$ ]]; then
+                echo "취소되었습니다."
+                exit 0
+            fi
+            cleanup_resources "reset"
+            exit 0
+            ;;
         *) echo "취소되었습니다."; exit 0 ;;
     esac
 fi
