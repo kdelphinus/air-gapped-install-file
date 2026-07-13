@@ -36,11 +36,13 @@ select_download_scope
 
 if [ "$DOWNLOAD_HELM" = true ]; then
     echo "[1/2] Helm 차트 다운로드 중..."
+    rm -rf "${CHART_DIR}/metallb"
     helm repo add metallb https://metallb.github.io/metallb --force-update
     helm repo update
-    helm pull metallb/metallb --version 0.16.1 -d "$CHART_DIR"
+    helm pull metallb/metallb --version 0.16.1 -d "$CHART_DIR" --untar
 fi
 
+# ⚠️ MetalLB v0.16.1 에어갭 패키지는 L2 전용 모드만 지원하며 BGP(FRR) 관련 자산은 제외됩니다.
 IMAGES=(
     "quay.io/metallb/controller:v0.16.1"
     "quay.io/metallb/speaker:v0.16.1"

@@ -80,4 +80,4 @@
 - **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`
 - **Velero**: `velero-1.18.0`
 - **K8s Installation**: `k8s-1.33.11-ubuntu24.04`
-- **MetalLB**: `metallb-0.14.8`
+- **MetalLB**: `metallb-0.14.8`, `metallb-0.16.1`

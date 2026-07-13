@@ -2,6 +2,10 @@
 
 폐쇄망 K8s 클러스터에서 `LoadBalancer` 타입의 서비스를 사용하기 위한 네트워크 로드밸런서입니다.
 
+> [!IMPORTANT]
+> **L2 전용 모드 고정 선언**
+> 본 패키지는 오프라인 L2 ARP 모드만을 지원하며, BGP (FRR) 기능 관련 이미지 및 자산은 수집 대상과 기술 지원 범위에서 명시적으로 제외됩니다.
+
 ## 📦 구성 요소
 
 | 경로 | 설명 |
@@ -23,8 +27,8 @@ sudo ./scripts/install.sh
 
 ## 🛠️ 주요 설정 (변수화)
 
-- **Registry**: `values.yaml` 내 `controller.image.repository` / `speaker.image.repository` (형식: `<NODE_IP>:30002/library/<name>`)
-- **IP Range**: `manifests/l2-config.yaml` 내 `addresses` (install.sh 가 자동 치환)
+- **Registry**: `values-infra.yaml` 내 `controller.image.repository` / `speaker.image.repository`
+- **IP Range**: `manifests/l2-config.yaml` 내 `addresses` (install.sh 가 메모리상에서 동적 치환하여 파이프로 배포하므로 원본은 불변으로 보존됨)
 
 ## 💡 운영 팁
 
