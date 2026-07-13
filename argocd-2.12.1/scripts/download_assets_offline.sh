@@ -63,11 +63,12 @@ if [ "$DOWNLOAD_IMAGES" = true ]; then
         exit 1
     fi
 
-    # haproxy: Redis HA(High Availability) 다중화 배포 구성을 위한 예비 수집용 자산
+    # haproxy 및 shellcheck: Redis HA 다중화 배포 및 Helm test를 위한 예비 수집용 자산
     IMAGES=(
         "quay.io/argoproj/argocd:v2.12.1"
         "public.ecr.aws/docker/library/redis:7.2.4-alpine"
         "public.ecr.aws/docker/library/haproxy:2.9-alpine"
+        "docker.io/koalaman/shellcheck:v0.5.0"
     )
 
     for img in "${IMAGES[@]}"; do
@@ -75,6 +76,8 @@ if [ "$DOWNLOAD_IMAGES" = true ]; then
         echo "🚀 처리 중: $img"
         if [[ "$img" =~ haproxy ]]; then
             echo "   (알림: haproxy는 Redis HA 구성 시에만 선택적으로 사용되는 예비 자산입니다.)"
+        elif [[ "$img" =~ shellcheck ]]; then
+            echo "   (알림: shellcheck은 Redis HA 모드 시 Helm test 훅용 예비 자산입니다.)"
         fi
 
         echo -n "   └─ Pulling... "

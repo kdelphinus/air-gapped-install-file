@@ -30,6 +30,7 @@ sudo ./scripts/download_assets_offline.sh
     * `quay.io_argoproj_argocd_v2.12.1.tar`
     * `public.ecr.aws_docker_library_redis_7.2.4-alpine.tar`
     * `public.ecr.aws_docker_library_haproxy_2.9-alpine.tar` (Redis HA 대응을 위한 예비 자산)
+    * `docker.io_koalaman_shellcheck_v0.5.0.tar` (Redis HA 모드 시 Helm test 훅 지원용 예비 자산)
 
 자산 수집이 완료되면 전체 프로젝트 폴더를 압축하여 폐쇄망 내부로 반입하십시오.
 

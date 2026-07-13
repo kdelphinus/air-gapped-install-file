@@ -50,7 +50,7 @@ load_conf() {
             value=$(echo "$value" | xargs)
             if [[ "$key" =~ ^[A-Z0-9_]+$ ]]; then
                 value=$(echo "$value" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
-                eval "$key=\"\$value\""
+                printf -v "$key" '%s' "$value"
             fi
         done < "$CONF_FILE"
     fi
@@ -90,11 +90,13 @@ save_values_infra() {
     local ARGOCD_REPO="quay.io/argoproj/argocd"
     local REDIS_REPO="public.ecr.aws/docker/library/redis"
     local HAPROXY_REPO="public.ecr.aws/docker/library/haproxy"
+    local SHELLCHECK_REPO="docker.io/koalaman/shellcheck"
 
     if [ "${IMAGE_SOURCE}" = "harbor" ] || [ "${IMAGE_SOURCE}" = "1" ]; then
         ARGOCD_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/argocd"
         REDIS_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/redis"
         HAPROXY_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/haproxy"
+        SHELLCHECK_REPO="${HARBOR_REGISTRY}/${HARBOR_PROJECT}/shellcheck"
     fi
 
     # values-infra.yaml 작성 시작
@@ -121,12 +123,18 @@ configs:
 haproxy:
   image:
     repository: "${HAPROXY_REPO}"
+    tag: "2.9-alpine"
 redis-ha:
   image:
     repository: "${REDIS_REPO}"
   haproxy:
     image:
       repository: "${HAPROXY_REPO}"
+      tag: "2.9-alpine"
+  configmapTest:
+    image:
+      repository: "${SHELLCHECK_REPO}"
+      tag: "v0.5.0"
 EOF
 
     # 1) repoServer 블록 단일 정의 (이미지 + 볼륨 결합)

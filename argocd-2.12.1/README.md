@@ -20,6 +20,7 @@
 | `quay.io/argoproj/argocd` | `v2.12.1` | ArgoCD 핵심 컴포넌트 | 서버, 컨트롤러, repo-server, applicationSet 등 |
 | `public.ecr.aws/docker/library/redis` | `7.2.4-alpine` | ArgoCD 캐시 스토리지 | 기본 Standalone 캐시 데이터베이스 |
 | `public.ecr.aws/docker/library/haproxy` | `2.9-alpine` | Redis HA 프록시 | **[예비 자산]** Redis HA(다중화) 다중화 구성 시 사용 |
+| `docker.io/koalaman/shellcheck` | `v0.5.0` | 헬름 테스트 훅 | **[예비 자산]** Redis HA 모드 시 Helm test 훅 지원용 |
 
 ---
 
