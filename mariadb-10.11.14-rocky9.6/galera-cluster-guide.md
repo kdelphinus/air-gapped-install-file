@@ -116,6 +116,17 @@ sudo chmod 750 /app/mariadb_data
 sudo mysql_install_db --user=mysql --datadir=/app/mariadb_data
 ```
 
+### 2-6. 파일 입출력 제한 디렉토리 생성
+
+`LOAD DATA INFILE` 및 `SELECT ... INTO OUTFILE`의 파일 접근 범위를 제한하기 위해
+3대 서버 모두에서 동일하게 생성합니다.
+
+```bash
+sudo mkdir -p /var/lib/mysql-files
+sudo chown mysql:mysql /var/lib/mysql-files
+sudo chmod 750 /var/lib/mysql-files
+```
+
 ---
 
 ## Phase 3: Galera 설정 파일 작성 (3대 공통)
@@ -141,6 +152,13 @@ lower_case_table_names=1
 max_connections=1000
 sql_mode="STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
 
+# --- 파일 입출력 보안 ---
+# 지정 디렉토리 밖의 LOAD DATA INFILE 및 SELECT ... INTO OUTFILE 사용을 제한
+secure_file_priv=/var/lib/mysql-files
+
+# LOAD DATA LOCAL INFILE 비활성화
+local_infile=OFF
+
 # --- Galera Provider ---
 wsrep_on=ON
 wsrep_provider=/usr/lib64/galera-4/libgalera_smm.so
@@ -164,6 +182,33 @@ wsrep_sst_method=mariabackup
 | 1번 | `IP_1` | `galera-cluster-1` |
 | 2번 | `IP_2` | `galera-cluster-2` |
 | 3번 | `IP_3` | `galera-cluster-3` |
+
+### 3-1. 기존 운영 클러스터 적용 시 순차 재시작
+
+이미 운영 중인 Galera 3중화 클러스터에 위 보안 설정을 추가하는 경우, 모든 노드를
+동시에 재시작하지 않습니다. `wsrep_cluster_size`와 VIP 상태를 확인하면서 한 대씩
+순차 적용합니다.
+
+```bash
+# 각 노드에서 설정 변경 전 현재값 확인
+sudo mariadb -u root -p -e "SHOW VARIABLES LIKE 'secure_file_priv';"
+sudo mariadb -u root -p -e "SHOW VARIABLES LIKE 'local_infile';"
+sudo mariadb -u root -p -e "SHOW STATUS LIKE 'wsrep_cluster_size';"
+
+# 한 노드씩 설정 반영
+sudo systemctl restart mariadb
+
+# 재기동된 노드가 클러스터에 정상 복귀했는지 확인
+sudo mariadb -u root -p -e "SHOW STATUS LIKE 'wsrep_local_state_comment';"
+sudo mariadb -u root -p -e "SHOW STATUS LIKE 'wsrep_cluster_size';"
+sudo mariadb -u root -p -e "SHOW VARIABLES LIKE 'secure_file_priv';"
+sudo mariadb -u root -p -e "SHOW VARIABLES LIKE 'local_infile';"
+```
+
+Kubernetes 1.30 기반 HA 마스터와 VIP가 이미 구성된 환경에서는 MariaDB 설정 변경이
+Kubernetes PKI를 변경하는 작업이 아닙니다. 단, 애플리케이션이 VIP 또는 외부 DB
+엔드포인트를 통해 Galera에 접속 중이면 재시작 중 연결 재시도가 발생할 수 있으므로
+DB 연결 풀의 재시도 설정과 애플리케이션 파드 상태를 함께 확인합니다.
 
 ---
 
@@ -216,7 +261,32 @@ sudo mariadb -u root -e "SHOW DATABASES;"
 
 `galera_test_db`가 보이면 3중화 성공입니다.
 
-### 5-2. K8s 노드 연결 (필요 시)
+### 5-2. 파일 입출력 보안 설정 확인
+
+3대 노드 모두에서 동일한 결과가 나와야 합니다.
+
+```bash
+sudo mariadb -u root -p -e "SHOW VARIABLES LIKE 'secure_file_priv';"
+sudo mariadb -u root -p -e "SHOW VARIABLES LIKE 'local_infile';"
+```
+
+| 항목 | 권장값 | 의미 |
+| :--- | :--- | :--- |
+| `secure_file_priv` | `/var/lib/mysql-files/` | 지정 디렉토리에서만 DB 파일 입출력 허용 |
+| `local_infile` | `OFF` | 클라이언트 로컬 파일 직접 적재 비활성화 |
+
+`local_infile=OFF`는 `LOAD DATA LOCAL INFILE` 구문에만 영향을 줍니다. 일반적인
+Spring MVC/MyBatis/JPA 기반 `SELECT`, `INSERT`, `UPDATE`, `DELETE`, 엑셀 다운로드,
+`mysqldump` 복원, SQL `INSERT` 방식의 DB 툴 Import에는 영향이 없습니다. DB 툴에서
+고속 CSV Import 기능이 `LOAD DATA LOCAL INFILE`을 사용하는 경우에만 실패할 수
+있으므로, 운영 반영 전 애플리케이션 소스와 운영 Import 절차에서 다음 구문 사용
+여부를 확인합니다.
+
+```bash
+grep -RInE "LOAD DATA|LOCAL INFILE" /path/to/application/source
+```
+
+### 5-3. K8s 노드 연결 (필요 시)
 
 다른 노드의 K8s에서 접속해야 할 경우 IP 허용 규칙을 추가합니다.
 
@@ -238,6 +308,28 @@ kubectl run tmp-shell --rm -it \
 
 # 파드 내부에서 연결 테스트
 telnet <IP_1> 3306
+```
+
+### 5-4. Kubernetes 인증서와 MariaDB 인증서 분리
+
+Kubernetes 1.30 HA 마스터와 VIP가 구성된 환경이라도 MariaDB 서버 인증서와 개인키는
+Kubernetes 인증서와 공유하지 않습니다. 동일한 내부 CA로 각각의 인증서를 발급하는
+것은 가능하지만, Kubernetes API Server용 인증서와 MariaDB 서버용 인증서 및
+개인키는 서비스별로 분리해야 합니다.
+
+| 구분 | 권장 |
+| :--- | :--- |
+| Kubernetes CA와 MariaDB CA | 동일 내부 CA 사용 가능 |
+| Kubernetes 서버 인증서와 MariaDB 서버 인증서 | 별도 발급 |
+| Kubernetes 개인키와 MariaDB 개인키 | 공유 금지 |
+
+MariaDB TLS를 적용하는 경우에는 별도 발급한 MariaDB 전용 인증서를 각 Galera 노드에
+배치한 뒤 `[mariadb]` 섹션에 다음 설정을 추가합니다.
+
+```ini
+ssl-ca=/etc/mysql/ssl/ca-cert.pem
+ssl-cert=/etc/mysql/ssl/server-cert.pem
+ssl-key=/etc/mysql/ssl/server-key.pem
 ```
 
 ---

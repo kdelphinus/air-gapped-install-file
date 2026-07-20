@@ -82,6 +82,10 @@ sudo mysql_secure_installation
 `/etc/my.cnf.d/` 아래 설정 파일을 생성하여 핵심 파라미터를 구성합니다.
 
 ```bash
+sudo mkdir -p /var/lib/mysql-files
+sudo chown mysql:mysql /var/lib/mysql-files
+sudo chmod 750 /var/lib/mysql-files
+
 sudo tee /etc/my.cnf.d/custom.cnf <<'EOF'
 [mariadb]
 # ----------------------------------------------
@@ -107,10 +111,26 @@ max_connections=1000
 # [튜닝] SQL Mode 완화 (ONLY_FULL_GROUP_BY 제거)
 # 쿼리 작성 시 GROUP BY 절 제약을 완화하여 호환성 확보
 sql_mode="STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION"
+
+# ----------------------------------------------
+# 2. 파일 입출력 보안 설정
+# ----------------------------------------------
+# LOAD DATA INFILE 및 SELECT ... INTO OUTFILE 이 지정 디렉토리 밖의 파일에
+# 접근하지 못하도록 제한합니다.
+secure_file_priv=/var/lib/mysql-files
+
+# 클라이언트 로컬 파일을 서버로 직접 읽어들이는 LOAD DATA LOCAL INFILE 기능은
+# 운영 기본값에서 비활성화합니다. 대용량 CSV 적재가 필요한 경우에만 영향 범위를
+# 확인한 뒤 일시적으로 허용합니다.
+local_infile=OFF
 EOF
 
 sudo systemctl restart mariadb
 ```
+
+`local_infile=OFF`는 `LOAD DATA LOCAL INFILE` 구문에만 영향을 줍니다. 일반적인
+Spring MVC/MyBatis/JPA 기반 `SELECT`, `INSERT`, `UPDATE`, `DELETE`, 엑셀 다운로드,
+`mysqldump` 복원, SQL `INSERT` 방식의 DB 툴 Import에는 영향이 없습니다.
 
 ## Phase 4: 초기 데이터베이스 및 사용자 생성
 
@@ -129,6 +149,8 @@ EOF
 mysql -u root -p -e "SHOW DATABASES;"
 mysql -u root -p -e "SELECT version();"
 mysql -u root -p -e "SHOW VARIABLES LIKE 'character_set_server';"
+mysql -u root -p -e "SHOW VARIABLES LIKE 'secure_file_priv';"
+mysql -u root -p -e "SHOW VARIABLES LIKE 'local_infile';"
 ```
 
 ## Phase 6: 방화벽 설정 (필요 시)
