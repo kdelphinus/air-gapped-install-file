@@ -49,6 +49,7 @@ containerd v2.2.0을 컨테이너 런타임으로, Calico를 CNI로 사용합니
 
 - [ ] 미확정 항목이 없고, 운영 영향이 있는 조치의 승인 범위가 명확한지 확인
 - [ ] 장애 발생 시 되돌릴 범위와 담당자 연락 경로 확인
+- [ ] API Server 설정, etcd TLS, 인증서 취약점은 `kubernetes-kubeadm-vulnerability-check-remediation.md` 기준으로 점검
 
 ## 디렉토리 구조
 
@@ -60,6 +61,7 @@ containerd v2.2.0을 컨테이너 런타임으로, Calico를 CNI로 사용합니
 | `k8s/images/` | kubeadm, Calico 등 컨테이너 이미지 `.tar` |
 | `k8s/charts/` | Helm 차트 |
 | `k8s/utils/` | calico.yaml 등 매니페스트 |
+| `kubernetes-kubeadm-vulnerability-check-remediation.md` | Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차 |
 
 ## Phase -1: 인터넷 연결 호스트에서 에셋 다운로드
 
@@ -1253,3 +1255,7 @@ kubectl get pods -n kube-system
 ```
 
 모든 노드가 `Ready` 상태이고 kube-system Pod가 `Running`이면 완료입니다.
+
+## 참고: 취약점 점검 및 보완
+
+Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차는 `kubernetes-kubeadm-vulnerability-check-remediation.md`를 참조하세요.

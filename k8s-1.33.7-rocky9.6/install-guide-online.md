@@ -1265,3 +1265,7 @@ kubectl get pods -n kube-system
 **주의**: Rocky Linux 8에서는 `nftables`와 `iptables` 간섭이 있을 수 있으므로,
 방화벽 설정 시 주의가 필요합니다. 상기 가이드는 방화벽을 끄는 것을 전제로 합니다.
 `iptables` 명령어는 Rocky 8에서 `iptables-nft` 백엔드로 alias 되어 동작합니다.
+
+## 참고: 취약점 점검 및 보완
+
+Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차는 `kubernetes-kubeadm-vulnerability-check-remediation.md`를 참조하세요.

@@ -115,3 +115,11 @@ k8s-1.33.11-ubuntu24.04/
 | `../envoy-1.37.2/scripts/install.sh` | Envoy Gateway (L7) — 독립 설치 파일 활용 | `CNI_CHOICE=calico` 선택 시 자동 |
 
 > Cilium 선택 시에는 Cilium의 Gateway API 기능을 사용하므로 Envoy Gateway를 별도로 설치하지 않습니다.
+
+---
+
+## 운영 점검 문서
+
+| 문서 | 설명 |
+| --- | --- |
+| `kubernetes-kubeadm-vulnerability-check-remediation.md` | Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차 |

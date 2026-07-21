@@ -1103,3 +1103,7 @@ kubectl get pods -n kube-system
 
 - 폐쇄망 배포용 파일은 `scripts/download_assets_offline.sh`로 수집합니다.
 - 오프라인 설치 절차와 동일한 HA 구성이 `install-guide.md` 에 상세히 기술되어 있습니다.
+
+## 참고: 취약점 점검 및 보완
+
+Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차는 `kubernetes-kubeadm-vulnerability-check-remediation.md`를 참조하세요.

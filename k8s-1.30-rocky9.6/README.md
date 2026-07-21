@@ -45,3 +45,13 @@
 * **Pod CIDR**: `192.168.0.0/16` (Calico가 Pod에 할당할 IP 대역)
 * **Service CIDR**: `10.96.0.0/12` (K8s 서비스 객체가 사용할 가상 IP 대역)
 * **Internal DNS**: `10.96.0.10` (CoreDNS 서비스의 고정 IP)
+
+---
+
+## 4. 운영 점검 문서
+
+| 문서 | 설명 |
+| --- | --- |
+| `install-guide.md` | 폐쇄망 Kubernetes v1.30.0 설치 절차 |
+| `reboot-guide.md` | Kubernetes 노드 재부팅 및 복구 절차 |
+| `kubernetes-kubeadm-vulnerability-check-remediation.md` | Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차 |

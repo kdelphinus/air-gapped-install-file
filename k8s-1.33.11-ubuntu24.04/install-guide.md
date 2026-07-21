@@ -46,6 +46,7 @@ containerd v2.2.x를 컨테이너 런타임으로, CNI는 **Calico(+ Envoy Gatew
 
 - [ ] 미확정 항목이 없고, 운영 영향이 있는 조치의 승인 범위가 명확한지 확인
 - [ ] 장애 발생 시 되돌릴 범위와 담당자 연락 경로 확인
+- [ ] API Server 설정, etcd TLS, 인증서 취약점은 `kubernetes-kubeadm-vulnerability-check-remediation.md` 기준으로 점검
 
 ## 스크립트 사용 가이드
 
@@ -1433,3 +1434,7 @@ kubectl get pods -n kube-system
 | `ip addr show eth0 \| grep VIP` | `ip addr show \| grep <VIP>` (인터페이스명 다를 수 있음) |
 | `firewalld` 고려 | `ufw` 고려 (폐쇄망에서는 대부분 `sudo ufw disable`) |
 | iptables backend 고정 | WSL2만 `iptables-legacy` 강제, VM은 기본값 충분 |
+
+## 참고: 취약점 점검 및 보완
+
+Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차는 `kubernetes-kubeadm-vulnerability-check-remediation.md`를 참조하세요.

@@ -203,3 +203,7 @@ bash -n scripts/build_bundle.sh
 
 1. Rocky 9.6 실환경 RPM 수집/설치 스모크 테스트
 2. 기존 `k8s-1.33.11-ubuntu24.04` 산출물 재현 검증
+
+## 참고: 취약점 점검 및 보완
+
+Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차는 `kubernetes-kubeadm-vulnerability-check-remediation.md`를 참조하세요.

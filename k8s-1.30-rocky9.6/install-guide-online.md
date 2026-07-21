@@ -1175,3 +1175,7 @@ kubectl get pods -n kube-system
 ```
 
 모든 노드가 `Ready` 상태이고 kube-system Pod가 `Running`이면 완료입니다.
+
+## 참고: 취약점 점검 및 보완
+
+Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차는 `kubernetes-kubeadm-vulnerability-check-remediation.md`를 참조하세요.

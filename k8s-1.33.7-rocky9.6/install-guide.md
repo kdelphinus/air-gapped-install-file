@@ -64,6 +64,7 @@ sudo ./scripts/download_assets_offline.sh
 
 - [ ] 미확정 항목이 없고, 운영 영향이 있는 조치의 승인 범위가 명확한지 확인
 - [ ] 장애 발생 시 되돌릴 범위와 담당자 연락 경로 확인
+- [ ] API Server 설정, etcd TLS, 인증서 취약점은 `kubernetes-kubeadm-vulnerability-check-remediation.md` 기준으로 점검
 
 ## 디렉토리 구조
 
@@ -74,6 +75,7 @@ sudo ./scripts/download_assets_offline.sh
 | `k8s/binaries/` | helm, cri-dockerd, nerdctl 등 바이너리 |
 | `k8s/images/` | Kubernetes 코어 및 Calico CNI 컨테이너 이미지 `.tar` |
 | `k8s/utils/` | calico.yaml 등 구성 매니페스트 |
+| `kubernetes-kubeadm-vulnerability-check-remediation.md` | Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차 |
 
 ## Phase 1: 패키지 설치 (전체 노드)
 
@@ -173,3 +175,7 @@ sudo systemctl restart containerd
 ```
 
 이후 설치 상세 절차(HA 프록시 구성 및 `kubeadm init`)는 `install-guide-online.md`를 참고하여 동일하게 수행하되, 패키지 및 이미지 pull 부분만 오프라인으로 대체됩니다.
+
+## 참고: 취약점 점검 및 보완
+
+Kubernetes kubeadm API Server 설정, etcd TLS, 인증서 취약점 점검 및 보완 절차는 `kubernetes-kubeadm-vulnerability-check-remediation.md`를 참조하세요.
