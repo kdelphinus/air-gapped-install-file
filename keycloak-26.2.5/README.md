@@ -19,8 +19,10 @@
 ## SSO 테스트 순서
 
 1. Keycloak을 설치하고 `oss` Realm을 생성합니다.
-2. GitLab, Nexus, Jenkins에 각각 Confidential OIDC Client를 생성합니다.
+2. Gitea, Argo CD, Jenkins, Harbor, GitLab에 각각 OIDC Client를 생성합니다.
 3. 각 OSS의 redirect URI와 Keycloak Client의 Valid redirect URIs를 정확히 일치시킵니다.
 4. Keycloak 사용자로 각 OSS 로그인을 검증합니다.
 
 상세 설치 및 수동 절차는 [install-guide.md](install-guide.md)를 참고하십시오.
+OSS별 Realm, Client, callback URL과 롤백 절차는
+[sso-integration-guide.md](sso-integration-guide.md)를 참고하십시오.
