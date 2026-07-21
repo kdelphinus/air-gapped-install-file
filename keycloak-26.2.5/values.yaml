@@ -1,0 +1,39 @@
+# Keycloak 26.2.5 - offline OIDC SSO test deployment
+existingSecret: keycloak-credentials
+imagePullSecrets: []
+
+keycloak:
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: "26.2.5"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  # HTTPRoute의 호스트명과 반드시 같아야 합니다.
+  hostname: keycloak.devops.internal
+  bootstrapAdmin:
+    username: admin
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+postgresql:
+  image:
+    repository: docker.io/library/postgres
+    tag: "16.9"
+    pullPolicy: IfNotPresent
+  database: keycloak
+  username: keycloak
+  persistence:
+    storageClass: nfs-provisioner
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
