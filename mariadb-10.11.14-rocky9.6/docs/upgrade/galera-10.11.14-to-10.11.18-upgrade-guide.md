@@ -194,16 +194,18 @@ sudo ./scripts/upgrade_galera_10.11.18.sh \
   --yes
 
 # DB2가 완전히 Synced된 것을 확인한 후 DB1
-# DB1은 --all 실행 시 업그레이드 전 Dump도 보존한다.
+# 현재 환경의 DB1이 백업 노드이므로 --backup-node를 함께 지정한다.
 sudo ./scripts/upgrade_galera_10.11.18.sh \
   --all \
   --node-role db1 \
+  --backup-node \
   --yes
 
-# 전체 업그레이드 완료 후 DB1 백업 검증
+# 전체 업그레이드 완료 후 백업 노드 검증
 sudo ./scripts/upgrade_galera_10.11.18.sh \
   --verify-backup \
-  --node-role db1
+  --node-role db1 \
+  --backup-node
 ```
 
 ### 7.1 MariaDB 중지

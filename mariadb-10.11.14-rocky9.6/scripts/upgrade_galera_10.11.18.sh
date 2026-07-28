@@ -50,31 +50,35 @@ usage() {
   cat <<'EOF'
 사용법:
   upgrade_galera_10.11.18.sh --check-only
-  upgrade_galera_10.11.18.sh --backup-dump --node-role db1
+  upgrade_galera_10.11.18.sh --backup-dump --node-role <db1|db2|db3> --backup-node
   upgrade_galera_10.11.18.sh --upgrade-node --node-role <db1|db2|db3> --yes
-  upgrade_galera_10.11.18.sh --verify-backup --node-role db1
-  upgrade_galera_10.11.18.sh --all --node-role <db1|db2|db3> --yes
+  upgrade_galera_10.11.18.sh --verify-backup --node-role <db1|db2|db3> --backup-node
+  upgrade_galera_10.11.18.sh --all --node-role <db1|db2|db3> [--backup-node] --yes
 
 옵션:
   --check-only
       현재 RPM과 Galera 상태만 점검합니다. 시스템을 변경하지 않습니다.
 
   --backup-dump
-      DB1의 최신 논리 Dump를 업그레이드 전 보존 경로에 복사하고
+      백업 노드의 최신 논리 Dump를 업그레이드 전 보존 경로에 복사하고
       SHA256 및 gzip 무결성을 검증합니다.
 
   --upgrade-node
       현재 노드만 MariaDB 10.11.18과 Galera 26.4.27로 업그레이드합니다.
 
   --verify-backup
-      DB1의 백업 서비스를 실행하고 결과와 타이머를 검증합니다.
+      백업 노드의 백업 서비스를 실행하고 결과와 타이머를 검증합니다.
 
   --all
       엄격한 사전 점검 후 현재 노드를 업그레이드합니다.
-      db1에서는 업그레이드 전 Dump 보존도 함께 수행합니다.
+      --backup-node를 지정한 노드에서는 업그레이드 전 Dump도 보존합니다.
 
   --node-role <db1|db2|db3>
       현재 작업 노드의 역할입니다. 변경 작업에서는 필수입니다.
+
+  --backup-node
+      현재 노드가 논리 백업 담당임을 표시합니다.
+      실제 호스트가 db1, db2 또는 db3인지와 독립적으로 지정할 수 있습니다.
 
   --yes
       업그레이드 실행을 명시적으로 승인합니다.
@@ -94,12 +98,13 @@ usage() {
       각 mariadb-upgrade 단계의 제한 시간(초)입니다. 기본값은 1800입니다.
 
 권장 롤링 순서:
-  db3 -> db2 -> db1
+  비백업 노드를 한 번에 하나씩 처리한 후 백업 노드를 마지막에 처리
 EOF
 }
 
 ACTION=""
 NODE_ROLE=""
+IS_BACKUP_NODE=false
 ASSUME_YES=false
 
 while [[ $# -gt 0 ]]; do
@@ -133,6 +138,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die "--node-role 뒤에 db1, db2 또는 db3를 지정해야 합니다."
       NODE_ROLE="${2,,}"
       shift 2
+      ;;
+    --backup-node)
+      IS_BACKUP_NODE=true
+      shift
       ;;
     --yes)
       ASSUME_YES=true
@@ -222,6 +231,11 @@ require_node_role() {
       die "--node-role db1, db2 또는 db3를 지정해야 합니다."
       ;;
   esac
+}
+
+require_backup_node() {
+  [[ "${IS_BACKUP_NODE}" == true ]] ||
+    die "이 작업에는 --backup-node 옵션이 필요합니다."
 }
 
 require_upgrade_confirmation() {
@@ -443,8 +457,7 @@ preflight_target_packages() {
 preserve_pre_upgrade_backup() {
   local latest_dump
 
-  [[ "${NODE_ROLE}" == "db1" ]] ||
-    die "업그레이드 전 Dump 보존은 --node-role db1에서만 실행할 수 있습니다."
+  require_backup_node
 
   [[ -d "${DAILY_DUMP_DIR}" ]] ||
     die "일일 Dump 디렉터리가 없습니다: ${DAILY_DUMP_DIR}"
@@ -583,8 +596,8 @@ run_mariadb_upgrade_step() {
 }
 
 perform_node_upgrade() {
-  log_info "현재 작업 노드: role=${NODE_ROLE}, hostname=$(hostname -f)"
-  log_warn "권장 순서는 db3 -> db2 -> db1이며 한 노드가 완전히 복귀한 뒤 다음 노드를 작업해야 합니다."
+  log_info "현재 작업 노드: role=${NODE_ROLE}, backup_node=${IS_BACKUP_NODE}, hostname=$(hostname -f)"
+  log_warn "비백업 노드를 한 번에 하나씩 처리하고 백업 노드는 마지막에 작업하는 것을 권장합니다."
 
   check_cluster_status
   check_source_version
@@ -645,11 +658,10 @@ latest_dump_file() {
     cut -d" " -f2-
 }
 
-verify_db1_backup() {
+verify_backup_node() {
   local latest_dump
 
-  [[ "${NODE_ROLE}" == "db1" ]] ||
-    die "백업 검증은 --node-role db1에서만 실행할 수 있습니다."
+  require_backup_node
 
   check_cluster_status
 
@@ -658,7 +670,7 @@ verify_db1_backup() {
   systemctl cat mariadb-backup-dump.timer >/dev/null ||
     die "mariadb-backup-dump.timer가 없습니다."
 
-  log_info "DB1 논리 백업 서비스를 실행합니다."
+  log_info "백업 노드 논리 백업 서비스를 실행합니다."
   systemctl start mariadb-backup-dump.service
 
   latest_dump=$(latest_dump_file)
@@ -677,7 +689,7 @@ verify_db1_backup() {
   check_cluster_status
   systemctl list-timers mariadb-backup-dump.timer --all
 
-  log_success "DB1 업그레이드 후 백업 및 타이머 검증 완료"
+  log_success "백업 노드 업그레이드 후 백업 및 타이머 검증 완료"
 }
 
 check_os
@@ -691,8 +703,7 @@ case "${ACTION}" in
     ;;
   backup)
     require_node_role
-    [[ "${NODE_ROLE}" == "db1" ]] ||
-      die "--backup-dump는 --node-role db1에서만 사용할 수 있습니다."
+    require_backup_node
     acquire_lock
     check_cluster_status
     preserve_pre_upgrade_backup
@@ -705,10 +716,9 @@ case "${ACTION}" in
     ;;
   verify_backup)
     require_node_role
-    [[ "${NODE_ROLE}" == "db1" ]] ||
-      die "--verify-backup은 --node-role db1에서만 사용할 수 있습니다."
+    require_backup_node
     acquire_lock
-    verify_db1_backup
+    verify_backup_node
     ;;
   all)
     require_node_role
@@ -716,10 +726,10 @@ case "${ACTION}" in
     acquire_lock
     check_cluster_status
 
-    if [[ "${NODE_ROLE}" == "db1" ]]; then
+    if [[ "${IS_BACKUP_NODE}" == true ]]; then
       preserve_pre_upgrade_backup
     else
-      log_info "${NODE_ROLE}에서는 DB1 전용 Dump 보존 단계를 건너뜁니다."
+      log_info "--backup-node가 지정되지 않아 Dump 보존 단계를 건너뜁니다."
     fi
 
     perform_node_upgrade
