@@ -173,6 +173,13 @@ SHOW GLOBAL VARIABLES LIKE 'wsrep_desync';
 다음 절차를 DB3, DB2, DB1 순서로 한 노드씩 수행했다. 현재 작업 중인
 노드가 정상화되기 전에는 다음 노드로 진행하지 않는다.
 
+> [!NOTE]
+> 본 가이드의 절차는 제공되는 자동화 스크립트 `scripts/upgrade_galera_10.11.18.sh`를 통해서도 수행할 수 있습니다.
+> ```bash
+> # 현재 노드에서 롤링 업그레이드 전체 자동 수행
+> sudo ./scripts/upgrade_galera_10.11.18.sh --all
+> ```
+
 ### 7.1 MariaDB 중지
 
 ```bash
