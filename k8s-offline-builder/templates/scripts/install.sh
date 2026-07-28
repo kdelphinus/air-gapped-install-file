@@ -9,6 +9,10 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+echo "[ERROR] Generated bundle installation is disabled because the security baseline is incomplete."
+echo "        Use a version- and OS-specific secure package from this repository."
+exit 1
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -29,7 +33,37 @@ if [ ! -f "$CONF_FILE" ]; then
     exit 1
 fi
 
-source "$CONF_FILE"
+load_install_conf() {
+    local key value
+    while IFS='=' read -r key value; do
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+        value="${value:-}"
+        value="${value%%#*}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+            value="${value:1:${#value}-2}"
+        elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+            value="${value:1:${#value}-2}"
+        fi
+        [[ -z "$key" || "$key" == \#* ]] && continue
+        case "$key" in
+            K8S_VERSION|TARGET_OS|ARCH|CONTAINER_RUNTIME|CONTAINERD_VERSION|\
+            CNI_CHOICE|CALICO_VERSION|CALICO_INSTALL_METHOD|CILIUM_VERSION|\
+            ENABLE_HUBBLE|MTU_VALUE|ENV_TYPE|NODE_ROLE|CNI_INSTALL_MODE|\
+            POD_CIDR|SERVICE_CIDR|CONTROL_PLANE_ENDPOINT|CRI_SOCKET|KUBELET_NODE_IP)
+                printf -v "$key" '%s' "$value"
+                ;;
+            *)
+                echo "[ERROR] Unsupported install.conf key: ${key}"
+                exit 1
+                ;;
+        esac
+    done < "$CONF_FILE"
+}
+
+load_install_conf
 
 : "${K8S_VERSION:=}"
 : "${TARGET_OS:=ubuntu24.04}"
@@ -52,8 +86,8 @@ if [[ "$K8S_VERSION" != v* ]]; then
     K8S_VERSION="v${K8S_VERSION}"
 fi
 
-if [[ "$TARGET_OS" != "ubuntu24.04" && "$TARGET_OS" != "rocky9.6" ]]; then
-    echo -e "${RED}[오류] 현재 생성 번들 설치 스크립트는 ubuntu24.04 또는 rocky9.6 대상만 지원합니다: $TARGET_OS${NC}"
+if [[ "$TARGET_OS" != "ubuntu24.04" && "$TARGET_OS" != "rocky9" ]]; then
+    echo -e "${RED}[오류] 현재 생성 번들 설치 스크립트는 ubuntu24.04 또는 rocky9 대상만 지원합니다: $TARGET_OS${NC}"
     exit 1
 fi
 
@@ -181,7 +215,7 @@ configure_kubelet_node_ip() {
 KUBELET_EXTRA_ARGS=--node-ip=${KUBELET_NODE_IP}
 EOF
             ;;
-        rocky9.6)
+        rocky9)
             cat > /etc/sysconfig/kubelet <<EOF
 KUBELET_EXTRA_ARGS=--node-ip=${KUBELET_NODE_IP}
 EOF
@@ -310,15 +344,8 @@ install_rpms_and_prepare_node() {
     dnf localinstall -y --disablerepo='*' "$RPM_DIR"/*.rpm
     systemctl enable kubelet
 
-    if command -v setenforce >/dev/null 2>&1; then
-        setenforce 0 2>/dev/null || true
-    fi
-    if [ -f /etc/selinux/config ]; then
-        sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-    fi
-
-    systemctl stop firewalld 2>/dev/null || true
-    systemctl disable firewalld 2>/dev/null || true
+    echo -e "${RED}[ERROR] The generic Rocky 9 template does not meet the SELinux/firewalld security baseline.${NC}"
+    exit 1
 
     modprobe overlay || true
     modprobe br_netfilter || true
@@ -343,7 +370,7 @@ install_packages_and_prepare_node() {
         ubuntu24.04)
             install_debs_and_prepare_node
             ;;
-        rocky9.6)
+        rocky9)
             install_rpms_and_prepare_node
             ;;
         *)
@@ -642,8 +669,8 @@ if [ "$ENV_TYPE" = "wsl2" ] && ! pidof systemd >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ "$TARGET_OS" = "rocky9.6" ] && [ "$ENV_TYPE" = "wsl2" ]; then
-    echo -e "${RED}[오류] rocky9.6 번들은 VM/베어메탈 계열만 지원합니다. WSL2는 ubuntu24.04 번들을 사용하세요.${NC}"
+if [ "$TARGET_OS" = "rocky9" ] && [ "$ENV_TYPE" = "wsl2" ]; then
+    echo -e "${RED}[오류] rocky9 번들은 VM/베어메탈 계열만 지원합니다. WSL2는 ubuntu24.04 번들을 사용하세요.${NC}"
     exit 1
 fi
 

@@ -1,6 +1,6 @@
-# Kubernetes v1.33.11 Ubuntu 24.04 재현성 검증
+# Kubernetes v1.33.13 Ubuntu 24.04 재현성 검증
 
-이 문서는 기존 고정 산출물 `k8s-1.33.11-ubuntu24.04`를 기준으로 `k8s-offline-builder`가 동일한 수준의 설치 번들을 재현할 수 있는지 비교한 결과입니다.
+이 문서는 기존 고정 산출물 `k8s-1.33.13-ubuntu24.04`를 기준으로 `k8s-offline-builder`가 동일한 수준의 설치 번들을 재현할 수 있는지 비교한 결과입니다.
 
 검증 기준은 현재 저장소에 포함된 기존 산출물과 builder의 수집/빌드/설치 로직입니다. 아직 외부망 Ubuntu 24.04 호스트에서 builder의 `download_assets_offline.sh`를 끝까지 실행한 것은 아니므로, 최종 DEB/이미지 파일 수량과 목록 일치는 실제 수집 후 다시 확인해야 합니다.
 
@@ -16,22 +16,22 @@
 
 기존 이미지 기준 목록:
 
-- `kube-apiserver-v1.33.11.tar`
-- `kube-controller-manager-v1.33.11.tar`
-- `kube-scheduler-v1.33.11.tar`
-- `kube-proxy-v1.33.11.tar`
+- `kube-apiserver-v1.33.13.tar`
+- `kube-controller-manager-v1.33.13.tar`
+- `kube-scheduler-v1.33.13.tar`
+- `kube-proxy-v1.33.13.tar`
 - `etcd-3.5.24-0.tar`
 - `coredns-coredns-v1.12.0.tar`
 - `pause-3.10.tar`
 - `tigera-operator-v1.40.0.tar`
-- `calico-cni-v3.31.0.tar`
-- `calico-node-v3.31.0.tar`
-- `calico-kube-controllers-v3.31.0.tar`
-- `calico-typha-v3.31.0.tar`
-- `calico-pod2daemon-flexvol-v3.31.0.tar`
-- `calico-csi-v3.31.0.tar`
-- `calico-node-driver-registrar-v3.31.0.tar`
-- `calico-apiserver-v3.31.0.tar`
+- `calico-cni-v3.31.6.tar`
+- `calico-node-v3.31.6.tar`
+- `calico-kube-controllers-v3.31.6.tar`
+- `calico-typha-v3.31.6.tar`
+- `calico-pod2daemon-flexvol-v3.31.6.tar`
+- `calico-csi-v3.31.6.tar`
+- `calico-node-driver-registrar-v3.31.6.tar`
+- `calico-apiserver-v3.31.6.tar`
 
 ## 디렉터리 구조 비교
 
@@ -92,7 +92,7 @@
 | --- | --- | --- | --- |
 | Kubernetes APT repo | `v1.33` 고정 | `K8S_VERSION`에서 minor 자동 계산 | 개선 |
 | Docker CE repo | Ubuntu codename 기반 | Ubuntu codename 기반 | 일치 |
-| kubeadm/kubelet/kubectl | `1.33.11-1.1` 고정 | `K8S_VERSION`에서 자동 계산 | 개선 |
+| kubeadm/kubelet/kubectl | `1.33.13-1.1` 고정 | `K8S_VERSION`에서 자동 계산 | 개선 |
 | containerd.io | 최신 또는 고정 | `auto` 또는 고정 | 일치 |
 | 유틸 패키지 | conntrack, socat, ebtables, ipset, jq, chrony, haproxy, keepalived, psmisc | 동일 목록 | 일치 |
 | Helm | `v3.20.2` | 설정 기반 `v3.20.2` | 일치 |
@@ -134,13 +134,13 @@ sudo ./scripts/download_assets_offline.sh
 - 생성된 스크립트 문법 검사:
 
 ```bash
-bash -n bundles/k8s-v1.33.11-ubuntu24.04/scripts/install.sh
-bash -n bundles/k8s-v1.33.11-ubuntu24.04/scripts/uninstall.sh
-bash -n bundles/k8s-v1.33.11-ubuntu24.04/scripts/wsl2_prep.sh
+bash -n bundles/k8s-v1.33.13-ubuntu24.04/scripts/install.sh
+bash -n bundles/k8s-v1.33.13-ubuntu24.04/scripts/uninstall.sh
+bash -n bundles/k8s-v1.33.13-ubuntu24.04/scripts/wsl2_prep.sh
 ```
 
 ## 결론
 
-현재 builder는 기존 `k8s-1.33.11-ubuntu24.04`의 Kubernetes 설치 핵심 기능을 대부분 재현합니다. 특히 버전, OS, CNI, compatibility 판단을 설정과 정책 파일로 분리했고, Cilium은 외부 컴포넌트 호출보다 독립적인 번들 내부 설치 방식으로 확장되었습니다.
+현재 builder는 기존 `k8s-1.33.13-ubuntu24.04`의 Kubernetes 설치 핵심 기능을 대부분 재현합니다. 특히 버전, OS, CNI, compatibility 판단을 설정과 정책 파일로 분리했고, Cilium은 외부 컴포넌트 호출보다 독립적인 번들 내부 설치 방식으로 확장되었습니다.
 
 남은 검증은 실제 외부망 수집 결과와 기존 산출물의 파일 목록 비교입니다. 이 검증 전까지는 builder를 기능적으로 정렬된 상태로 보고, 파일 단위 재현성은 실수집 후 확정하는 것이 안전합니다.

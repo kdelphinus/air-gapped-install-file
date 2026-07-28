@@ -13,7 +13,7 @@ policy:
     - v1.33
   targetOS:
     - ubuntu24.04
-    - rocky9.6
+    - rocky9
   arch:
     - amd64
   containerRuntime:
@@ -25,7 +25,7 @@ policy:
     - calico
     - cilium
   calicoVersions:
-    - v3.31.0
+    - v3.31.6
   calicoInstallMethods:
     - manifest
     - operator
@@ -34,18 +34,18 @@ policy:
   ciliumInstallMethods:
     - helm
   validatedTuples:
-    - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.0|manifest"
-    - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.0|operator"
+    - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.6|manifest"
+    - "v1.33|ubuntu24.04|amd64|containerd|auto|calico|v3.31.6|operator"
     - "v1.33|ubuntu24.04|amd64|containerd|auto|cilium|v1.19.3|helm"
-    - "v1.33|rocky9.6|amd64|containerd|2.1.*|calico|v3.31.0|manifest"
-    - "v1.33|rocky9.6|amd64|containerd|2.1.*|calico|v3.31.0|operator"
-    - "v1.33|rocky9.6|amd64|containerd|2.1.*|cilium|v1.19.3|helm"
+    - "v1.33|rocky9|amd64|containerd|2.1.*|calico|v3.31.6|manifest"
+    - "v1.33|rocky9|amd64|containerd|2.1.*|calico|v3.31.6|operator"
+    - "v1.33|rocky9|amd64|containerd|2.1.*|cilium|v1.19.3|helm"
 
 kubernetes:
   versionFormat: "v<major>.<minor>.<patch>"
   supportedTargetOS:
     - ubuntu24.04
-    - rocky9.6
+    - rocky9
   supportedArch:
     - amd64
   componentSkewPolicy:
@@ -64,7 +64,7 @@ runtime:
 cni:
   calico:
     versions:
-      - v3.31.0
+      - v3.31.6
     installMethods:
       - manifest
       - operator

@@ -77,7 +77,7 @@ cat > "$STAGING_DIR/README.md" <<EOF
 sudo ./scripts/install.sh
 \`\`\`
 
-현재 번들 설치 스크립트는 Ubuntu 24.04 또는 Rocky 9.6 + containerd + Calico/Cilium 조합의 kubeadm init/join 설치를 지원합니다.
+현재 번들 설치 스크립트는 Ubuntu 24.04 또는 Rocky 9 + containerd + Calico/Cilium 조합의 kubeadm init/join 설치를 지원합니다.
 EOF
 
 echo "[4/4] tar.gz 패키징..."

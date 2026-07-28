@@ -4,17 +4,19 @@ Kubernetes 버전과 OS 버전을 고정하지 않고, 온라인 호스트에서
 
 기존 `k8s-<version>-<os>/` 디렉터리는 실제 설치 산출물로 유지하고, 이 디렉터리는 해당 산출물을 생성하는 공통 수집기/생성기 역할을 합니다.
 
+> **Security warning:** The generic builder does not implement the complete vulnerability-remediation baseline. Installation from generated bundles is disabled. Use one of the version- and OS-specific secure packages: `k8s-1.30.14-rocky9`, `k8s-1.33.13-rocky9`, `k8s-1.33.13-ubuntu24.04`, `k8s-1.36.3-rocky9`, or `k8s-1.36.3-ubuntu24.04`.
+
 ## 목표
 
-- Kubernetes patch 버전(`v1.33.11` 등)을 입력받아 minor repo(`v1.33`)를 자동 계산합니다.
-- Ubuntu 24.04와 Rocky Linux 9.6을 1차 지원 대상으로 둡니다.
+- Kubernetes patch 버전(`v1.33.13` 등)을 입력받아 minor repo(`v1.33`)를 자동 계산합니다.
+- Ubuntu 24.04와 Rocky Linux 9을 1차 지원 대상으로 둡니다.
 - 온라인 호스트에서 DEB/RPM, 바이너리, 매니페스트, 컨테이너 이미지를 수집합니다.
 - 수집 결과를 `bundles/k8s-<version>-<os>/` 하위에 버전 고정 산출물로 생성합니다.
-- 폐쇄망 노드는 생성된 번들 안의 `scripts/install.sh`만 사용합니다.
+- Generated bundles are used only for asset collection and reproducibility comparison. Use a version- and OS-specific secure package for node installation.
 
 ## 현재 범위
 
-이 단계는 Ubuntu 24.04와 Rocky Linux 9.6 기준 수집/번들 생성의 초기 구현입니다.
+이 단계는 Ubuntu 24.04와 Rocky Linux 9 기준 수집/번들 생성의 초기 구현입니다.
 
 - 공통 설정 파일: `install.conf`
 - 예시 설정 템플릿: `templates/install.conf.example`
@@ -28,10 +30,10 @@ Kubernetes 버전과 OS 버전을 고정하지 않고, 온라인 호스트에서
 - 번들 내부 스크립트 템플릿: `templates/scripts/`
 - 산출물 루트: `bundles/`
 
-현재 `download_assets_offline.sh`는 Ubuntu 24.04 기준 DEB, Rocky 9.6 기준 RPM, 공통 바이너리, 매니페스트, Helm chart, Kubernetes core image, Calico/Cilium image를 수집합니다.
+현재 `download_assets_offline.sh`는 Ubuntu 24.04 기준 DEB, Rocky 9 기준 RPM, 공통 바이너리, 매니페스트, Helm chart, Kubernetes core image, Calico/Cilium image를 수집합니다.
 `build_bundle.sh`는 staging 디렉터리에 수집 자산, 번들 스크립트, 설정을 배치하고 tar.gz 파일을 생성합니다.
 
-번들 내부 `scripts/install.sh`는 Ubuntu 24.04 또는 Rocky 9.6 + containerd + Calico/Cilium 조합의 kubeadm init/join 설치를 수행합니다.
+번들 내부 `scripts/install.sh`는 Ubuntu 24.04 또는 Rocky 9 + containerd + Calico/Cilium 조합의 kubeadm init/join 설치를 수행합니다.
 
 ## 기본 사용 흐름
 
@@ -72,7 +74,7 @@ k8s-offline-builder/
 - 생성된 번들은 항상 버전과 OS가 이름에 드러나야 합니다.
 - 스크립트는 컴포넌트 루트 기준으로 실행되도록 `cd "$(dirname "$0")/.."` 패턴을 사용합니다.
 - 외부 네트워크 접근은 `download_assets_offline.sh` 단계에만 존재해야 합니다.
-- Rocky 9.6에서는 Kubernetes 1.33 호환성을 위해 `CONTAINERD_VERSION=auto`를 `2.1.*` 라인으로 정규화합니다.
+- Rocky 9에서는 Kubernetes 1.33 호환성을 위해 `CONTAINERD_VERSION=auto`를 `2.1.*` 라인으로 정규화합니다.
 - 노드에 IP가 여러 개 있으면 생성된 번들의 `install.conf`에서 `KUBELET_NODE_IP`를 노드별로 지정합니다.
 
 ## 호환성 체크 방향
@@ -87,7 +89,7 @@ k8s-offline-builder/
 
 ## 재현성 검증
 
-기존 고정 산출물 `k8s-1.33.11-ubuntu24.04`와 builder 생성 번들의 기능 비교는 `docs/reproducibility-check-k8s-1.33.11-ubuntu24.04.md`를 참고합니다.
+기존 고정 산출물 `k8s-1.33.13-ubuntu24.04`와 builder 생성 번들의 기능 비교는 `docs/reproducibility-check-k8s-1.33.13-ubuntu24.04.md`를 참고합니다.
 
 ---
 

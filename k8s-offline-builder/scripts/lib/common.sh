@@ -15,8 +15,33 @@ require_file() {
 load_builder_config() {
     CONF_FILE="${CONF_FILE:-install.conf}"
     require_file "$CONF_FILE"
-    # shellcheck disable=SC1090
-    source "$CONF_FILE"
+    [ ! -L "$CONF_FILE" ] || fail "install.conf 심볼릭 링크는 허용하지 않습니다."
+
+    local key value
+    while IFS='=' read -r key value; do
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+        value="${value:-}"
+        value="${value%%#*}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+            value="${value:1:${#value}-2}"
+        elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+            value="${value:1:${#value}-2}"
+        fi
+        [[ -z "$key" || "$key" == \#* ]] && continue
+        case "$key" in
+            K8S_VERSION|TARGET_OS|ARCH|CONTAINER_RUNTIME|CONTAINERD_VERSION|\
+            CNI_CHOICE|CALICO_VERSION|CALICO_INSTALL_METHOD|CILIUM_VERSION|\
+            ENABLE_HUBBLE|MTU_VALUE|HELM_VERSION|NERDCTL_VERSION|BUNDLE_OUTPUT_DIR)
+                printf -v "$key" '%s' "$value"
+                ;;
+            *)
+                fail "install.conf의 허용되지 않은 키입니다: ${key}"
+                ;;
+        esac
+    done < "$CONF_FILE"
 }
 
 normalize_builder_config() {
@@ -28,7 +53,7 @@ normalize_builder_config() {
     fi
 
     if [[ ! "$K8S_VERSION" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-        fail "K8S_VERSION 형식이 올바르지 않습니다: $K8S_VERSION (예: v1.33.11)"
+        fail "K8S_VERSION 형식이 올바르지 않습니다: $K8S_VERSION (예: v1.33.13)"
     fi
 
     K8S_MAJOR="${BASH_REMATCH[1]}"
@@ -40,11 +65,11 @@ normalize_builder_config() {
     ARCH="${ARCH:-amd64}"
     CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-containerd}"
     CONTAINERD_VERSION="${CONTAINERD_VERSION:-auto}"
-    if [ "$TARGET_OS" = "rocky9.6" ] && [ "$CONTAINERD_VERSION" = "auto" ]; then
+    if [ "$TARGET_OS" = "rocky9" ] && [ "$CONTAINERD_VERSION" = "auto" ]; then
         CONTAINERD_VERSION="2.1.*"
     fi
     CNI_CHOICE="${CNI_CHOICE:-calico}"
-    CALICO_VERSION="${CALICO_VERSION:-v3.31.0}"
+    CALICO_VERSION="${CALICO_VERSION:-v3.31.6}"
     CALICO_INSTALL_METHOD="${CALICO_INSTALL_METHOD:-manifest}"
     CILIUM_VERSION="${CILIUM_VERSION:-v1.19.3}"
     ENABLE_HUBBLE="${ENABLE_HUBBLE:-true}"
@@ -144,7 +169,7 @@ validate_compatibility_policy() {
 }
 
 validate_builder_config() {
-    validate_choice "TARGET_OS" "$TARGET_OS" "ubuntu24.04" "rocky9.6"
+    validate_choice "TARGET_OS" "$TARGET_OS" "ubuntu24.04" "rocky9"
     validate_choice "ARCH" "$ARCH" "amd64"
     validate_choice "CONTAINER_RUNTIME" "$CONTAINER_RUNTIME" "containerd"
     validate_choice "CNI_CHOICE" "$CNI_CHOICE" "calico" "cilium"

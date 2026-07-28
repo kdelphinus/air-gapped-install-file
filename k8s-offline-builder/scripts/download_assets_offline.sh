@@ -151,7 +151,7 @@ download_common_images() {
             ubuntu24.04)
                 apt-get install -y containerd.io >/dev/null
                 ;;
-            rocky9.6)
+            rocky9)
                 dnf install -y containerd.io >/dev/null
                 ;;
         esac
@@ -162,7 +162,7 @@ download_common_images() {
             ubuntu24.04)
                 apt-get install -y "kubeadm=${K8S_DEB_VERSION}" >/dev/null
                 ;;
-            rocky9.6)
+            rocky9)
                 dnf install -y --disableexcludes=kubernetes "kubeadm-${K8S_RPM_VERSION}-*" >/dev/null
                 ;;
         esac
@@ -293,7 +293,7 @@ case "$TARGET_OS" in
         download_common_manifests
         download_common_images
         ;;
-    rocky9.6)
+    rocky9)
         mkdir -p "$RPM_DIR" "$BIN_DIR" "$IMG_DIR" "$UTIL_DIR" "$CHART_DIR"
 
         echo "[1/6] DNF repo 임시 등록..."
@@ -340,7 +340,7 @@ EOF
         download_common_images
         ;;
     *)
-        fail "현재는 ubuntu24.04 또는 rocky9.6 만 지원합니다: $TARGET_OS"
+        fail "현재는 ubuntu24.04 또는 rocky9 만 지원합니다: $TARGET_OS"
         ;;
 esac
 

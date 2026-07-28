@@ -13,7 +13,18 @@ AUTO_YES=0
 PURGE=0
 TARGET_OS="ubuntu24.04"
 if [ -f install.conf ]; then
-    source install.conf
+    while IFS='=' read -r key value; do
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+        value="${value:-}"
+        value="${value%%#*}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+            value="${value:1:${#value}-2}"
+        fi
+        [ "$key" = "TARGET_OS" ] && TARGET_OS="$value"
+    done < install.conf
 fi
 for arg in "$@"; do
     case "$arg" in
@@ -79,7 +90,7 @@ if [ "$PURGE" -eq 1 ]; then
             apt-get remove -y --purge kubeadm kubelet kubectl cri-tools containerd.io 2>/dev/null || true
             apt-get autoremove -y 2>/dev/null || true
             ;;
-        rocky9.6)
+        rocky9)
             dnf remove -y kubeadm kubelet kubectl cri-tools containerd.io 2>/dev/null || true
             dnf autoremove -y 2>/dev/null || true
             ;;

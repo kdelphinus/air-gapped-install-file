@@ -7,7 +7,18 @@ cd "$(dirname "$0")/.."
 CONF_FILE="${CONF_FILE:-install.conf}"
 
 if [ -f "$CONF_FILE" ]; then
-    source "$CONF_FILE"
+    while IFS='=' read -r key value; do
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+        value="${value:-}"
+        value="${value%%#*}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+            value="${value:1:${#value}-2}"
+        fi
+        [ "$key" = "BUNDLE_OUTPUT_DIR" ] && BUNDLE_OUTPUT_DIR="$value"
+    done < "$CONF_FILE"
 else
     BUNDLE_OUTPUT_DIR="bundles"
 fi
