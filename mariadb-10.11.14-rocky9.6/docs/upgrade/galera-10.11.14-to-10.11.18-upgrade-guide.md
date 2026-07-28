@@ -173,12 +173,38 @@ SHOW GLOBAL VARIABLES LIKE 'wsrep_desync';
 다음 절차를 DB3, DB2, DB1 순서로 한 노드씩 수행했다. 현재 작업 중인
 노드가 정상화되기 전에는 다음 노드로 진행하지 않는다.
 
-> [!NOTE]
-> 본 가이드의 절차는 제공되는 자동화 스크립트 `scripts/upgrade_galera_10.11.18.sh`를 통해서도 수행할 수 있습니다.
-> ```bash
-> # 현재 노드에서 롤링 업그레이드 전체 자동 수행
-> sudo ./scripts/upgrade_galera_10.11.18.sh --all
-> ```
+자동화 스크립트를 사용할 때도 한 번에 한 노드만 실행한다. 인자 없이
+실행하면 사용법만 표시되며, 실제 업그레이드에는 노드 역할과 `--yes`
+옵션이 필요하다.
+
+```bash
+# 모든 노드에서 사전 상태 확인
+sudo ./scripts/upgrade_galera_10.11.18.sh --check-only
+
+# DB3
+sudo ./scripts/upgrade_galera_10.11.18.sh \
+  --upgrade-node \
+  --node-role db3 \
+  --yes
+
+# DB3가 완전히 Synced된 것을 확인한 후 DB2
+sudo ./scripts/upgrade_galera_10.11.18.sh \
+  --upgrade-node \
+  --node-role db2 \
+  --yes
+
+# DB2가 완전히 Synced된 것을 확인한 후 DB1
+# DB1은 --all 실행 시 업그레이드 전 Dump도 보존한다.
+sudo ./scripts/upgrade_galera_10.11.18.sh \
+  --all \
+  --node-role db1 \
+  --yes
+
+# 전체 업그레이드 완료 후 DB1 백업 검증
+sudo ./scripts/upgrade_galera_10.11.18.sh \
+  --verify-backup \
+  --node-role db1
+```
 
 ### 7.1 MariaDB 중지
 
