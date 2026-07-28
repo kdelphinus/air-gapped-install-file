@@ -79,5 +79,6 @@
 - **Cilium**: `cilium-1.19.3`
 - **GitLab**: `gitlab-18.7`, `gitlab-omnibus-18.7`
 - **Velero**: `velero-1.18.0`
-- **K8s Installation**: `k8s-1.33.11-ubuntu24.04`
+- **K8s Installation (Current)**: `k8s-1.36.3-ubuntu24.04`, `k8s-1.36.3-rocky9`
+- **K8s Installation (EOL Compatibility)**: `k8s-1.33.13-ubuntu24.04`, `k8s-1.33.13-rocky9`, `k8s-1.30.14-rocky9`
 - **MetalLB**: `metallb-0.14.8`, `metallb-0.16.1`

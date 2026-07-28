@@ -1,0 +1,111 @@
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "__NODE_IP__"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: "unix:///run/containerd/containerd.sock"
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: "v1.33.13"
+controlPlaneEndpoint: "__CONTROL_PLANE_ENDPOINT__"
+imageRepository: "registry.k8s.io"
+networking:
+  dnsDomain: "__DNS_DOMAIN__"
+  podSubnet: "__POD_CIDR__"
+  serviceSubnet: "__SERVICE_CIDR__"
+apiServer:
+  certSANs:
+    - "__NODE_IP__"
+    - "__ENDPOINT_HOST__"
+  extraArgs:
+    - name: anonymous-auth
+      value: "false"
+    - name: authorization-mode
+      value: "Node,RBAC"
+    - name: enable-admission-plugins
+      value: "NodeRestriction"
+    - name: service-account-lookup
+      value: "true"
+    - name: profiling
+      value: "false"
+    - name: tls-min-version
+      value: "VersionTLS12"
+    - name: tls-cipher-suites
+      value: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+    - name: audit-policy-file
+      value: "/etc/kubernetes/security/audit-policy.yaml"
+    - name: audit-log-path
+      value: "/var/log/kubernetes/audit/audit.log"
+    - name: audit-log-maxage
+      value: "30"
+    - name: audit-log-maxbackup
+      value: "10"
+    - name: audit-log-maxsize
+      value: "100"
+    - name: encryption-provider-config
+      value: "/etc/kubernetes/security/encryption-config.yaml"
+    - name: admission-control-config-file
+      value: "/etc/kubernetes/security/pod-security-admission-config.yaml"
+  extraVolumes:
+    - name: kubernetes-security
+      hostPath: "/etc/kubernetes/security"
+      mountPath: "/etc/kubernetes/security"
+      readOnly: true
+      pathType: Directory
+    - name: kubernetes-audit
+      hostPath: "/var/log/kubernetes/audit"
+      mountPath: "/var/log/kubernetes/audit"
+      readOnly: false
+      pathType: Directory
+controllerManager:
+  extraArgs:
+    - name: bind-address
+      value: "127.0.0.1"
+    - name: profiling
+      value: "false"
+    - name: use-service-account-credentials
+      value: "true"
+scheduler:
+  extraArgs:
+    - name: bind-address
+      value: "127.0.0.1"
+    - name: profiling
+      value: "false"
+etcd:
+  local:
+    extraArgs:
+      - name: auto-tls
+        value: "false"
+      - name: client-cert-auth
+        value: "true"
+      - name: peer-auto-tls
+        value: "false"
+      - name: peer-client-cert-auth
+        value: "true"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: /etc/kubernetes/pki/ca.crt
+authorization:
+  mode: Webhook
+readOnlyPort: 0
+protectKernelDefaults: true
+rotateCertificates: true
+serverTLSBootstrap: true
+tlsMinVersion: VersionTLS12
+tlsCipherSuites:
+  - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+  - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+seccompDefault: true
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+metricsBindAddress: 127.0.0.1:10249

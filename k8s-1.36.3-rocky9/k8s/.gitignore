@@ -1,0 +1,12 @@
+ASSET_VERSIONS.txt
+SHA256SUMS
+binaries/*
+!binaries/.gitkeep
+images/*
+!images/.gitkeep
+keys/*
+!keys/.gitkeep
+rpms/*
+!rpms/.gitkeep
+utils/*
+!utils/.gitkeep

@@ -1,0 +1,88 @@
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "__NODE_IP__"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: "unix:///run/containerd/containerd.sock"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: "v1.30.14"
+controlPlaneEndpoint: "__CONTROL_PLANE_ENDPOINT__"
+imageRepository: "registry.k8s.io"
+networking:
+  dnsDomain: "__DNS_DOMAIN__"
+  podSubnet: "__POD_CIDR__"
+  serviceSubnet: "__SERVICE_CIDR__"
+apiServer:
+  certSANs:
+    - "__NODE_IP__"
+    - "__ENDPOINT_HOST__"
+  extraArgs:
+    admission-control-config-file: "/etc/kubernetes/security/pod-security-admission-config.yaml"
+    anonymous-auth: "false"
+    audit-log-maxage: "30"
+    audit-log-maxbackup: "10"
+    audit-log-maxsize: "100"
+    audit-log-path: "/var/log/kubernetes/audit/audit.log"
+    audit-policy-file: "/etc/kubernetes/security/audit-policy.yaml"
+    authorization-mode: "Node,RBAC"
+    enable-admission-plugins: "NodeRestriction"
+    encryption-provider-config: "/etc/kubernetes/security/encryption-config.yaml"
+    profiling: "false"
+    service-account-lookup: "true"
+    tls-cipher-suites: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+    tls-min-version: "VersionTLS12"
+  extraVolumes:
+    - name: kubernetes-security
+      hostPath: "/etc/kubernetes/security"
+      mountPath: "/etc/kubernetes/security"
+      readOnly: true
+      pathType: Directory
+    - name: kubernetes-audit
+      hostPath: "/var/log/kubernetes/audit"
+      mountPath: "/var/log/kubernetes/audit"
+      readOnly: false
+      pathType: Directory
+controllerManager:
+  extraArgs:
+    bind-address: "127.0.0.1"
+    profiling: "false"
+    use-service-account-credentials: "true"
+scheduler:
+  extraArgs:
+    bind-address: "127.0.0.1"
+    profiling: "false"
+etcd:
+  local:
+    extraArgs:
+      auto-tls: "false"
+      client-cert-auth: "true"
+      peer-auto-tls: "false"
+      peer-client-cert-auth: "true"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: /etc/kubernetes/pki/ca.crt
+authorization:
+  mode: Webhook
+readOnlyPort: 0
+protectKernelDefaults: true
+rotateCertificates: true
+serverTLSBootstrap: true
+tlsMinVersion: VersionTLS12
+tlsCipherSuites:
+  - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+  - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+seccompDefault: true
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+metricsBindAddress: 127.0.0.1:10249
