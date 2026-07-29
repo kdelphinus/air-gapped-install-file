@@ -2,13 +2,13 @@
 set -Eeuo pipefail
 
 # ==============================================================================
-# MariaDB Galera Cluster 10.11.14 -> 10.11.18 Rolling Upgrade Script
+# MariaDB Galera Cluster 10.11.16 -> 10.11.18 Rolling Upgrade Script
 #
 # Target OS: Rocky Linux / RHEL 9 x86_64
 # Target MariaDB: 10.11.18-1.el9
 # Target Galera: 26.4.27-1.el9
 # Reference:
-#   docs/upgrade/galera-10.11.14-to-10.11.18-upgrade-guide.md
+#   docs/upgrade/galera-10.11.16-to-10.11.18-upgrade-guide.md
 # ==============================================================================
 
 if [[ -t 1 ]]; then
@@ -50,10 +50,10 @@ usage() {
   cat <<'EOF'
 사용법:
   upgrade_galera_10.11.18.sh --check-only
-  upgrade_galera_10.11.18.sh --backup-dump --node-role <db1|db2|db3> --backup-node
-  upgrade_galera_10.11.18.sh --upgrade-node --node-role <db1|db2|db3> --yes
-  upgrade_galera_10.11.18.sh --verify-backup --node-role <db1|db2|db3> --backup-node
-  upgrade_galera_10.11.18.sh --all --node-role <db1|db2|db3> [--backup-node] --yes
+  upgrade_galera_10.11.18.sh --backup-dump --backup-node
+  upgrade_galera_10.11.18.sh --upgrade-node --yes
+  upgrade_galera_10.11.18.sh --verify-backup --backup-node
+  upgrade_galera_10.11.18.sh --all [--backup-node] --yes
 
 옵션:
   --check-only
@@ -65,6 +65,8 @@ usage() {
 
   --upgrade-node
       현재 노드만 MariaDB 10.11.18과 Galera 26.4.27로 업그레이드합니다.
+      이미 목표 버전인 노드에서는 패키지 설치와 서비스 재시작을 생략하고
+      mariadb-upgrade 및 최종 검증 단계를 안전하게 다시 실행합니다.
 
   --verify-backup
       백업 노드의 백업 서비스를 실행하고 결과와 타이머를 검증합니다.
@@ -73,12 +75,11 @@ usage() {
       엄격한 사전 점검 후 현재 노드를 업그레이드합니다.
       --backup-node를 지정한 노드에서는 업그레이드 전 Dump도 보존합니다.
 
-  --node-role <db1|db2|db3>
-      현재 작업 노드의 역할입니다. 변경 작업에서는 필수입니다.
+
 
   --backup-node
       현재 노드가 논리 백업 담당임을 표시합니다.
-      실제 호스트가 db1, db2 또는 db3인지와 독립적으로 지정할 수 있습니다.
+      호스트 이름과 독립적으로 지정할 수 있습니다.
 
   --yes
       업그레이드 실행을 명시적으로 승인합니다.
@@ -103,7 +104,6 @@ EOF
 }
 
 ACTION=""
-NODE_ROLE=""
 IS_BACKUP_NODE=false
 ASSUME_YES=false
 
@@ -134,11 +134,6 @@ while [[ $# -gt 0 ]]; do
       ACTION="all"
       shift
       ;;
-    --node-role)
-      [[ $# -ge 2 ]] || die "--node-role 뒤에 db1, db2 또는 db3를 지정해야 합니다."
-      NODE_ROLE="${2,,}"
-      shift 2
-      ;;
     --backup-node)
       IS_BACKUP_NODE=true
       shift
@@ -168,11 +163,12 @@ if [[ "${EUID}" -ne 0 ]]; then
   die "이 작업은 root 권한이 필요합니다. sudo로 실행하십시오."
 fi
 
-readonly SOURCE_MARIADB_VERSION="10.11.14"
+readonly SOURCE_MARIADB_VERSION="10.11.16"
 readonly TARGET_MARIADB_VERSION="10.11.18"
 readonly TARGET_MARIADB_RPM="10.11.18-1.el9.x86_64"
+readonly SOURCE_GALERA_RPM="26.4.25-1.el9.x86_64"
 readonly TARGET_GALERA_RPM="26.4.27-1.el9.x86_64"
-readonly PRE_UPGRADE_BACKUP_DIR="/backup/pre-upgrade-10.11.14"
+readonly PRE_UPGRADE_BACKUP_DIR="/backup/pre-upgrade-10.11.16"
 readonly DAILY_DUMP_DIR="/backup/dump"
 readonly UPGRADE_INFO_FILE="/var/lib/mysql/mysql_upgrade_info"
 readonly LOCK_FILE="/run/lock/mariadb-galera-10.11.18-upgrade.lock"
@@ -223,15 +219,6 @@ validate_positive_integer "EXPECTED_CLUSTER_SIZE" "${EXPECTED_CLUSTER_SIZE}"
 validate_positive_integer "SYNC_TIMEOUT" "${SYNC_TIMEOUT}"
 validate_positive_integer "UPGRADE_TIMEOUT" "${UPGRADE_TIMEOUT}"
 
-require_node_role() {
-  case "${NODE_ROLE}" in
-    db1|db2|db3)
-      ;;
-    *)
-      die "--node-role db1, db2 또는 db3를 지정해야 합니다."
-      ;;
-  esac
-}
 
 require_backup_node() {
   [[ "${IS_BACKUP_NODE}" == true ]] ||
@@ -283,6 +270,7 @@ require_common_commands() {
     chmod
     cp
     cut
+    date
     find
     flock
     grep
@@ -293,11 +281,13 @@ require_common_commands() {
     journalctl
     mariadb
     mariadb-upgrade
+    mv
     rpm
     sha256sum
     sort
     systemctl
     timeout
+    tr
   )
 
   for command_name in "${commands[@]}"; do
@@ -376,15 +366,22 @@ check_cluster_status() {
   log_success "Galera 사전 조건이 모두 정상입니다."
 }
 
+running_mariadb_version() {
+  mariadb -NBe "SELECT VERSION();" | cut -d- -f1
+}
+
 check_source_version() {
   local current_version
 
-  current_version=$(mariadb -NBe "SELECT VERSION();" | cut -d- -f1)
+  current_version=$(running_mariadb_version)
 
   [[ "${current_version}" == "${SOURCE_MARIADB_VERSION}" ]] ||
     die "현재 MariaDB 버전이 ${SOURCE_MARIADB_VERSION}이 아닙니다: ${current_version}"
 
   log_success "업그레이드 시작 버전 확인: ${current_version}"
+
+  assert_installed_rpm "galera-4" "${SOURCE_GALERA_RPM}"
+  log_success "업그레이드 시작 Galera 버전 확인: ${SOURCE_GALERA_RPM}"
 }
 
 selinux_port_is_mysqld() {
@@ -595,11 +592,81 @@ run_mariadb_upgrade_step() {
   fi
 }
 
+prepare_upgrade_info_marker() {
+  local current_value
+  local backup_file
+
+  [[ -f "${UPGRADE_INFO_FILE}" ]] || return 0
+
+  current_value=$(tr -d '\r\n' < "${UPGRADE_INFO_FILE}")
+  if [[ "${current_value}" == "${TARGET_MARIADB_VERSION}-MariaDB"* ]]; then
+    log_info "mysql_upgrade_info가 이미 목표 버전입니다: ${current_value}"
+    return 0
+  fi
+
+  backup_file="${UPGRADE_INFO_FILE}.pre-$(date +%Y%m%d_%H%M%S)"
+  mv -- "${UPGRADE_INFO_FILE}" "${backup_file}"
+  log_warn \
+    "이전 mysql_upgrade_info를 보존했습니다: ${current_value:-empty} -> ${backup_file}"
+}
+
+validate_upgrade_info() {
+  local upgrade_info
+
+  [[ -f "${UPGRADE_INFO_FILE}" ]] ||
+    die "mariadb-upgrade 완료 파일이 없습니다: ${UPGRADE_INFO_FILE}"
+
+  upgrade_info=$(tr -d '\r\n' < "${UPGRADE_INFO_FILE}")
+  [[ "${upgrade_info}" == "${TARGET_MARIADB_VERSION}-MariaDB"* ]] ||
+    die "mysql_upgrade_info 값이 올바르지 않습니다: ${upgrade_info:-empty}"
+
+  log_success "mysql_upgrade_info 검증 완료: ${upgrade_info}"
+}
+
+run_post_upgrade_tasks() {
+  local running_version
+
+  running_version=$(running_mariadb_version)
+  [[ "${running_version}" == "${TARGET_MARIADB_VERSION}" ]] ||
+    die "사후 작업 대상 MariaDB 버전이 올바르지 않습니다: ${running_version}"
+
+  prepare_upgrade_info_marker
+
+  run_mariadb_upgrade_step \
+    "시스템 테이블 업그레이드를 실행합니다." \
+    --upgrade-system-tables
+
+  run_mariadb_upgrade_step \
+    "전체 스키마 업그레이드 검사를 실행합니다."
+
+  validate_upgrade_info
+  verify_target_packages
+  check_cluster_status
+
+  running_version=$(running_mariadb_version)
+  [[ "${running_version}" == "${TARGET_MARIADB_VERSION}" ]] ||
+    die "실행 중인 MariaDB 버전이 올바르지 않습니다: ${running_version}"
+
+  log_success "현재 노드의 MariaDB 10.11.18 사후 작업 및 검증 완료"
+}
+
 perform_node_upgrade() {
-  log_info "현재 작업 노드: role=${NODE_ROLE}, backup_node=${IS_BACKUP_NODE}, hostname=$(hostname -f)"
+  local current_version
+
+  log_info "현재 작업 노드: backup_node=${IS_BACKUP_NODE}, hostname=$(hostname -f)"
   log_warn "비백업 노드를 한 번에 하나씩 처리하고 백업 노드는 마지막에 작업하는 것을 권장합니다."
 
   check_cluster_status
+  current_version=$(running_mariadb_version)
+
+  if [[ "${current_version}" == "${TARGET_MARIADB_VERSION}" ]]; then
+    log_warn \
+      "현재 노드는 이미 MariaDB ${TARGET_MARIADB_VERSION}입니다. 패키지 설치와 서비스 재시작을 생략합니다."
+    verify_target_packages
+    run_post_upgrade_tasks
+    return 0
+  fi
+
   check_source_version
   check_selinux_preflight
   preflight_target_packages
@@ -623,30 +690,9 @@ perform_node_upgrade() {
   systemctl start --no-block mariadb
   wait_for_synced_cluster
 
-  run_mariadb_upgrade_step \
-    "시스템 테이블 업그레이드를 실행합니다." \
-    --upgrade-system-tables
-
-  run_mariadb_upgrade_step \
-    "전체 스키마 업그레이드 검사를 실행합니다."
-
-  [[ -f "${UPGRADE_INFO_FILE}" ]] ||
-    die "mariadb-upgrade 완료 파일이 없습니다: ${UPGRADE_INFO_FILE}"
-
-  [[ "$(<"${UPGRADE_INFO_FILE}")" == "${TARGET_MARIADB_VERSION}-MariaDB" ]] ||
-    die "mysql_upgrade_info 값이 올바르지 않습니다: $(<"${UPGRADE_INFO_FILE}")"
-
-  verify_target_packages
-  check_cluster_status
-
-  local running_version
-  running_version=$(mariadb -NBe "SELECT VERSION();" | cut -d- -f1)
-  [[ "${running_version}" == "${TARGET_MARIADB_VERSION}" ]] ||
-    die "실행 중인 MariaDB 버전이 올바르지 않습니다: ${running_version}"
-
+  run_post_upgrade_tasks
   log_success "현재 노드의 MariaDB 10.11.18 업그레이드 완료"
 }
-
 latest_dump_file() {
   find "${DAILY_DUMP_DIR}" \
     -maxdepth 1 \
@@ -702,26 +748,22 @@ case "${ACTION}" in
     check_cluster_status
     ;;
   backup)
-    require_node_role
     require_backup_node
     acquire_lock
     check_cluster_status
     preserve_pre_upgrade_backup
     ;;
   upgrade)
-    require_node_role
     require_upgrade_confirmation
     acquire_lock
     perform_node_upgrade
     ;;
   verify_backup)
-    require_node_role
     require_backup_node
     acquire_lock
     verify_backup_node
     ;;
   all)
-    require_node_role
     require_upgrade_confirmation
     acquire_lock
     check_cluster_status

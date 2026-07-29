@@ -1,20 +1,20 @@
-# MariaDB Galera 10.11.14에서 10.11.18 업그레이드 가이드
+# MariaDB Galera 10.11.16에서 10.11.18 업그레이드 가이드
 
 ## 1. 문서 목적
 
 Rocky Linux 9 기반 3노드 MariaDB Galera Cluster를 MariaDB
-`10.11.14`에서 `10.11.18`로 롤링 업그레이드한 결과와 재수행 절차를
+`10.11.16`에서 `10.11.18`로 롤링 업그레이드한 결과와 재수행 절차를
 기록한다.
 
 이 문서는 실제 테스트에서 확인한 명령, 장애 원인, 복구 방법 및 최종
 검증 결과를 기준으로 작성했다. 상세 장애 대응은
-[트러블슈팅 문서](galera-10.11.14-to-10.11.18-troubleshooting.md)를
+[트러블슈팅 문서](galera-10.11.16-to-10.11.18-troubleshooting.md)를
 참조한다.
 
 ## 2. 완료 범위
 
-- MariaDB `10.11.14`에서 `10.11.18`로 3노드 롤링 업그레이드
-- Galera `26.4.23`에서 `26.4.27`로 업그레이드
+- MariaDB `10.11.16`에서 `10.11.18`로 3노드 롤링 업그레이드
+- Galera `26.4.25`에서 `26.4.27`로 업그레이드
 - 업그레이드 순서 `DB3 -> DB2 -> DB1` 준수
 - 각 노드의 `mariadb-upgrade` 완료
 - 최종 3노드 `Primary`, `Synced`, `Ready` 상태 확인
@@ -47,8 +47,8 @@ wsrep_cluster_address="gcomm://1.1.1.233,1.1.1.73,1.1.1.156"
 
 | 항목 | 업그레이드 전 | 업그레이드 후 |
 | --- | --- | --- |
-| MariaDB | `10.11.14-1.el9` | `10.11.18-1.el9` |
-| Galera | `26.4.23-1.el9` | `26.4.27-1.el9` |
+| MariaDB | `10.11.16-1.el9` | `10.11.18-1.el9` |
+| Galera | `26.4.25-1.el9` | `26.4.27-1.el9` |
 | 운영체제 | Rocky Linux 9 | 변경 없음 |
 
 - MariaDB 공식 온라인 DNF 저장소를 사용했다.
@@ -69,7 +69,7 @@ wsrep_cluster_address="gcomm://1.1.1.233,1.1.1.73,1.1.1.156"
 | 백업 스크립트 | `/opt/mariadb-backup/backup-dump.sh` |
 | 인증 파일 | `/etc/mariadb-backup.cnf` |
 | 일일 Dump | `/backup/dump` |
-| 업그레이드 전 보존본 | `/backup/pre-upgrade-10.11.14` |
+| 업그레이드 전 보존본 | `/backup/pre-upgrade-10.11.16` |
 
 백업 계정은 `backup_user@localhost`이며 다음 최소 권한을 사용했다.
 
@@ -100,7 +100,7 @@ sudo install -d \
   -o root \
   -g root \
   -m 700 \
-  /backup/pre-upgrade-10.11.14
+  /backup/pre-upgrade-10.11.16
 
 sudo bash -c '
 set -Eeuo pipefail
@@ -115,7 +115,7 @@ latest_dump=$(find /backup/dump \
   cut -d" " -f2-)
 
 test -n "${latest_dump}"
-cp -a -- "${latest_dump}" /backup/pre-upgrade-10.11.14/
+cp -a -- "${latest_dump}" /backup/pre-upgrade-10.11.16/
 '
 ```
 
@@ -126,7 +126,7 @@ cp -a -- "${latest_dump}" /backup/pre-upgrade-10.11.14/
 ```bash
 sudo bash -c '
 set -Eeuo pipefail
-cd /backup/pre-upgrade-10.11.14
+cd /backup/pre-upgrade-10.11.16
 sha256sum -- *.sql.gz > SHA256SUMS
 sha256sum -c SHA256SUMS
 gzip -t -- *.sql.gz
@@ -174,7 +174,7 @@ SHOW GLOBAL VARIABLES LIKE 'wsrep_desync';
 노드가 정상화되기 전에는 다음 노드로 진행하지 않는다.
 
 자동화 스크립트를 사용할 때도 한 번에 한 노드만 실행한다. 인자 없이
-실행하면 사용법만 표시되며, 실제 업그레이드에는 노드 역할과 `--yes`
+실행하면 사용법만 표시되며, 실제 업그레이드에는 `--yes`
 옵션이 필요하다.
 
 ```bash
@@ -184,27 +184,23 @@ sudo ./scripts/upgrade_galera_10.11.18.sh --check-only
 # DB3
 sudo ./scripts/upgrade_galera_10.11.18.sh \
   --upgrade-node \
-  --node-role db3 \
   --yes
 
 # DB3가 완전히 Synced된 것을 확인한 후 DB2
 sudo ./scripts/upgrade_galera_10.11.18.sh \
   --upgrade-node \
-  --node-role db2 \
   --yes
 
 # DB2가 완전히 Synced된 것을 확인한 후 DB1
 # 현재 환경의 DB1이 백업 노드이므로 --backup-node를 함께 지정한다.
 sudo ./scripts/upgrade_galera_10.11.18.sh \
   --all \
-  --node-role db1 \
   --backup-node \
   --yes
 
 # 전체 업그레이드 완료 후 백업 노드 검증
 sudo ./scripts/upgrade_galera_10.11.18.sh \
   --verify-backup \
-  --node-role db1 \
   --backup-node
 ```
 
@@ -353,9 +349,38 @@ DB2에서 `mysql.proc` 변경 작업이 메타데이터 잠금을 기다리며 �
 전체 업그레이드를 순서대로 실행해 완료했다.
 
 세부 진단 및 복구 명령은
-[트러블슈팅 문서](galera-10.11.14-to-10.11.18-troubleshooting.md)를
+[트러블슈팅 문서](galera-10.11.16-to-10.11.18-troubleshooting.md)를
 참조한다.
 
+### 8.5 mysql_upgrade_info에 이전 버전이 남음
+
+패키지, 실행 중인 서버 및 Galera는 모두 `10.11.18`과 정상 상태였지만,
+`/var/lib/mysql/mysql_upgrade_info`에 `10.11.16-MariaDB`가 남아 자동화
+스크립트의 마지막 검증만 실패했다.
+
+수정된 스크립트는 실행 중인 MariaDB가 이미 `10.11.18`이면 DNF 설치와
+서비스 재시작을 생략한다. 이전 버전의 `mysql_upgrade_info`는 다음과 같은
+이름으로 보존하고 `mariadb-upgrade --force`를 다시 실행해 완료 파일을
+정상적으로 생성한다.
+
+```text
+/var/lib/mysql/mysql_upgrade_info.pre-YYYYmmdd_HHMMSS
+```
+
+따라서 동일한 노드에서 업그레이드 명령을 다시 실행한다.
+
+```bash
+sudo ./scripts/upgrade_galera_10.11.18.sh \
+  --upgrade-node \
+  --yes
+```
+
+재실행 완료 기준은 다음과 같다.
+
+- DNF 설치 및 MariaDB 서비스 재시작 단계가 생략됨
+- `mariadb-upgrade`의 Phase 8/8 완료
+- `mysql_upgrade_info`가 `10.11.18-MariaDB`로 확인됨
+- Galera가 `size=3`, `Primary`, `Synced`, `Ready=ON`으로 확인됨
 ## 9. 최종 검증 결과
 
 ### 9.1 패키지 및 클러스터
@@ -427,7 +452,7 @@ sudo systemctl list-timers mariadb-backup-dump.timer --all
 
 ## 11. 완료 판정
 
-2026-07-23 기준 MariaDB Galera 3노드의 `10.11.14`에서 `10.11.18`로
+2026-07-23 기준 MariaDB Galera 3노드의 `10.11.16`에서 `10.11.18`로
 롤링 업그레이드와 업그레이드 후 논리 백업 검증을 완료했다.
 
 운영 반영 시에도 이 문서의 순서와 중단 조건을 적용하고, 한 노드가

@@ -2,11 +2,11 @@
 
 ## 1. 문서 목적
 
-MariaDB Galera Cluster를 `10.11.14`에서 `10.11.18`로 롤링
+MariaDB Galera Cluster를 `10.11.16`에서 `10.11.18`로 롤링
 업그레이드하면서 실제 발생한 문제와 해결 방법을 기록한다.
 
 정상 업그레이드 순서와 최종 결과는
-[업그레이드 가이드](galera-10.11.14-to-10.11.18-upgrade-guide.md)를
+[업그레이드 가이드](galera-10.11.16-to-10.11.18-upgrade-guide.md)를
 참조한다.
 
 ## 2. DNF exclude로 인한 설치 차단
@@ -17,7 +17,7 @@ MariaDB Galera Cluster를 `10.11.14`에서 `10.11.18`로 롤링
 All matches were filtered out by exclude filtering
 ```
 
-MariaDB `10.11.14` 버전 고정을 위해 설정한 DNF `exclude` 또는
+MariaDB `10.11.16` 버전 고정을 위해 설정한 DNF `exclude` 또는
 versionlock이 업그레이드 대상 패키지까지 차단한다.
 
 ### 2.2 확인
@@ -243,11 +243,11 @@ sudo cat /var/lib/mysql/mysql_upgrade_info
 ### 7.1 증상
 
 ```bash
-sudo gzip -t /backup/pre-upgrade-10.11.14/*.sql.gz
+sudo gzip -t /backup/pre-upgrade-10.11.16/*.sql.gz
 ```
 
 ```text
-gzip: /backup/pre-upgrade-10.11.14/*.sql.gz: No such file or directory
+gzip: /backup/pre-upgrade-10.11.16/*.sql.gz: No such file or directory
 ```
 
 파일이 실제로 존재하더라도 현재 사용자가 root 전용 디렉터리를 읽지
@@ -262,7 +262,7 @@ root 셸 안에서 와일드카드를 확장한다.
 ```bash
 sudo bash -c '
 set -Eeuo pipefail
-cd /backup/pre-upgrade-10.11.14
+cd /backup/pre-upgrade-10.11.16
 sha256sum -- *.sql.gz > SHA256SUMS
 sha256sum -c SHA256SUMS
 gzip -t -- *.sql.gz
@@ -273,7 +273,7 @@ chmod 600 -- *.sql.gz SHA256SUMS
 또는 `find -exec`를 사용한다.
 
 ```bash
-sudo find /backup/pre-upgrade-10.11.14 \
+sudo find /backup/pre-upgrade-10.11.16 \
   -maxdepth 1 \
   -type f \
   -name '*.sql.gz' \
@@ -284,7 +284,7 @@ sudo find /backup/pre-upgrade-10.11.14 \
 
 ```bash
 sudo sha256sum \
-  -c /backup/pre-upgrade-10.11.14/SHA256SUMS
+  -c /backup/pre-upgrade-10.11.16/SHA256SUMS
 ```
 
 ## 8. 백업 계정 인증 실패
