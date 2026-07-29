@@ -359,9 +359,9 @@ DB2에서 `mysql.proc` 변경 작업이 메타데이터 잠금을 기다리며 �
 스크립트의 마지막 검증만 실패했다.
 
 수정된 스크립트는 실행 중인 MariaDB가 이미 `10.11.18`이면 DNF 설치와
-서비스 재시작을 생략한다. 이전 버전의 `mysql_upgrade_info`는 다음과 같은
-이름으로 보존하고 `mariadb-upgrade --force`를 다시 실행해 완료 파일을
-정상적으로 생성한다.
+서비스 재시작을 생략한다. 이전 버전의 `mysql_upgrade_info`는 삭제하지 않고
+다음 이름으로 복사해 보존한다. 두 단계의 `mariadb-upgrade --force`가 모두
+성공한 뒤에만 `10.11.18-MariaDB` 완료 마커를 원자적으로 기록한다.
 
 ```text
 /var/lib/mysql/mysql_upgrade_info.pre-YYYYmmdd_HHMMSS
@@ -379,8 +379,10 @@ sudo ./scripts/upgrade_galera_10.11.18.sh \
 
 - DNF 설치 및 MariaDB 서비스 재시작 단계가 생략됨
 - `mariadb-upgrade`의 Phase 8/8 완료
+- 이전 마커가 `.pre-YYYYmmdd_HHMMSS` 파일로 보존됨
 - `mysql_upgrade_info`가 `10.11.18-MariaDB`로 확인됨
 - Galera가 `size=3`, `Primary`, `Synced`, `Ready=ON`으로 확인됨
+
 ## 9. 최종 검증 결과
 
 ### 9.1 패키지 및 클러스터

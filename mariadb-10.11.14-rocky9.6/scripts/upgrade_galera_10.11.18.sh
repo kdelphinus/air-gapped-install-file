@@ -605,9 +605,28 @@ prepare_upgrade_info_marker() {
   fi
 
   backup_file="${UPGRADE_INFO_FILE}.pre-$(date +%Y%m%d_%H%M%S)"
-  mv -- "${UPGRADE_INFO_FILE}" "${backup_file}"
+  cp -a -- "${UPGRADE_INFO_FILE}" "${backup_file}"
   log_warn \
-    "이전 mysql_upgrade_info를 보존했습니다: ${current_value:-empty} -> ${backup_file}"
+    "이전 mysql_upgrade_info를 복사해 보존했습니다: ${current_value:-empty} -> ${backup_file}"
+}
+
+write_upgrade_info_marker() {
+  local marker_tmp="${UPGRADE_INFO_FILE}.tmp.$$"
+
+  install -o mysql -g mysql -m 644 /dev/null "${marker_tmp}"
+  printf '%s\n' "${TARGET_MARIADB_VERSION}-MariaDB" > "${marker_tmp}"
+
+  if command -v restorecon >/dev/null 2>&1; then
+    restorecon -F "${marker_tmp}"
+  fi
+
+  mv -f -- "${marker_tmp}" "${UPGRADE_INFO_FILE}"
+
+  if command -v restorecon >/dev/null 2>&1; then
+    restorecon -F "${UPGRADE_INFO_FILE}"
+  fi
+
+  log_success "mysql_upgrade_info 완료 마커 기록: ${TARGET_MARIADB_VERSION}-MariaDB"
 }
 
 validate_upgrade_info() {
@@ -639,6 +658,7 @@ run_post_upgrade_tasks() {
   run_mariadb_upgrade_step \
     "전체 스키마 업그레이드 검사를 실행합니다."
 
+  write_upgrade_info_marker
   validate_upgrade_info
   verify_target_packages
   check_cluster_status
