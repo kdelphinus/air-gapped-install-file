@@ -169,25 +169,75 @@ mapfile -t MANIFEST_IMAGES < <(
         "${UTIL_DIR}/calico-custom-resources.yaml" \
         "${UTIL_DIR}/local-path-storage.yaml" |
         sed -E 's/^[[:space:]]*image:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/' |
-        grep -E '^[A-Za-z0-9._-]+([.:][A-Za-z0-9._-]+)?/' |
+        grep -E '^[A-Za-z0-9._-]+([.:][A-Za-z0-9._-]+)?(/|$)' |
         sort -u
 )
+
+normalize_image_ref() {
+    local image="$1"
+    local first_component="${image%%/*}"
+    local last_component="${image##*/}"
+
+    if [[ "$image" != */* ]]; then
+        image="docker.io/library/${image}"
+    elif [[ "$first_component" != *.* &&
+            "$first_component" != *:* &&
+            "$first_component" != "localhost" ]]; then
+        image="docker.io/${image}"
+    fi
+    if [[ "$last_component" != *:* && "$image" != *@* ]]; then
+        image="${image}:latest"
+    fi
+    printf '%s\n' "$image"
+}
+
 mapfile -t ALL_IMAGES < <(
-    printf '%s\n' "${CORE_IMAGES[@]}" "${MANIFEST_IMAGES[@]}" |
-        sed '/^$/d' |
+    for image in "${CORE_IMAGES[@]}" "${MANIFEST_IMAGES[@]}"; do
+        [ -n "$image" ] && normalize_image_ref "$image"
+    done |
         sort -u
 )
+
+pull_image() {
+    local image="$1"
+    local attempt
+
+    for attempt in 1 2 3; do
+        if ctr -n k8s.io images pull "$image"; then
+            return 0
+        fi
+        echo "[재시도 ${attempt}/3] 이미지 pull 실패: ${image}"
+        [ "$attempt" -eq 3 ] || sleep $((attempt * 2))
+    done
+    return 1
+}
+
+export_image() {
+    local image="$1"
+    local archive="$2"
+    local attempt
+
+    for attempt in 1 2 3; do
+        rm -f "$archive"
+        if ctr -n k8s.io images export "$archive" "$image"; then
+            return 0
+        fi
+        echo "[재시도 ${attempt}/3] 이미지 export 실패: ${image}"
+        [ "$attempt" -eq 3 ] || sleep $((attempt * 2))
+    done
+    return 1
+}
 
 FAILED_IMAGES=()
 for image in "${ALL_IMAGES[@]}"; do
     safe_name=$(printf '%s' "$image" | sed -E 's#^[a-z]+://##; s#[/@:]#-#g')
     archive="${IMG_DIR}/${safe_name}.tar"
     echo "[IMAGE] ${image}"
-    if ! ctr -n k8s.io images pull "$image"; then
+    if ! pull_image "$image"; then
         FAILED_IMAGES+=("$image")
         continue
     fi
-    if ! ctr -n k8s.io images export "$archive" "$image"; then
+    if ! export_image "$image" "$archive"; then
         FAILED_IMAGES+=("$image")
         continue
     fi
