@@ -1,0 +1,10 @@
+# 다운로드 스크립트가 생성하는 오프라인 자산
+common/debs/*
+!common/debs/.gitkeep
+db/debs/*
+!db/debs/.gitkeep
+repository/*
+!repository/.gitkeep
+
+# 루트 정책에서 제외된 비밀값 없는 기본 설정은 이 컴포넌트에서 추적
+!install.conf
