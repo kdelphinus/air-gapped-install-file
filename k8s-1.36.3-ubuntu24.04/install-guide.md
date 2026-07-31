@@ -1,4 +1,4 @@
-# Kubernetes v1.36.3 보안 기준 오프라인 설치 가이드
+# Kubernetes v1.36.3 보안 기준 설치 가이드
 
 ## 1. 적용 대상
 
@@ -14,7 +14,18 @@
 - 외부망 수집 호스트와 폐쇄망 설치 호스트 모두 Ubuntu 24.04 amd64
 - AppArmor와 UFW가 활성화 가능하고, 입력할 노드 CIDR이 관리 접속망을 포함함
 
-## 2. 외부망 자산 수집
+## 2. 설치 방식 선택
+
+### 2.1. 온라인 설치
+
+인터넷 연결이 가능한 설치 대상 노드에서는 다음 명령 하나로 자산 수집과 설치를 연속 실행합니다. 온라인 설치도 DEB, 이미지, Helm 및 nerdctl을 로컬 `k8s/` 디렉터리에 먼저 수집하고 SHA-256과 버전을 검증한 뒤 기존 `install.sh`를 호출합니다.
+
+```bash
+cd k8s-1.36.3-ubuntu24.04
+sudo ./scripts/install_online.sh
+```
+
+### 2.2. 폐쇄망 설치용 외부망 자산 수집
 
 외부망 전용 Ubuntu 24.04 호스트에서 실행합니다.
 
@@ -79,6 +90,13 @@ sudo ./scripts/install.sh
 
 ## 5. Worker 및 추가 Control Plane Join
 
+첫 Control Plane에서 가입 창을 엽니다. 이 작업은 kubeadm이 `cluster-info`를 조회할 수 있도록 익명 인증을 일시 활성화합니다. 가입 중에만 열어 두고 완료 즉시 닫아야 합니다.
+
+```bash
+cd k8s-1.36.3-ubuntu24.04
+sudo ./scripts/join_window.sh open
+```
+
 첫 Control Plane에서 Worker join 정보를 생성합니다.
 
 ```bash
@@ -109,6 +127,12 @@ sudo ./scripts/install.sh
 
 `Worker 노드 Join` 또는 `추가 Control Plane Join`을 선택하고 endpoint, token, CA hash를 입력합니다. Control Plane Join은 certificate key도 입력합니다. token과 certificate key는 `install.conf`에 저장되지 않습니다.
 
+
+모든 노드가 가입되면 첫 Control Plane에서 가입 창을 닫습니다. `close`는 `anonymous-auth=false`가 실제 반영될 때까지 기다린 뒤 보안 점검을 실행합니다.
+
+```bash
+sudo ./scripts/join_window.sh close
+```
 ## 6. Kubelet Serving CSR 승인
 
 `serverTLSBootstrap=true`이므로 kubelet serving certificate 요청이 생성될 수 있습니다. 요청자와 SAN을 확인하지 않은 일괄 자동 승인은 금지합니다.

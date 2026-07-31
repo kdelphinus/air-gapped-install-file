@@ -135,9 +135,17 @@ check_kubelet() {
         fail "kubelet webhook authentication 설정 불완전"
     fi
 
+    if grep -Eq '^[[:space:]]*readOnlyPort:[[:space:]]*0' "$cfg"; then
+        pass "kubelet read-only port 명시적 비활성화"
+    elif ! grep -Eq '^[[:space:]]*readOnlyPort:' "$cfg" &&
+         ! ss -lntH | grep -Eq '[[:space:]][^[:space:]]*:10255[[:space:]]'; then
+        pass "kubelet read-only port 기본 비활성화 및 10255 미수신"
+    else
+        fail "kubelet read-only port가 안전하게 비활성화되지 않음"
+    fi
+
     local checks=(
         '^[[:space:]]*mode:[[:space:]]*Webhook'
-        '^[[:space:]]*readOnlyPort:[[:space:]]*0'
         '^[[:space:]]*protectKernelDefaults:[[:space:]]*true'
         '^[[:space:]]*rotateCertificates:[[:space:]]*true'
         '^[[:space:]]*serverTLSBootstrap:[[:space:]]*true'

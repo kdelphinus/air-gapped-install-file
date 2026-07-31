@@ -248,7 +248,7 @@ choose_mode() {
 guard_existing_state() {
     if [ -f /etc/kubernetes/kubelet.conf ] ||
        [ -f /etc/kubernetes/admin.conf ] ||
-       [ -d /etc/kubernetes/manifests ]; then
+       compgen -G '/etc/kubernetes/manifests/*.yaml' >/dev/null; then
         echo -e "${RED}[중단] 기존 또는 부분 구성된 Kubernetes 노드가 감지되었습니다.${NC}"
         echo "자동 덮어쓰기와 in-place 보안 전환은 지원하지 않습니다."
         echo "현재 상태는 scripts/security_audit.sh로 점검하고, 재구축이 승인된 경우에만"
@@ -404,12 +404,18 @@ EOF
     chmod 600 /etc/kubernetes/installer/ufw-rules
 
     mkdir -p /etc/containerd
-    if [ ! -s /etc/containerd/config.toml ]; then
-        containerd config default > /etc/containerd/config.toml
+    if [ -s /etc/containerd/config.toml ]; then
+        cp -a /etc/containerd/config.toml "/etc/containerd/config.toml.k8s-${K8S_VERSION}.bak"
     fi
+    containerd config default > /etc/containerd/config.toml
     sed -Ei 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
-    systemctl enable --now containerd
+    systemctl enable containerd
+    systemctl restart containerd
+    if ! crictl --runtime-endpoint "$CRI_SOCKET" info >/dev/null 2>&1; then
+        echo -e "${RED}[오류] containerd CRI v1 응답을 확인하지 못했습니다.${NC}"
+        exit 1
+    fi
     systemctl enable kubelet
 }
 
@@ -586,7 +592,8 @@ EOF
 }
 
 initialize_cluster() {
-    if [ -f /etc/kubernetes/admin.conf ] || [ -d /etc/kubernetes/manifests ]; then
+    if [ -f /etc/kubernetes/admin.conf ] ||
+       compgen -G '/etc/kubernetes/manifests/*.yaml' >/dev/null; then
         echo -e "${RED}[중단] 기존 Kubernetes Control Plane이 감지되었습니다.${NC}"
         echo "기존 클러스터에 이 보안 기준을 덮어쓰지 않습니다."
         echo "먼저 scripts/security_audit.sh로 현재 상태를 점검하거나 별도 마이그레이션 계획을 수립하십시오."
@@ -684,11 +691,17 @@ print_next_steps() {
     echo ""
     echo -e "${GREEN}Kubernetes ${K8S_VERSION} 설치가 완료되었습니다.${NC}"
     if [ "$MODE" = "init" ]; then
+        echo "Join 전 첫 Control Plane에서 가입 창 열기:"
+        echo "  sudo ./scripts/join_window.sh open"
         echo "Worker join 명령 생성:"
         echo "  sudo kubeadm token create --print-join-command"
         echo "추가 Control Plane용 인증서 키 생성:"
         echo "  sudo kubeadm init phase upload-certs --upload-certs"
         echo ""
+        echo "추가 Control Plane에는 암호화 설정을 같은 경로로 복사:"
+        echo "  /etc/kubernetes/security/encryption-config.yaml"
+        echo "모든 Join 완료 후 첫 Control Plane에서 가입 창 닫기:"
+        echo "  sudo ./scripts/join_window.sh close"
         echo -e "${YELLOW}kubelet serving CSR은 자동 승인하지 않습니다.${NC}"
         echo "요청자와 SAN을 검증한 뒤 개별 승인하십시오:"
         echo "  sudo KUBECONFIG=/etc/kubernetes/admin.conf kubectl get csr"

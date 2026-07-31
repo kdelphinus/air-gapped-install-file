@@ -1,6 +1,6 @@
 # Kubernetes v1.36.3 Rocky 9 보안 설치 패키지
 
-Rocky Linux 9 amd64에 Kubernetes `v1.36.3`을 설치하는 에어갭 패키지입니다. `K8s취약점_점검_가이드.pdf`의 Control Plane 및 Worker 점검 항목을 신규 설치 기본값에 반영합니다.
+Rocky Linux 9 amd64에 Kubernetes `v1.36.3`을 설치하는 온라인·에어갭 패키지입니다. `K8s취약점_점검_가이드.pdf`의 Control Plane 및 Worker 점검 항목을 신규 설치 기본값에 반영합니다.
 
 ## 지원 범위
 
@@ -44,6 +44,8 @@ k8s-1.36.3-rocky9/
 ├── scripts/
 │   ├── download_assets_offline.sh
 │   ├── install.sh
+│   ├── install_online.sh
+│   ├── join_window.sh
 │   ├── security_audit.sh
 │   └── uninstall.sh
 ├── security/
@@ -56,7 +58,14 @@ k8s-1.36.3-rocky9/
 
 ## 빠른 시작
 
-인터넷 연결이 가능한 Rocky Linux 9 amd64 수집 호스트에서 실행합니다. 수집기는 호스트를 최신 Rocky 9 마이너로 업데이트합니다.
+인터넷 연결이 가능한 설치 대상 노드에서는 자산 수집과 설치를 한 번에 실행합니다. 자산 수집 과정에서 호스트가 최신 Rocky Linux 9 마이너로 업데이트됩니다.
+
+```bash
+cd k8s-1.36.3-rocky9
+sudo ./scripts/install_online.sh
+```
+
+폐쇄망 설치용 자산은 인터넷 연결이 가능한 Rocky Linux 9 amd64 수집 호스트에서 준비합니다. 수집기는 호스트를 최신 Rocky 9 마이너로 업데이트합니다.
 
 ```bash
 cd k8s-1.36.3-rocky9

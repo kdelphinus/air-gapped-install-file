@@ -106,6 +106,17 @@ rm -f /etc/modules-load.d/k8s.conf
 rm -f /etc/sysctl.d/99-kubernetes-security.conf
 sysctl --system >/dev/null 2>&1 || true
 
+if command -v semanage >/dev/null 2>&1; then
+    selinux_paths=(
+        '/etc/kubernetes(/.*)?'
+        '/var/lib/etcd(/.*)?'
+        '/var/log/kubernetes(/.*)?'
+    )
+    for selinux_path in "${selinux_paths[@]}"; do
+        semanage fcontext -d "$selinux_path" >/dev/null 2>&1 || true
+    done
+fi
+
 if [ -n "$copied_admin" ] &&
    [[ "$copied_admin" =~ ^/(home/[^/]+|root)/\.kube/config$ ]]; then
     rm -f -- "$copied_admin"

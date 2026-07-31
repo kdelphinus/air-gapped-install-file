@@ -1,6 +1,6 @@
-# Kubernetes v1.36.3 보안 기준 오프라인 설치 패키지
+# Kubernetes v1.36.3 보안 기준 설치 패키지
 
-Ubuntu 24.04 amd64 환경에 Kubernetes `v1.36.3`을 설치하는 에어갭 패키지입니다. 단순 설치가 아니라 `K8s취약점_점검_가이드.pdf`의 Master/Worker 점검 항목을 설치 기본값에 반영하는 첫 기준 구현입니다.
+Ubuntu 24.04 amd64 환경에 Kubernetes `v1.36.3`을 설치하는 온라인·에어갭 패키지입니다. 단순 설치가 아니라 `K8s취약점_점검_가이드.pdf`의 Master/Worker 점검 항목을 설치 기본값에 반영하는 첫 기준 구현입니다.
 
 ## 지원 범위
 
@@ -41,6 +41,8 @@ k8s-1.36.3-ubuntu24.04/
 ├── scripts/
 │   ├── download_assets_offline.sh
 │   ├── install.sh
+│   ├── install_online.sh
+│   ├── join_window.sh
 │   ├── security_audit.sh
 │   └── uninstall.sh
 ├── security/
@@ -53,7 +55,14 @@ k8s-1.36.3-ubuntu24.04/
 
 ## 빠른 시작
 
-외부망 Ubuntu 24.04 호스트에서 자산을 수집합니다.
+인터넷 연결이 가능한 설치 대상 노드에서는 자산 수집과 설치를 한 번에 실행합니다.
+
+```bash
+cd k8s-1.36.3-ubuntu24.04
+sudo ./scripts/install_online.sh
+```
+
+폐쇄망 설치용 자산은 외부망 Ubuntu 24.04 호스트에서 수집합니다.
 
 ```bash
 cd k8s-1.36.3-ubuntu24.04

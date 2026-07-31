@@ -14,7 +14,20 @@
 - SELinux `Enforcing` 또는 `Permissive`; Disabled는 지원하지 않음
 - 외부망 수집 호스트와 폐쇄망 설치 노드가 동일한 Rocky 9 마이너와 amd64 아키텍처
 
-## 2. 외부망 자산 수집
+## 2. 설치 방식 선택
+
+### 2.1. 온라인 설치
+
+인터넷 연결이 가능한 설치 대상 노드에서는 다음 명령 하나로 자산 수집과 설치를 연속 실행합니다. 온라인 설치도 RPM, 이미지, Helm 및 nerdctl을 로컬 `k8s/` 디렉터리에 먼저 수집하고 SHA-256과 버전을 검증한 뒤 기존 `install.sh`를 호출합니다.
+
+수집 단계에서 `dnf upgrade --refresh`를 실행하므로 시스템 스냅샷 또는 변경 승인을 준비하고, 커널이 갱신되면 재부팅한 뒤 다시 실행하십시오.
+
+```bash
+cd k8s-1.36.3-rocky9
+sudo ./scripts/install_online.sh
+```
+
+### 2.2. 폐쇄망 설치용 외부망 자산 수집
 
 인터넷 연결이 가능한 Rocky Linux 9 amd64 전용 호스트에서 실행합니다. 스크립트가 `dnf upgrade --refresh`를 수행하므로 수집 전에 시스템 스냅샷 또는 변경 승인을 준비합니다.
 
@@ -72,6 +85,13 @@ sudo ./scripts/install.sh
 
 ## 5. Worker 및 추가 Control Plane Join
 
+첫 Control Plane에서 가입 창을 엽니다. 이 작업은 kubeadm이 `cluster-info`를 조회할 수 있도록 익명 인증을 일시 활성화합니다. 가입 중에만 열어 두고 완료 즉시 닫아야 합니다.
+
+```bash
+cd k8s-1.36.3-rocky9
+sudo ./scripts/join_window.sh open
+```
+
 첫 Control Plane에서 Worker join 정보를 생성합니다.
 
 ```bash
@@ -94,6 +114,12 @@ sudo sha256sum /etc/kubernetes/security/encryption-config.yaml
 ```
 
 가입할 노드에서 같은 패키지를 실행하고 Worker 또는 추가 Control Plane을 선택합니다. bootstrap token과 certificate key는 `install.conf`에 저장되지 않습니다.
+
+모든 노드가 가입되면 첫 Control Plane에서 가입 창을 닫습니다. `close`는 `anonymous-auth=false`가 실제 반영될 때까지 기다린 뒤 보안 점검을 실행합니다.
+
+```bash
+sudo ./scripts/join_window.sh close
+```
 
 ## 6. Kubelet Serving CSR 승인
 
