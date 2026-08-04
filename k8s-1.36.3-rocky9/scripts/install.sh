@@ -295,7 +295,12 @@ collect_common_settings() {
     validate_value "$NODE_IP" '^[0-9a-fA-F:.]+$' "노드 IP"
 
     if [ -z "$NODE_NETWORK_CIDR" ]; then
-        read -r -p "노드 간 통신을 허용할 trusted CIDR (예: 192.168.10.0/24): " NODE_NETWORK_CIDR
+        # NODE_IP 기반으로 기본 CIDR(예: 1.1.1.0/24) 자동 계산
+        local default_cidr
+        default_cidr=$(echo "$NODE_IP" | awk -F. '{print $1"."$2"."$3".0/24"}')
+
+        read -r -p "노드 간 통신을 허용할 trusted CIDR [${default_cidr}]: " NODE_NETWORK_CIDR
+        NODE_NETWORK_CIDR="${NODE_NETWORK_CIDR:-$default_cidr}"
     fi
     validate_value "$NODE_NETWORK_CIDR" '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$' "노드 네트워크 CIDR"
 
